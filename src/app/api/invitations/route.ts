@@ -172,12 +172,14 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    const details = process.env.NODE_ENV !== "production" ? error.message : undefined;
+    const details = error.message;
+    const code = (error as unknown as { code?: string }).code;
     return NextResponse.json(
       {
         error:
           "Einladung konnte nicht gespeichert werden. Bitte prüfe die Supabase-Tabelle 'invitations'.",
         details,
+        code,
       },
       { status: 500 }
     );
