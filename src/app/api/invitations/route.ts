@@ -137,6 +137,25 @@ export async function POST(request: Request) {
   const appName = "Master Dashboard";
 
   const admin = createAdminClient();
+
+  // Wichtig: Viele Setups haben invited_by als FK auf public.profiles.id.
+  // Dann muss das Profil des einladenden Users existieren, sonst scheitert der Insert in invitations.
+  try {
+    const inviterEmail = (auth.user.email ?? "").toLowerCase();
+    await admin.from("profiles").upsert(
+      {
+        id: auth.user.id,
+        email: inviterEmail || `${auth.user.id}@local`,
+        full_name: (auth.user.user_metadata?.full_name as string | undefined) ?? "",
+        role: "owner",
+      },
+      { onConflict: "id" }
+    );
+  } catch {
+    // Best-effort: Wenn profiles nicht existiert oder RLS anders konfiguriert ist,
+    // kann invitations trotzdem funktionieren (z.B. FK zeigt auf auth.users).
+  }
+
   const invitePayload: InvitationInsert = {
     email,
     role,
