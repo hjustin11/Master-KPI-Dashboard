@@ -135,9 +135,39 @@ export function UserAuthOverlay({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: values.email }),
         });
-        const data = (await res.json()) as
+        const raw = await res.text();
+        let data:
           | { invited: true; role: string; inviteUrl: string }
-          | { invited: false; error?: string };
+          | { invited: false; error?: string }
+          | null = null;
+        try {
+          data = JSON.parse(raw) as
+            | { invited: true; role: string; inviteUrl: string }
+            | { invited: false; error?: string };
+        } catch {
+          data = null;
+        }
+
+        if (!res.ok) {
+          setServerMessage(
+            data && "error" in data && data.error
+              ? `Einladung konnte nicht geprüft werden: ${data.error}`
+              : `Einladung konnte nicht geprüft werden (HTTP ${res.status}).`
+          );
+          if (!data && raw) {
+            setServerMessage(
+              `Einladung konnte nicht geprüft werden (HTTP ${res.status}): ${raw.slice(0, 180)}`
+            );
+          }
+          return;
+        }
+
+        if (!data) {
+          setServerMessage(
+            `Einladung konnte nicht geprüft werden (HTTP ${res.status}): Ungültige Serverantwort.`
+          );
+          return;
+        }
 
         if ("invited" in data && data.invited) {
           router.push(data.inviteUrl);
@@ -206,13 +236,15 @@ export function UserAuthOverlay({
             loading="eager"
           />
         </div>
-        <p className="text-sm text-muted-foreground">
-          {inviteToken
-            ? "Einladung abschliessen: Passwort setzen und Konto aktivieren."
-            : mode === "login"
-              ? "Bitte anmelden."
-              : "Registrieren ist nur mit Einladung möglich."}
-        </p>
+        {inviteToken ? (
+          <p className="text-sm text-muted-foreground">
+            Einladung abschliessen: Passwort setzen und Konto aktivieren.
+          </p>
+        ) : mode === "register" ? (
+          <p className="text-sm text-muted-foreground">
+            Registrieren ist nur mit Einladung möglich.
+          </p>
+        ) : null}
       </div>
       {invitedRole ? (
         <p className="mb-4 rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-300">
