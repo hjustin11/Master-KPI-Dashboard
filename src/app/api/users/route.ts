@@ -9,7 +9,12 @@ function isOwnerUser(user: {
 }) {
   const appRole = user.app_metadata?.role;
   const userRole = user.user_metadata?.role;
-  return appRole === "owner" || userRole === "owner";
+  if (appRole === "owner" || userRole === "owner") return true;
+  const email = (user.email ?? "").toLowerCase();
+  const ownerEmails =
+    process.env.OWNER_EMAILS?.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean) ??
+    [];
+  return Boolean(email) && ownerEmails.includes(email);
 }
 
 async function getCurrentUser() {
@@ -43,14 +48,23 @@ export async function GET() {
     );
   }
 
+  const ids = data.users?.map((u) => u.id) ?? [];
+  const { data: profiles } = ids.length
+    ? await admin.from("profiles").select("id,role").in("id", ids)
+    : { data: [] as Array<{ id: string; role: string }> };
+  const roleById = new Map(
+    (profiles ?? []).map((row) => [row.id, (row.role as string | undefined) ?? "viewer"])
+  );
+
   const users =
     data.users?.map((item) => ({
       id: item.id,
       email: item.email ?? "",
       role:
+        roleById.get(item.id) ??
         ((item.app_metadata?.role as string | undefined) ??
           (item.user_metadata?.role as string | undefined) ??
-          "viewer") || "viewer",
+          "viewer"),
       createdAt: item.created_at,
     })) ?? [];
 

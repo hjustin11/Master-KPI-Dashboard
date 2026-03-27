@@ -54,7 +54,12 @@ function isOwnerRole(user: {
 }) {
   const appRole = user.app_metadata?.role;
   const userRole = user.user_metadata?.role;
-  return appRole === "owner" || userRole === "owner";
+  if (appRole === "owner" || userRole === "owner") return true;
+  const email = (user.email ?? "").toLowerCase();
+  const ownerEmails =
+    process.env.OWNER_EMAILS?.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean) ??
+    [];
+  return Boolean(email) && ownerEmails.includes(email);
 }
 
 export async function GET() {
@@ -94,8 +99,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
   }
   if (!isOwnerRole(user)) {
+    const details =
+      process.env.NODE_ENV !== "production"
+        ? {
+            email: user.email ?? null,
+            appRole: (user.app_metadata?.role as string | undefined) ?? null,
+            userRole: (user.user_metadata?.role as string | undefined) ?? null,
+          }
+        : undefined;
     return NextResponse.json(
-      { error: "Nur Owner dürfen Einladungen versenden." },
+      { error: "Nur Owner dürfen Einladungen versenden.", details },
       { status: 403 }
     );
   }

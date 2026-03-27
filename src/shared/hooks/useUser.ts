@@ -50,17 +50,25 @@ export function useUser() {
         return;
       }
 
-      const fullName =
+      const email = authUser.email ?? "";
+      const fallbackFullName =
         (authUser.user_metadata?.full_name as string | undefined) ||
         authUser.email?.split("@")[0] ||
         "Benutzer";
-
-      const email = authUser.email ?? "";
-      const rawRoleKey =
+      const fallbackRoleKey =
         (authUser.user_metadata?.role as string | undefined) ??
         (authUser.app_metadata?.role as string | undefined) ??
         "viewer";
-      const roleKey = rawRoleKey;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name,role")
+        .eq("id", authUser.id)
+        .maybeSingle();
+
+      const fullName =
+        (profile?.full_name as string | undefined) || fallbackFullName;
+      const roleKey = (profile?.role as string | undefined) || fallbackRoleKey;
 
       setUser({
         id: authUser.id,

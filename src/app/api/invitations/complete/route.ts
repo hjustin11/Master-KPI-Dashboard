@@ -102,6 +102,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Benutzer konnte nicht aktualisiert werden." }, { status: 500 });
   }
 
+  // Profiles: zentrale, sichtbare Rolle + Name (Option B)
+  const { error: profileError } = await admin.from("profiles").upsert(
+    {
+      id: userId,
+      email,
+      full_name: fullName,
+      role,
+    },
+    { onConflict: "id" }
+  );
+
+  if (profileError) {
+    return NextResponse.json({ error: "Profil konnte nicht gespeichert werden." }, { status: 500 });
+  }
+
   const { error: updateInviteError } = await admin
     .from("invitations")
     .update({ status: "accepted" })

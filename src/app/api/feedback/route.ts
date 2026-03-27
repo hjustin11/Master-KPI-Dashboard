@@ -9,7 +9,12 @@ function isOwnerUser(user: {
 }) {
   const appRole = user.app_metadata?.role;
   const userRole = user.user_metadata?.role;
-  return appRole === "owner" || userRole === "owner";
+  if (appRole === "owner" || userRole === "owner") return true;
+  const email = (user.email ?? "").toLowerCase();
+  const ownerEmails =
+    process.env.OWNER_EMAILS?.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean) ??
+    [];
+  return Boolean(email) && ownerEmails.includes(email);
 }
 
 type FeatureRequestRow = {
