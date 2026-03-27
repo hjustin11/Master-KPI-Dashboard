@@ -12,10 +12,14 @@ type XentralArticleRow = {
 
 export default function XentralProductsPage() {
   const [data, setData] = useState<XentralArticleRow[]>([]);
+  const [displayedRows, setDisplayedRows] = useState<XentralArticleRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const totalStock = useMemo(() => data.reduce((sum, row) => sum + (row.stock ?? 0), 0), [data]);
+  const totalStock = useMemo(
+    () => displayedRows.reduce((sum, row) => sum + (row.stock ?? 0), 0),
+    [displayedRows]
+  );
   const totalStockLabel = useMemo(
     () => new Intl.NumberFormat("de-DE").format(totalStock),
     [totalStock]
@@ -29,7 +33,9 @@ export default function XentralProductsPage() {
         const res = await fetch("/api/xentral/articles?all=1&limit=150");
         const payload = (await res.json()) as { items?: XentralArticleRow[]; error?: string };
         if (!res.ok) throw new Error(payload.error ?? "Xentral Artikel konnten nicht geladen werden.");
-        setData(payload.items ?? []);
+        const nextItems = payload.items ?? [];
+        setData(nextItems);
+        setDisplayedRows(nextItems);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Unbekannter Fehler.");
       } finally {
@@ -108,6 +114,7 @@ export default function XentralProductsPage() {
           paginate={false}
           className="flex-1 min-h-0"
           tableWrapClassName="min-h-0"
+          onDisplayedRowsChange={setDisplayedRows}
         />
       )}
     </div>

@@ -10,7 +10,7 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUpDown, ChevronDown, ChevronUp, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,7 @@ type DataTableProps<TData, TValue> = {
   className?: string;
   tableWrapClassName?: string;
   paginate?: boolean;
+  onDisplayedRowsChange?: (rows: TData[]) => void;
 };
 
 export function DataTable<TData, TValue>({
@@ -40,9 +41,11 @@ export function DataTable<TData, TValue>({
   className,
   tableWrapClassName,
   paginate = true,
+  onDisplayedRowsChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
+  const lastSignatureRef = useRef<string>("");
 
   // TanStack Table ist bewusst zustandsbehaftet und hier die gewuenschte Runtime-API.
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -59,6 +62,14 @@ export function DataTable<TData, TValue>({
   });
 
   const rows = paginate ? table.getRowModel().rows : table.getPrePaginationRowModel().rows;
+
+  useEffect(() => {
+    if (!onDisplayedRowsChange) return;
+    const signature = rows.map((row) => row.id).join("|");
+    if (signature === lastSignatureRef.current) return;
+    lastSignatureRef.current = signature;
+    onDisplayedRowsChange(rows.map((row) => row.original));
+  }, [onDisplayedRowsChange, rows]);
 
   return (
     <div
