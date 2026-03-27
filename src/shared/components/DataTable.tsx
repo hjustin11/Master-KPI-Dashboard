@@ -10,7 +10,7 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpDown, ChevronDown, ChevronUp, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,8 @@ type DataTableProps<TData, TValue> = {
   columns: Array<ColumnDef<TData, TValue>>;
   data: TData[];
   filterColumn?: string;
+  /** Zusatz rechts neben der Suchleiste (z. B. Datumsfilter). */
+  toolbarEnd?: ReactNode;
   className?: string;
   tableWrapClassName?: string;
   paginate?: boolean;
@@ -42,6 +44,7 @@ export function DataTable<TData, TValue>({
   columns,
   data,
   filterColumn,
+  toolbarEnd,
   className,
   tableWrapClassName,
   paginate = true,
@@ -82,8 +85,8 @@ export function DataTable<TData, TValue>({
         className
       )}
     >
-      <div className="flex items-center gap-2">
-        <div className="relative w-full max-w-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-0 max-w-sm flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={globalFilter}
@@ -96,6 +99,11 @@ export function DataTable<TData, TValue>({
             }
           />
         </div>
+        {toolbarEnd ? (
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {toolbarEnd}
+          </div>
+        ) : null}
       </div>
 
       <div
