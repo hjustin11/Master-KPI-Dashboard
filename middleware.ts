@@ -3,7 +3,17 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  const publicPaths = ["/login", "/register", "/forgot-password", "/auth/callback", "/auth/reset"];
+  const publicPaths = [
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/auth/callback",
+    "/auth/reset",
+    // Invite-only Registrierung nutzt diese Endpoints auch ohne Session.
+    "/api/invitations/register-init",
+    "/api/invitations/lookup",
+    "/api/invitations/complete",
+  ];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );
