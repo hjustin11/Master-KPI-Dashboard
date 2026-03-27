@@ -2,14 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/shared/lib/supabase/client";
-import { cn } from "@/lib/utils";
 
 type AuthMode = "login" | "register";
 
@@ -115,32 +113,15 @@ export function UserAuthOverlay({
     router.refresh();
   };
 
-  const onGoogleAuth = async () => {
-    setServerMessage(null);
-    const supabase = createClient();
-    const redirectTo =
-      typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo },
-    });
-
-    if (error) {
-      setServerMessage(error.message);
-    }
-  };
-
   return (
     <div className="rounded-2xl border border-border/50 bg-card/80 p-6 shadow-lg backdrop-blur-sm">
       <div className="mb-6 space-y-3 text-center">
         <div className="flex justify-center">
-          <Image
+          <img
             src="/brand/petrhein-logo-attached.png"
             alt="PetRhein"
-            width={190}
-            height={44}
             className="h-11 w-auto object-contain"
+            loading="eager"
           />
         </div>
         <p className="text-sm text-muted-foreground">
@@ -222,44 +203,13 @@ export function UserAuthOverlay({
         </button>
 
         {mode === "login" ? (
-          <>
-            <div className="relative py-1">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border/60" />
-              </div>
-              <span className="relative block w-fit bg-card/80 px-2 text-xs text-muted-foreground">
-                oder
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={onGoogleAuth}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border/70 bg-background px-4 py-2 text-sm font-medium text-foreground transition-all duration-200 hover:bg-accent/40"
-            >
-              <span
-                className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 text-xs"
-                aria-hidden
-              >
-                G
-              </span>
-              Mit Google anmelden
-            </button>
-
-            <div className="text-right">
-              <Link href="/forgot-password" className="text-xs text-primary hover:underline">
-                Passwort vergessen?
-              </Link>
-            </div>
-          </>
+          <div className="text-right">
+            <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+              Passwort vergessen?
+            </Link>
+          </div>
         ) : null}
       </form>
-
-      <div className="mt-4 text-center text-xs text-muted-foreground">
-        <Link href="/login" className="text-primary hover:underline">
-          Zurueck zum Login
-        </Link>
-      </div>
     </div>
   );
 }

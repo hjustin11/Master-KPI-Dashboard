@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/shared/lib/supabase/client";
 
@@ -41,12 +40,11 @@ export default function ResetPasswordPage() {
     <div className="rounded-2xl border border-border/50 bg-card/80 p-6 shadow-lg backdrop-blur-sm">
       <div className="mb-6 space-y-3 text-center">
         <div className="flex justify-center">
-          <Image
+          <img
             src="/brand/petrhein-logo-attached.png"
             alt="PetRhein"
-            width={190}
-            height={44}
             className="h-11 w-auto object-contain"
+            loading="eager"
           />
         </div>
         <p className="text-sm text-muted-foreground">Neues Passwort setzen</p>
