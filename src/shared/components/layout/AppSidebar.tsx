@@ -10,7 +10,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
-  LayoutDashboard,
   Megaphone,
   Package,
   PanelLeft,
@@ -65,7 +64,6 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { key: "overview", label: "Übersicht", href: "/", icon: LayoutDashboard },
   {
     key: "amazon",
     label: "Amazon",
@@ -107,6 +105,11 @@ const navItems: NavItem[] = [
     href: "/analytics",
     icon: BarChart3,
     requiredPermissions: ["export_data"],
+    children: [
+      { label: "Marktplätze", href: "/analytics/marketplaces" },
+      { label: "Artikelprognose", href: "/analytics/article-forecast" },
+      { label: "Performance", href: "/analytics/performance" },
+    ],
   },
   {
     key: "settings",

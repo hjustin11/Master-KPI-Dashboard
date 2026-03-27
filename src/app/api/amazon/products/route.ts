@@ -1,0 +1,706 @@
+import crypto from "node:crypto";
+import { gunzipSync } from "node:zlib";
+import { NextResponse } from "next/server";
+import { createAdminClient } from "@/shared/lib/supabase/admin";
+
+type ListingSummary = {
+  asin?: string;
+  productType?: string;
+  itemName?: string;
+  status?: string[];
+  fnSku?: string;
+};
+
+type ListingItem = {
+  sku?: string;
+  summaries?: ListingSummary[];
+};
+
+type ProductRow = {
+  sku: string;
+  asin: string;
+  title: string;
+  statusLabel: string;
+  productType: string;
+  isActive: boolean;
+};
+
+type ReportFallbackState = {
+  reportId?: string;
+  reportType?: string;
+  startedAt?: number;
+  rows?: ProductRow[];
+  updatedAt?: number;
+  lastError?: string;
+  switchCount?: number;
+};
+
+const fallbackByMarketplace: Record<string, ReportFallbackState> = {};
+
+function env(name: string) {
+  return (process.env[name] ?? "").trim();
+}
+
+function normalizeHost(value: string) {
+  return value.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+}
+
+function hashHex(value: string) {
+  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function hmac(key: Buffer | string, value: string) {
+  return crypto.createHmac("sha256", key).update(value, "utf8").digest();
+}
+
+function hmacHex(key: Buffer | string, value: string) {
+  return crypto.createHmac("sha256", key).update(value, "utf8").digest("hex");
+}
+
+function percentEncodeRfc3986(value: string) {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (ch) =>
+    `%${ch.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+}
+
+function canonicalQuery(query: Record<string, string>) {
+  const pairs = Object.entries(query).filter(([, v]) => v !== "");
+  pairs.sort(([a], [b]) => a.localeCompare(b));
+  return pairs
+    .map(([k, v]) => `${percentEncodeRfc3986(k)}=${percentEncodeRfc3986(v)}`)
+    .join("&");
+}
+
+async function getSupabaseSecret(key: string): Promise<string> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("integration_secrets")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+  if (error) return "";
+  return typeof data?.value === "string" ? data.value.trim() : "";
+}
+
+async function getConfig() {
+  const refreshToken =
+    env("AMAZON_SP_API_REFRESH_TOKEN") || (await getSupabaseSecret("AMAZON_SP_API_REFRESH_TOKEN"));
+  const lwaClientId =
+    env("AMAZON_SP_API_CLIENT_ID") || (await getSupabaseSecret("AMAZON_SP_API_CLIENT_ID"));
+  const lwaClientSecret =
+    env("AMAZON_SP_API_CLIENT_SECRET") || (await getSupabaseSecret("AMAZON_SP_API_CLIENT_SECRET"));
+  const awsAccessKeyId =
+    env("AMAZON_AWS_ACCESS_KEY_ID") || (await getSupabaseSecret("AMAZON_AWS_ACCESS_KEY_ID"));
+  const awsSecretAccessKey =
+    env("AMAZON_AWS_SECRET_ACCESS_KEY") ||
+    (await getSupabaseSecret("AMAZON_AWS_SECRET_ACCESS_KEY"));
+  const awsSessionToken =
+    env("AMAZON_AWS_SESSION_TOKEN") || (await getSupabaseSecret("AMAZON_AWS_SESSION_TOKEN"));
+  const region =
+    env("AMAZON_SP_API_REGION") || (await getSupabaseSecret("AMAZON_SP_API_REGION")) || "eu-west-1";
+  const endpoint = normalizeHost(
+    env("AMAZON_SP_API_ENDPOINT") ||
+      (await getSupabaseSecret("AMAZON_SP_API_ENDPOINT")) ||
+      "sellingpartnerapi-eu.amazon.com"
+  );
+  const marketplaceIdsRaw =
+    env("AMAZON_SP_API_MARKETPLACE_IDS") ||
+    env("AMAZON_SP_API_MARKETPLACE_ID") ||
+    (await getSupabaseSecret("AMAZON_SP_API_MARKETPLACE_IDS")) ||
+    (await getSupabaseSecret("AMAZON_SP_API_MARKETPLACE_ID"));
+  const marketplaceIds = marketplaceIdsRaw
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  const sellerId =
+    env("AMAZON_SP_API_SELLER_ID") || (await getSupabaseSecret("AMAZON_SP_API_SELLER_ID"));
+
+  return {
+    refreshToken,
+    lwaClientId,
+    lwaClientSecret,
+    awsAccessKeyId,
+    awsSecretAccessKey,
+    awsSessionToken,
+    region,
+    endpoint,
+    marketplaceIds,
+    sellerId,
+  };
+}
+
+async function getLwaAccessToken(args: {
+  refreshToken: string;
+  lwaClientId: string;
+  lwaClientSecret: string;
+}) {
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: args.refreshToken,
+    client_id: args.lwaClientId,
+    client_secret: args.lwaClientSecret,
+  });
+  const res = await fetch("https://api.amazon.com/auth/o2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: body.toString(),
+    cache: "no-store",
+  });
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = text ? (JSON.parse(text) as unknown) : null;
+  } catch {
+    json = null;
+  }
+  const token = (json as { access_token?: string } | null)?.access_token;
+  if (!res.ok || !token) throw new Error(`LWA Token konnte nicht geladen werden (${res.status}).`);
+  return token;
+}
+
+async function spApiGet(args: {
+  endpoint: string;
+  region: string;
+  path: string;
+  query: Record<string, string>;
+  awsAccessKeyId: string;
+  awsSecretAccessKey: string;
+  awsSessionToken?: string;
+  lwaAccessToken: string;
+}) {
+  const method = "GET";
+  const service = "execute-api";
+  const host = args.endpoint;
+  const canonicalUri = args.path;
+  const queryString = canonicalQuery(args.query);
+
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const dateStamp = amzDate.slice(0, 8);
+  const canonicalHeadersList: Array<[string, string]> = [
+    ["host", host],
+    ["x-amz-access-token", args.lwaAccessToken],
+    ["x-amz-date", amzDate],
+  ];
+  if (args.awsSessionToken) canonicalHeadersList.push(["x-amz-security-token", args.awsSessionToken]);
+  canonicalHeadersList.sort(([a], [b]) => a.localeCompare(b));
+
+  const canonicalHeaders = canonicalHeadersList.map(([k, v]) => `${k}:${v.trim()}\n`).join("");
+  const signedHeaders = canonicalHeadersList.map(([k]) => k).join(";");
+  const canonicalRequest = [method, canonicalUri, queryString, canonicalHeaders, signedHeaders, hashHex("")].join("\n");
+  const credentialScope = `${dateStamp}/${args.region}/${service}/aws4_request`;
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, hashHex(canonicalRequest)].join("\n");
+  const kDate = hmac(`AWS4${args.awsSecretAccessKey}`, dateStamp);
+  const kRegion = hmac(kDate, args.region);
+  const kService = hmac(kRegion, service);
+  const kSigning = hmac(kService, "aws4_request");
+  const signature = hmacHex(kSigning, stringToSign);
+  const authorization = [
+    `AWS4-HMAC-SHA256 Credential=${args.awsAccessKeyId}/${credentialScope}`,
+    `SignedHeaders=${signedHeaders}`,
+    `Signature=${signature}`,
+  ].join(", ");
+
+  const url = new URL(`https://${host}${canonicalUri}`);
+  for (const [k, v] of Object.entries(args.query)) {
+    if (v !== "") url.searchParams.set(k, v);
+  }
+  const headers: Record<string, string> = {
+    host,
+    "x-amz-date": amzDate,
+    "x-amz-access-token": args.lwaAccessToken,
+    Authorization: authorization,
+    Accept: "application/json",
+  };
+  if (args.awsSessionToken) headers["x-amz-security-token"] = args.awsSessionToken;
+
+  const res = await fetch(url.toString(), { method, headers, cache: "no-store" });
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = text ? (JSON.parse(text) as unknown) : null;
+  } catch {
+    json = null;
+  }
+  return { res, text, json };
+}
+
+async function spApiRequest(args: {
+  endpoint: string;
+  region: string;
+  method: "GET" | "POST";
+  path: string;
+  query: Record<string, string>;
+  body?: string;
+  awsAccessKeyId: string;
+  awsSecretAccessKey: string;
+  awsSessionToken?: string;
+  lwaAccessToken: string;
+  contentType?: string;
+}) {
+  const method = args.method;
+  const service = "execute-api";
+  const host = args.endpoint;
+  const canonicalUri = args.path;
+  const queryString = canonicalQuery(args.query);
+  const body = args.body ?? "";
+
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const dateStamp = amzDate.slice(0, 8);
+  const canonicalHeadersList: Array<[string, string]> = [
+    ["host", host],
+    ["x-amz-access-token", args.lwaAccessToken],
+    ["x-amz-date", amzDate],
+  ];
+  if (args.contentType) canonicalHeadersList.push(["content-type", args.contentType]);
+  if (args.awsSessionToken) canonicalHeadersList.push(["x-amz-security-token", args.awsSessionToken]);
+  canonicalHeadersList.sort(([a], [b]) => a.localeCompare(b));
+
+  const payloadHash = hashHex(body);
+  const canonicalHeaders = canonicalHeadersList.map(([k, v]) => `${k}:${v.trim()}\n`).join("");
+  const signedHeaders = canonicalHeadersList.map(([k]) => k).join(";");
+  const canonicalRequest = [method, canonicalUri, queryString, canonicalHeaders, signedHeaders, payloadHash].join("\n");
+  const credentialScope = `${dateStamp}/${args.region}/${service}/aws4_request`;
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, hashHex(canonicalRequest)].join("\n");
+  const kDate = hmac(`AWS4${args.awsSecretAccessKey}`, dateStamp);
+  const kRegion = hmac(kDate, args.region);
+  const kService = hmac(kRegion, service);
+  const kSigning = hmac(kService, "aws4_request");
+  const signature = hmacHex(kSigning, stringToSign);
+  const authorization = [
+    `AWS4-HMAC-SHA256 Credential=${args.awsAccessKeyId}/${credentialScope}`,
+    `SignedHeaders=${signedHeaders}`,
+    `Signature=${signature}`,
+  ].join(", ");
+
+  const url = new URL(`https://${host}${canonicalUri}`);
+  for (const [k, v] of Object.entries(args.query)) {
+    if (v !== "") url.searchParams.set(k, v);
+  }
+  const headers: Record<string, string> = {
+    host,
+    "x-amz-date": amzDate,
+    "x-amz-access-token": args.lwaAccessToken,
+    Authorization: authorization,
+    Accept: "application/json",
+  };
+  if (args.contentType) headers["content-type"] = args.contentType;
+  if (args.awsSessionToken) headers["x-amz-security-token"] = args.awsSessionToken;
+
+  const res = await fetch(url.toString(), {
+    method,
+    headers,
+    body: method === "POST" ? body : undefined,
+    cache: "no-store",
+  });
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = text ? (JSON.parse(text) as unknown) : null;
+  } catch {
+    json = null;
+  }
+  return { res, text, json };
+}
+
+function parseListingsTsv(content: string) {
+  const lines = content.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (!lines.length) return [];
+  const headers = lines[0].split("\t").map((h) => h.trim().toLowerCase());
+  const idx = (names: string[]) => names.map((n) => headers.indexOf(n)).find((i) => i >= 0) ?? -1;
+
+  const skuIdx = idx(["seller-sku", "sku", "item_sku"]);
+  const asinIdx = idx(["asin1", "asin"]);
+  const titleIdx = idx(["item-name", "item_name", "title", "product-name"]);
+  const statusIdx = idx(["status", "item-status"]);
+  const productTypeIdx = idx(["product-id-type", "product_type"]);
+
+  const rows: ProductRow[] = [];
+  for (let i = 1; i < lines.length; i += 1) {
+    const cols = lines[i].split("\t");
+    const value = (index: number) => (index >= 0 ? (cols[index] ?? "").trim() : "");
+    const statusLabel = value(statusIdx) || "Unbekannt";
+    const normalized = statusLabel.toLowerCase();
+    const isActive = normalized.includes("active") || normalized.includes("buyable") || normalized.includes("discoverable");
+    const sku = value(skuIdx);
+    const asin = value(asinIdx);
+    const title = value(titleIdx);
+    const productType = value(productTypeIdx);
+    if (!sku && !asin && !title) continue;
+    rows.push({ sku, asin, title, statusLabel, productType, isActive });
+  }
+  return rows;
+}
+
+async function fetchProductsFromReports(args: {
+  endpoint: string;
+  region: string;
+  awsAccessKeyId: string;
+  awsSecretAccessKey: string;
+  awsSessionToken?: string;
+  lwaAccessToken: string;
+  marketplaceId: string;
+}) {
+  const state = (fallbackByMarketplace[args.marketplaceId] ??= {});
+  const now = Date.now();
+  const reportTypes = ["GET_MERCHANT_LISTINGS_ALL_DATA", "GET_MERCHANT_LISTINGS_DATA"] as const;
+  const maxPendingMsPerReport = 75 * 1000;
+
+  const createReportForType = async (reportType: (typeof reportTypes)[number]) => {
+    const createBody = JSON.stringify({ reportType, marketplaceIds: [args.marketplaceId] });
+    const createRes = await spApiRequest({
+      endpoint: args.endpoint,
+      region: args.region,
+      method: "POST",
+      path: "/reports/2021-06-30/reports",
+      query: {},
+      body: createBody,
+      contentType: "application/json",
+      awsAccessKeyId: args.awsAccessKeyId,
+      awsSecretAccessKey: args.awsSecretAccessKey,
+      awsSessionToken: args.awsSessionToken,
+      lwaAccessToken: args.lwaAccessToken,
+    });
+    const reportId = (createRes.json as { reportId?: string } | null)?.reportId;
+    if (!createRes.res.ok || !reportId) {
+      return {
+        ok: false as const,
+        error: `createReport ${reportType} failed (${createRes.res.status})`,
+      };
+    }
+    state.reportId = reportId;
+    state.reportType = reportType;
+    state.startedAt = now;
+    state.lastError = undefined;
+    state.switchCount = (state.switchCount ?? 0) + 1;
+    return { ok: true as const };
+  };
+
+  if (state.rows?.length && state.updatedAt && now - state.updatedAt < 6 * 60 * 60 * 1000) {
+    return { rows: state.rows, source: `reports-cache:${state.reportType ?? "unknown"}` };
+  }
+
+  if (!state.reportId || !state.startedAt || now - state.startedAt > 30 * 60 * 1000) {
+    let created = false;
+    for (const reportType of reportTypes) {
+      const createdReport = await createReportForType(reportType);
+      if (createdReport.ok) {
+        created = true;
+        break;
+      }
+      state.lastError = createdReport.error;
+    }
+    if (!created) {
+      return {
+        rows: [],
+        source: "reports:none",
+        error: state.lastError ?? "createReport failed",
+      };
+    }
+    return { rows: [], source: `reports:${state.reportType}`, pending: true };
+  }
+
+  if (state.startedAt && now - state.startedAt > maxPendingMsPerReport) {
+    const currentType = state.reportType;
+    const nextType =
+      currentType === "GET_MERCHANT_LISTINGS_ALL_DATA"
+        ? "GET_MERCHANT_LISTINGS_DATA"
+        : "GET_MERCHANT_LISTINGS_ALL_DATA";
+    const switched = await createReportForType(nextType);
+    if (!switched.ok) {
+      state.lastError = switched.error;
+      return { rows: [], source: `reports:${currentType}`, error: switched.error };
+    }
+    return { rows: [], source: `reports:${state.reportType}`, pending: true };
+  }
+
+  const statusRes = await spApiGet({
+    endpoint: args.endpoint,
+    region: args.region,
+    path: `/reports/2021-06-30/reports/${encodeURIComponent(state.reportId)}`,
+    query: {},
+    awsAccessKeyId: args.awsAccessKeyId,
+    awsSecretAccessKey: args.awsSecretAccessKey,
+    awsSessionToken: args.awsSessionToken,
+    lwaAccessToken: args.lwaAccessToken,
+  });
+  if (!statusRes.res.ok || !statusRes.json) {
+    state.lastError = `getReport failed (${statusRes.res.status})`;
+    return { rows: [], source: `reports:${state.reportType}`, error: state.lastError };
+  }
+
+  const payload = statusRes.json as { processingStatus?: string; reportDocumentId?: string };
+  if (payload.processingStatus !== "DONE" || !payload.reportDocumentId) {
+    if (payload.processingStatus === "CANCELLED" || payload.processingStatus === "FATAL") {
+      state.lastError = `report status ${payload.processingStatus}`;
+      return { rows: [], source: `reports:${state.reportType}`, error: state.lastError };
+    }
+    return { rows: [], source: `reports:${state.reportType}`, pending: true };
+  }
+
+  const docRes = await spApiGet({
+    endpoint: args.endpoint,
+    region: args.region,
+    path: `/reports/2021-06-30/documents/${encodeURIComponent(payload.reportDocumentId)}`,
+    query: {},
+    awsAccessKeyId: args.awsAccessKeyId,
+    awsSecretAccessKey: args.awsSecretAccessKey,
+    awsSessionToken: args.awsSessionToken,
+    lwaAccessToken: args.lwaAccessToken,
+  });
+  if (!docRes.res.ok || !docRes.json) {
+    state.lastError = `getDocument failed (${docRes.res.status})`;
+    return { rows: [], source: `reports:${state.reportType}`, error: state.lastError };
+  }
+
+  const doc = docRes.json as { url?: string; compressionAlgorithm?: string };
+  if (!doc.url) {
+    state.lastError = "document without url";
+    return { rows: [], source: `reports:${state.reportType}`, error: state.lastError };
+  }
+  const fileRes = await fetch(doc.url, { cache: "no-store" });
+  if (!fileRes.ok) {
+    state.lastError = `download failed (${fileRes.status})`;
+    return { rows: [], source: `reports:${state.reportType}`, error: state.lastError };
+  }
+  const buffer = Buffer.from(await fileRes.arrayBuffer());
+  const decoded =
+    doc.compressionAlgorithm === "GZIP" ? gunzipSync(buffer).toString("utf8") : buffer.toString("utf8");
+  const parsed = parseListingsTsv(decoded);
+  state.rows = parsed;
+  state.updatedAt = now;
+  state.reportId = undefined;
+  state.startedAt = undefined;
+  return { rows: parsed, source: `reports:${state.reportType}` };
+}
+
+function isActiveStatus(statuses: string[]) {
+  const normalized = statuses.map((s) => s.toUpperCase());
+  return normalized.includes("BUYABLE") || normalized.includes("DISCOVERABLE");
+}
+
+export async function GET(request: Request) {
+  try {
+    const config = await getConfig();
+    const missing = {
+      AMAZON_SP_API_REFRESH_TOKEN: !config.refreshToken,
+      AMAZON_SP_API_CLIENT_ID: !config.lwaClientId,
+      AMAZON_SP_API_CLIENT_SECRET: !config.lwaClientSecret,
+      AMAZON_AWS_ACCESS_KEY_ID: !config.awsAccessKeyId,
+      AMAZON_AWS_SECRET_ACCESS_KEY: !config.awsSecretAccessKey,
+      AMAZON_SP_API_MARKETPLACE_ID: config.marketplaceIds.length === 0,
+      AMAZON_SP_API_SELLER_ID: false,
+    };
+    if (Object.values(missing).some(Boolean)) {
+      return NextResponse.json({ error: "Amazon SP-API ist nicht vollständig konfiguriert.", missing }, { status: 500 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const statusFilter = (searchParams.get("status") ?? "active").toLowerCase();
+
+    const lwaAccessToken = await getLwaAccessToken({
+      refreshToken: config.refreshToken,
+      lwaClientId: config.lwaClientId,
+      lwaClientSecret: config.lwaClientSecret,
+    });
+
+    // Seller-ID robust aus Amazon ziehen (MarketplaceParticipation),
+    // damit lokale/env Tippfehler keine Produktabfrage blockieren.
+    let effectiveSellerId = config.sellerId;
+    const sellerProbe = await spApiGet({
+      endpoint: config.endpoint,
+      region: config.region,
+      path: "/sellers/v1/marketplaceParticipations",
+      query: {},
+      awsAccessKeyId: config.awsAccessKeyId,
+      awsSecretAccessKey: config.awsSecretAccessKey,
+      awsSessionToken: config.awsSessionToken,
+      lwaAccessToken,
+    });
+    if (sellerProbe.res.ok && sellerProbe.json) {
+      const sellerPayload = sellerProbe.json as {
+        payload?: {
+          marketplaceParticipations?: Array<{
+            marketplace?: { id?: string };
+            participation?: { sellerId?: string };
+          }>;
+        };
+      };
+      const participations = sellerPayload.payload?.marketplaceParticipations ?? [];
+      const match = participations.find(
+        (entry) => entry.marketplace?.id === config.marketplaceIds[0]
+      );
+      const resolved = match?.participation?.sellerId ?? "";
+      if (resolved) effectiveSellerId = resolved;
+    }
+
+    if (!effectiveSellerId) {
+      return NextResponse.json(
+        { error: "Seller-ID konnte nicht ermittelt werden. Bitte AMAZON_SP_API_SELLER_ID prüfen." },
+        { status: 500 }
+      );
+    }
+
+    let pageToken = "";
+    let guard = 0;
+    const rows: Array<{
+      sku: string;
+      asin: string;
+      title: string;
+      productType: string;
+      statusLabel: string;
+      isActive: boolean;
+    }> = [];
+
+    while (guard < 40) {
+      const basePath = `/listings/2021-08-01/items/${encodeURIComponent(effectiveSellerId)}`;
+      const candidates: Array<Record<string, string>> = pageToken
+        ? [
+            { marketplaceIds: config.marketplaceIds[0], nextToken: pageToken },
+            { marketplaceIds: config.marketplaceIds[0], pageToken },
+          ]
+        : [
+            { marketplaceIds: config.marketplaceIds[0], includedData: "summaries" },
+            { marketplaceIds: config.marketplaceIds[0], issueLocale: "en_US" },
+            { marketplaceIds: config.marketplaceIds[0] },
+          ];
+
+      let result:
+        | {
+            res: Response;
+            text: string;
+            json: unknown;
+            query: Record<string, string>;
+          }
+        | null = null;
+      const attempts: Array<{ status: number; query: Record<string, string>; preview: string }> = [];
+
+      for (const query of candidates) {
+        const probe = await spApiGet({
+          endpoint: config.endpoint,
+          region: config.region,
+          path: basePath,
+          query,
+          awsAccessKeyId: config.awsAccessKeyId,
+          awsSecretAccessKey: config.awsSecretAccessKey,
+          awsSessionToken: config.awsSessionToken,
+          lwaAccessToken,
+        });
+        if (probe.res.ok && probe.json) {
+          result = { ...probe, query };
+          break;
+        }
+        attempts.push({
+          status: probe.res.status,
+          query,
+          preview: (probe.text ?? "").slice(0, 180),
+        });
+        // Wenn nur diese Variante invalid ist, probieren wir die nächste.
+        if (probe.res.status !== 400) {
+          result = { ...probe, query };
+          break;
+        }
+      }
+
+      if (!result || !result.res.ok || !result.json) {
+        const fallback = await fetchProductsFromReports({
+          endpoint: config.endpoint,
+          region: config.region,
+          awsAccessKeyId: config.awsAccessKeyId,
+          awsSecretAccessKey: config.awsSecretAccessKey,
+          awsSessionToken: config.awsSessionToken,
+          lwaAccessToken,
+          marketplaceId: config.marketplaceIds[0],
+        });
+        if (fallback.pending) {
+          return NextResponse.json(
+            {
+              pending: true,
+              error: "Produktreport wird noch erstellt. Bitte in wenigen Sekunden erneut laden.",
+              source: fallback.source,
+            },
+            { status: 202 }
+          );
+        }
+        if (fallback.rows.length) {
+          const filtered =
+            statusFilter === "inactive"
+              ? fallback.rows.filter((row) => !row.isActive)
+              : statusFilter === "all"
+                ? fallback.rows
+                : fallback.rows.filter((row) => row.isActive);
+          return NextResponse.json({
+            status: statusFilter,
+            sellerId: effectiveSellerId,
+            source: fallback.source,
+            totalCount: filtered.length,
+            items: filtered,
+          });
+        }
+
+        const status = result?.res.status ?? 500;
+        const isLikelyPermissionsIssue = status === 401 || status === 403 || status === 500;
+        return NextResponse.json(
+          {
+            error: isLikelyPermissionsIssue
+              ? "Amazon Produkte konnten nicht geladen werden. Wahrscheinlich fehlen Listings-Rechte (SP-API Role) oder die App muss nach Rollenänderung neu autorisiert werden."
+              : "Amazon Produkte konnten nicht geladen werden.",
+            hint: isLikelyPermissionsIssue
+              ? "Prüfe in Seller Central/Developer Console die Listings Items Berechtigung und autorisiere die App erneut. Orders können funktionieren, obwohl Listings blockiert sind."
+              : undefined,
+            status,
+            triedWithPageToken: Boolean(pageToken),
+            preview: (result?.text ?? "").slice(0, 320),
+            attempts,
+            sellerId: effectiveSellerId,
+            marketplaceId: config.marketplaceIds[0],
+            fallbackError: fallback.error,
+          },
+          { status: 502 }
+        );
+      }
+
+      const payload = result.json as {
+        items?: ListingItem[];
+        pagination?: { nextToken?: string };
+      };
+      const items = payload.items ?? [];
+      for (const item of items) {
+        const summary = item.summaries?.[0];
+        const statuses = Array.isArray(summary?.status) ? summary.status : [];
+        const active = isActiveStatus(statuses);
+        rows.push({
+          sku: item.sku ?? "",
+          asin: summary?.asin ?? "",
+          title: summary?.itemName ?? "",
+          productType: summary?.productType ?? "",
+          statusLabel: statuses.length ? statuses.join(", ") : "Unbekannt",
+          isActive: active,
+        });
+      }
+
+      pageToken = payload.pagination?.nextToken ?? "";
+      if (!pageToken) break;
+      guard += 1;
+    }
+
+    const filtered =
+      statusFilter === "inactive"
+        ? rows.filter((row) => !row.isActive)
+        : statusFilter === "all"
+          ? rows
+          : rows.filter((row) => row.isActive);
+
+    return NextResponse.json({
+      status: statusFilter,
+      sellerId: effectiveSellerId,
+      totalCount: filtered.length,
+      items: filtered,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+

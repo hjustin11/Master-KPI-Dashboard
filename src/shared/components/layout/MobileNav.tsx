@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Megaphone, Menu, Package, ShoppingCart } from "lucide-react";
+import { BarChart3, Megaphone, Menu, Package, ShoppingCart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePermissions } from "@/shared/hooks/usePermissions";
@@ -20,13 +20,13 @@ const mainItems: Array<{
   key: SidebarItemKey;
   label: string;
   href: string;
-  icon: typeof Home;
+  icon: typeof BarChart3;
   requiredPermissions?: PermissionKey[];
 }> = [
-  { key: "overview", label: "Home", href: "/", icon: Home },
   { key: "amazon", label: "Amazon", href: "/amazon", icon: ShoppingCart, requiredPermissions: ["manage_integrations"] },
   { key: "xentral", label: "Xentral", href: "/xentral", icon: Package, requiredPermissions: ["manage_integrations"] },
   { key: "advertising", label: "Werbung", href: "/advertising", icon: Megaphone, requiredPermissions: ["manage_integrations"] },
+  { key: "analytics", label: "Analytics", href: "/analytics", icon: BarChart3, requiredPermissions: ["export_data"] },
 ];
 
 const moreItems: Array<{
@@ -35,7 +35,8 @@ const moreItems: Array<{
   href: string;
   requiredPermissions?: PermissionKey[];
 }> = [
-  { key: "analytics", label: "Analytics", href: "/analytics", requiredPermissions: ["export_data"] },
+  { key: "analytics", label: "Marktplätze", href: "/analytics/marketplaces", requiredPermissions: ["export_data"] },
+  { key: "analytics", label: "Artikelprognose", href: "/analytics/article-forecast", requiredPermissions: ["export_data"] },
   { key: "settings", label: "Einstellungen", href: "/settings" },
   {
     key: "updates",

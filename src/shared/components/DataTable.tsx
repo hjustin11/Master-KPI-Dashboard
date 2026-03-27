@@ -34,6 +34,10 @@ type DataTableProps<TData, TValue> = {
   onDisplayedRowsChange?: (rows: TData[]) => void;
 };
 
+type ColumnMeta = {
+  align?: "left" | "center" | "right";
+};
+
 export function DataTable<TData, TValue>({
   columns,
   data,
@@ -105,7 +109,16 @@ export function DataTable<TData, TValue>({
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
+                  <TableHead
+                    key={header.id}
+                    className={
+                      ((header.column.columnDef.meta as ColumnMeta | undefined)?.align === "center"
+                        ? "text-center"
+                        : (header.column.columnDef.meta as ColumnMeta | undefined)?.align === "right"
+                          ? "text-right"
+                          : undefined)
+                    }
+                  >
                     {header.isPlaceholder ? null : (
                       <button
                         type="button"
@@ -113,6 +126,12 @@ export function DataTable<TData, TValue>({
                         disabled={!header.column.getCanSort()}
                         className={cn(
                           "inline-flex items-center gap-1.5",
+                          (header.column.columnDef.meta as ColumnMeta | undefined)?.align === "center"
+                            ? "w-full justify-center"
+                            : null,
+                          (header.column.columnDef.meta as ColumnMeta | undefined)?.align === "right"
+                            ? "w-full justify-end"
+                            : null,
                           header.column.getCanSort()
                             ? "cursor-pointer select-none hover:text-foreground"
                             : "cursor-default"
@@ -150,7 +169,16 @@ export function DataTable<TData, TValue>({
               rows.map((row) => (
                 <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell
+                      key={cell.id}
+                      className={
+                        ((cell.column.columnDef.meta as ColumnMeta | undefined)?.align === "center"
+                          ? "text-center"
+                          : (cell.column.columnDef.meta as ColumnMeta | undefined)?.align === "right"
+                            ? "text-right"
+                            : undefined)
+                      }
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}

@@ -16,6 +16,8 @@ const segmentLabels: Record<string, string> = {
   campaigns: "Kampagnen",
   performance: "Performance",
   analytics: "Analytics",
+  marketplaces: "Marktplätze",
+  "article-forecast": "Artikelprognose",
   settings: "Einstellungen",
   profile: "Profil",
   users: "Benutzer",

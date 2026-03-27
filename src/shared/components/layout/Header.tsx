@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search, User } from "lucide-react";
+import { Bell, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -53,24 +53,7 @@ export function Header() {
           <Breadcrumbs />
         </div>
 
-        <div className="hidden items-center gap-2 md:flex">
-          <button
-            type="button"
-            className="flex h-9 items-center gap-2 rounded-md border border-border bg-muted/40 px-3 text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted/60"
-          >
-            <Search className="h-4 w-4" />
-            <span>Suchen...</span>
-            <span className="rounded border border-border px-1.5 py-0.5 text-[11px]">
-              Cmd+K
-            </span>
-          </button>
-        </div>
-
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" className="md:hidden">
-            <Search className="h-4 w-4" />
-            <span className="sr-only">Suche</span>
-          </Button>
           <Button variant="ghost" size="icon-sm">
             <Bell className="h-4 w-4" />
             <span className="sr-only">Benachrichtigungen</span>
