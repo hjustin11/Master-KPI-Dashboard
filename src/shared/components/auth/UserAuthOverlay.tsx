@@ -130,7 +130,7 @@ export function UserAuthOverlay({
     // "Registrieren" im Login-Menü (invite-only): E-Mail gegen Einladungen prüfen und weiterleiten.
     if (!inviteToken) {
       try {
-        const res = await fetch("/api/invitations/lookup", {
+        const res = await fetch("/api/invitations/register-init", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: values.email }),
