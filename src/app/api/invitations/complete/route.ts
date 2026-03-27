@@ -82,7 +82,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ungueltige Rolle in Einladung." }, { status: 400 });
   }
 
-  const userId = await findAuthUserIdByEmail(email);
+  let userId = await findAuthUserIdByEmail(email);
+  if (!userId) {
+    // Falls die Einladung z.B. manuell in public.invitations angelegt wurde, existiert evtl. kein Auth-User.
+    // Dann legen wir einen Auth-User an (invite-only) und versuchen es erneut.
+    try {
+      const { data } = await admin.auth.admin.createUser({
+        email,
+        email_confirm: true,
+        user_metadata: { role },
+        app_metadata: { role },
+      });
+      userId = data.user?.id ?? null;
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!userId) {
+    userId = await findAuthUserIdByEmail(email);
+  }
+
   if (!userId) {
     return NextResponse.json({ error: "Auth-Benutzer nicht gefunden." }, { status: 404 });
   }

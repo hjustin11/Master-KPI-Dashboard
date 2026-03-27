@@ -236,11 +236,7 @@ export function UserAuthOverlay({
             loading="eager"
           />
         </div>
-        {inviteToken ? (
-          <p className="text-sm text-muted-foreground">
-            Einladung abschliessen: Passwort setzen und Konto aktivieren.
-          </p>
-        ) : mode === "register" ? (
+        {mode === "register" && !inviteToken ? (
           <p className="text-sm text-muted-foreground">
             Registrieren ist nur mit Einladung möglich.
           </p>
