@@ -137,7 +137,7 @@ export function UserAuthOverlay({
         });
         const data = (await res.json()) as
           | { invited: true; role: string; inviteUrl: string }
-          | { invited: false };
+          | { invited: false; error?: string };
 
         if ("invited" in data && data.invited) {
           router.push(data.inviteUrl);
@@ -146,7 +146,9 @@ export function UserAuthOverlay({
         }
 
         setServerMessage(
-          "Diese E-Mail entspricht keiner offenen Einladung. Bitte prüfe, ob du dich vertippt hast."
+          data.error
+            ? `Einladung konnte nicht geprüft werden: ${data.error}`
+            : "Diese E-Mail entspricht keiner offenen Einladung. Bitte prüfe, ob du dich vertippt hast."
         );
         return;
       } catch {
