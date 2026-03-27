@@ -9,15 +9,28 @@ type DashboardUser = {
   fullName: string;
   roleKey: string;
   initials: string;
+  isLoading: boolean;
 };
 
 const DEFAULT_USER: DashboardUser = {
   id: "",
   email: "",
   fullName: "Benutzer",
-  roleKey: "viewer",
+  roleKey: "",
   initials: "U",
+  isLoading: true,
 };
+
+function isLocalHostName(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0";
+}
+
+function parseEmailList(value: string | undefined) {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 function buildInitials(name: string, email: string) {
   const source = name.trim() || email.trim();
@@ -41,12 +54,15 @@ export function useUser() {
     const supabase = createClient();
 
     const loadUser = async () => {
+      // Beim Reload nicht kurzzeitig eine Default-Rolle rendern (verhindert UI-Flicker).
+      setUser((prev) => ({ ...prev, isLoading: true }));
+
       const {
         data: { user: authUser },
       } = await supabase.auth.getUser();
 
       if (!authUser) {
-        setUser(DEFAULT_USER);
+        setUser({ ...DEFAULT_USER, isLoading: false });
         return;
       }
 
@@ -68,7 +84,20 @@ export function useUser() {
 
       const fullName =
         (profile?.full_name as string | undefined) || fallbackFullName;
-      const roleKey = (profile?.role as string | undefined) || fallbackRoleKey;
+      let roleKey = (profile?.role as string | undefined) || fallbackRoleKey;
+
+      // Localhost-Testmodus: erlaubt einen definierten User lokal temporär als Owner zu behandeln.
+      // Aktivierung über .env.local (wird nicht nach Vercel gepusht).
+      try {
+        const enabled = process.env.NEXT_PUBLIC_LOCAL_TEST_MODE === "true";
+        const allowedEmails = parseEmailList(process.env.NEXT_PUBLIC_LOCAL_OWNER_EMAILS);
+        const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+        if (enabled && isLocalHostName(hostname) && allowedEmails.includes(email.toLowerCase())) {
+          roleKey = "owner";
+        }
+      } catch {
+        // ignore
+      }
 
       setUser({
         id: authUser.id,
@@ -76,6 +105,7 @@ export function useUser() {
         fullName,
         roleKey,
         initials: buildInitials(fullName, email),
+        isLoading: false,
       });
     };
 

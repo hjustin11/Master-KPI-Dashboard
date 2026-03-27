@@ -166,7 +166,7 @@ export function AppSidebar() {
   // Verhindert Hydration-Mismatch: initial immer expanded rendern,
   // erst nach dem Client-Mount den echten Sidebar-State verwenden.
   const collapsed = isHydrated ? state === "collapsed" : false;
-  const canRoleSwitch = user.roleKey === "owner" && roleTestingEnabled;
+  const canRoleSwitch = !user.isLoading && user.roleKey === "owner" && roleTestingEnabled;
 
   const cycleRole = (direction: "prev" | "next") => {
     if (!canRoleSwitch) return;
@@ -314,7 +314,9 @@ export function AppSidebar() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{user.fullName}</p>
                   <div className="mt-0.5 flex items-center justify-between gap-2">
-                    <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {user.isLoading ? "Lade..." : roleLabel}
+                    </p>
                     {canRoleSwitch ? (
                       <div className="flex items-center gap-1">
                         <button
@@ -352,7 +354,7 @@ export function AppSidebar() {
               <User className="h-4 w-4" />
               Profil
             </DropdownMenuItem>
-            {user.roleKey === "owner" ? (
+            {!user.isLoading && user.roleKey === "owner" ? (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -419,7 +421,7 @@ export function MobileSidebarTrigger() {
     })),
   ];
 
-  const canRoleSwitch = user.roleKey === "owner" && roleTestingEnabled;
+  const canRoleSwitch = !user.isLoading && user.roleKey === "owner" && roleTestingEnabled;
 
   const cycleRole = (direction: "prev" | "next") => {
     if (!canRoleSwitch) return;
@@ -519,7 +521,7 @@ export function MobileSidebarTrigger() {
                   <span className="min-w-0">
                     <span className="block truncate text-sm">{user.fullName}</span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {roleLabel}
+                      {user.isLoading ? "Lade..." : roleLabel}
                     </span>
                     {canRoleSwitch ? (
                       <div className="mt-1 flex items-center gap-1">
@@ -558,7 +560,7 @@ export function MobileSidebarTrigger() {
                 <User className="h-4 w-4" />
                 Profil
               </DropdownMenuItem>
-              {user.roleKey === "owner" ? (
+              {!user.isLoading && user.roleKey === "owner" ? (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

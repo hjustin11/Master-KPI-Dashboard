@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createClient } from "@/shared/lib/supabase/client";
+import { useUser } from "@/shared/hooks/useUser";
 
 type ProfileFormState = {
   fullName: string;
-  email: string;
   language: string;
   timezone: string;
   notificationsEmail: boolean;
@@ -12,28 +13,95 @@ type ProfileFormState = {
 };
 
 export default function SettingsProfilePage() {
+  const user = useUser();
   const [formState, setFormState] = useState<ProfileFormState>({
     fullName: "",
-    email: "",
     language: "de",
     timezone: "Europe/Berlin",
     notificationsEmail: true,
     notificationsWeeklyReport: true,
   });
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const updateField = <K extends keyof ProfileFormState>(
     key: K,
     value: ProfileFormState[K]
   ) => {
     setSaved(false);
+    setSaveError(null);
     setFormState((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleSave = (event: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    // Initialdaten aus Profil laden (primär aus profiles).
+    const supabase = createClient();
+    const load = async () => {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", authUser.id)
+        .maybeSingle();
+
+      const fullName =
+        (profile?.full_name as string | undefined) ||
+        (authUser.user_metadata?.full_name as string | undefined) ||
+        user.fullName ||
+        "";
+
+      setFormState((prev) => ({
+        ...prev,
+        fullName,
+      }));
+    };
+
+    void load();
+  }, [user.fullName]);
+
+  const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // Hier spaeter Persistenz gegen Supabase API anbinden.
-    setSaved(true);
+    setSaved(false);
+    setSaveError(null);
+    setIsSaving(true);
+
+    try {
+      const supabase = createClient();
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      if (!authUser) throw new Error("Nicht authentifiziert.");
+
+      const fullName = formState.fullName.trim();
+
+      // In DB sichtbar halten (public.profiles)
+      const { error: upsertError } = await supabase.from("profiles").upsert(
+        {
+          id: authUser.id,
+          email: authUser.email ?? "",
+          full_name: fullName,
+          role: user.roleKey,
+        },
+        { onConflict: "id" }
+      );
+      if (upsertError) throw new Error(upsertError.message);
+
+      // Best-effort: auch Auth metadata aktualisieren (falls irgendwo fallback genutzt wird)
+      await supabase.auth.updateUser({
+        data: { full_name: fullName },
+      });
+
+      setSaved(true);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Unbekannter Fehler.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -51,20 +119,10 @@ export default function SettingsProfilePage() {
       >
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2 text-sm">
-            <span className="font-medium">Vollstaendiger Name</span>
+            <span className="font-medium">Vollständiger Name</span>
             <input
               value={formState.fullName}
               onChange={(event) => updateField("fullName", event.target.value)}
-              className="w-full rounded-md border border-border/50 bg-background px-3 py-2 outline-none focus:border-primary"
-            />
-          </label>
-
-          <label className="space-y-2 text-sm">
-            <span className="font-medium">E-Mail</span>
-            <input
-              type="email"
-              value={formState.email}
-              onChange={(event) => updateField("email", event.target.value)}
               className="w-full rounded-md border border-border/50 bg-background px-3 py-2 outline-none focus:border-primary"
             />
           </label>
@@ -117,12 +175,19 @@ export default function SettingsProfilePage() {
           </label>
         </div>
 
+        {saveError ? (
+          <p className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700">
+            {saveError}
+          </p>
+        ) : null}
+
         <div className="flex items-center gap-3">
           <button
             type="submit"
+            disabled={isSaving}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all duration-200 hover:opacity-90"
           >
-            Einstellungen speichern
+            {isSaving ? "Speichere..." : "Einstellungen speichern"}
           </button>
           {saved ? (
             <span className="text-sm text-emerald-400">

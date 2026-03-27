@@ -39,7 +39,7 @@ export function Header() {
   ];
 
   return (
-    <header className="sticky top-0 z-40 h-14 border-b border-border/50 bg-background/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 h-14 border-b border-border/50 bg-sidebar">
       <div className="flex h-14 items-center gap-3 px-4 md:px-6">
         <div className="hidden md:block">
           <SidebarTrigger />
@@ -87,7 +87,7 @@ export function Header() {
                 <User className="h-4 w-4" />
                 Profil
               </DropdownMenuItem>
-              {user.roleKey === "owner" ? (
+              {!user.isLoading && user.roleKey === "owner" ? (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

@@ -16,14 +16,16 @@ export function usePermissions() {
   const roleSectionVisibility = useAppStore((state) => state.roleSectionVisibility);
 
   return useMemo(() => {
+    const userRoleKey = user.roleKey || "viewer";
+
     // Sicherheit: Non-Owner kann niemals eine Test-Rolle "effektiv" nutzen,
     // selbst wenn activeRole manipuliert wurde.
     const effectiveRoleKey =
-      user.roleKey === "owner"
+      userRoleKey === "owner"
         ? roleTestingEnabled
           ? activeRole
           : "owner"
-        : user.roleKey;
+        : userRoleKey;
     const permissions = rolePermissions[effectiveRoleKey] ?? [];
     const sidebarItems = roleSidebarItems[effectiveRoleKey];
     const sectionVisibility = roleSectionVisibility[effectiveRoleKey];

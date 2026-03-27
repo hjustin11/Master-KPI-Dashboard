@@ -37,11 +37,18 @@ export default function DashboardLayout({
         } as React.CSSProperties
       }
     >
-      <div className="flex min-h-screen w-full bg-muted/30">
+      <div className="relative flex min-h-screen w-full overflow-hidden bg-gradient-to-br from-white via-white to-white">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-blue-50/45 blur-3xl" />
+          <div className="absolute -right-28 top-1/3 h-80 w-80 rounded-full bg-indigo-50/40 blur-3xl" />
+          <div className="absolute bottom-[-130px] left-1/3 h-72 w-72 rounded-full bg-sky-50/45 blur-3xl" />
+        </div>
+        <div className="pointer-events-none absolute inset-0 bg-slate-900/[0.015]" />
+
         <AppSidebar />
-        <main className="flex min-h-screen min-w-0 w-full flex-1 basis-0 flex-col">
+        <main className="relative z-10 flex min-h-screen min-w-0 w-full flex-1 basis-0 flex-col">
           <Header />
-          <div className="flex-1 w-full max-w-none p-4 pb-20 md:p-6 md:pb-6 lg:p-8">
+          <div className="flex flex-1 flex-col w-full max-w-none p-4 pb-20 md:p-6 md:pb-6 lg:p-8">
             {children}
           </div>
           <MobileNav />
