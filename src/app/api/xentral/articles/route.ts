@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/shared/lib/supabase/admin";
 
 type XentralArticle = {
   sku: string;
@@ -28,6 +29,29 @@ const EXCLUDED_NAME_TERMS = [
 
 function env(name: string) {
   return (process.env[name] ?? "").trim();
+}
+
+async function getSupabaseSecret(key: string): Promise<string> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("integration_secrets")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+  if (error) return "";
+  const value = (data?.value as string | undefined) ?? "";
+  return value.trim();
+}
+
+async function resolveXentralConfig() {
+  const baseUrl = env("XENTRAL_BASE_URL") || (await getSupabaseSecret("XENTRAL_BASE_URL"));
+  const token =
+    env("XENTRAL_PAT") ||
+    env("XENTRAL_KEY") ||
+    (await getSupabaseSecret("XENTRAL_PAT")) ||
+    (await getSupabaseSecret("XENTRAL_KEY"));
+
+  return { baseUrl, token };
 }
 
 function joinUrl(base: string, path: string) {
@@ -124,12 +148,18 @@ function parseTotalCount(payload: unknown): number | null {
 }
 
 export async function GET(request: Request) {
-  const baseUrl = env("XENTRAL_BASE_URL");
-  const token = env("XENTRAL_PAT") || env("XENTRAL_KEY");
+  const { baseUrl, token } = await resolveXentralConfig();
 
   if (!baseUrl || !token) {
     return NextResponse.json(
-      { error: "Xentral ist nicht konfiguriert. Bitte .env.local prüfen." },
+      {
+        error:
+          "Xentral ist nicht konfiguriert. Bitte Env Vars setzen oder Supabase Tabelle 'integration_secrets' befüllen.",
+        missing: {
+          XENTRAL_BASE_URL: !baseUrl,
+          XENTRAL_PAT_or_KEY: !token,
+        },
+      },
       { status: 500 }
     );
   }
