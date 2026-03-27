@@ -25,34 +25,61 @@ export function UserAuthOverlay({
   inviteToken,
 }: UserAuthOverlayProps) {
   const router = useRouter();
-  const [mode] = useState<AuthMode>(initialMode);
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [inviteCta, setInviteCta] = useState<{ role: string; url: string } | null>(null);
   const [hasSession, setHasSession] = useState<boolean | null>(null);
 
+  type FormValues = { email: string; password?: string; fullName?: string };
+
   const schema = useMemo(() => {
-    if (mode === "login") {
-      return z.object({
-        email: z.string().email("Bitte eine gueltige E-Mail eingeben."),
-        password: z.string().min(6, "Das Passwort muss mindestens 6 Zeichen haben."),
-      });
-    }
-
-    // Invitation completion: only set password (email comes from invite)
-    return z.object({
-      fullName: z.string().min(2, "Bitte deinen Namen angeben."),
-      password: z.string().min(6, "Das Passwort muss mindestens 6 Zeichen haben."),
+    const base = z.object({
+      email: z.string().email("Bitte eine gueltige E-Mail eingeben."),
+      password: z.string().optional(),
+      fullName: z.string().optional(),
     });
-  }, [mode]);
 
-  type LoginValues = { email: string; password: string };
-  type InviteValues = { fullName: string; password: string };
+    return base.superRefine((value, ctx) => {
+      // Login: email + password
+      if (mode === "login") {
+        if (!value.password || value.password.trim().length < 6) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["password"],
+            message: "Das Passwort muss mindestens 6 Zeichen haben.",
+          });
+        }
+        return;
+      }
 
-  const form = useForm<LoginValues | InviteValues>({
+      // Invite completion: fullName + password (email is display only)
+      if (inviteToken) {
+        if (!value.fullName || value.fullName.trim().length < 2) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["fullName"],
+            message: "Bitte deinen Namen angeben.",
+          });
+        }
+        if (!value.password || value.password.trim().length < 6) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["password"],
+            message: "Das Passwort muss mindestens 6 Zeichen haben.",
+          });
+        }
+      }
+    });
+  }, [inviteToken, mode]);
+
+  const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: (mode === "login"
-      ? { email: initialEmail, password: "" }
-      : { fullName: "", password: "" }) as LoginValues | InviteValues,
+    defaultValues:
+      mode === "login"
+        ? { email: initialEmail, password: "" }
+        : inviteToken
+          ? { email: initialEmail, fullName: "", password: "" }
+          : { email: initialEmail },
   });
 
   const isLoading = form.formState.isSubmitting;
@@ -64,13 +91,16 @@ export function UserAuthOverlay({
     });
   }, []);
 
-  const onSubmit = async (values: LoginValues | InviteValues) => {
+  const onSubmit = async (values: FormValues) => {
     setServerMessage(null);
     setInviteCta(null);
     const supabase = createClient();
 
     if (mode === "login") {
-      const payload = values as LoginValues;
+      const payload = {
+        email: values.email,
+        password: values.password ?? "",
+      };
       const { error } = await supabase.auth.signInWithPassword(payload);
       if (error) {
         // Wenn der User eingeladen wurde (Invite-only), leite ihn zur Registrierung/Invite-Abschluss.
@@ -105,6 +135,36 @@ export function UserAuthOverlay({
       return;
     }
 
+    // "Registrieren" im Login-Menue (invite-only): E-Mail gegen Einladungen pruefen und weiterleiten.
+    if (!inviteToken) {
+      try {
+        const res = await fetch("/api/invitations/lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: values.email }),
+        });
+        const data = (await res.json()) as
+          | { invited: true; role: string; inviteUrl: string }
+          | { invited: false };
+
+        if ("invited" in data && data.invited) {
+          router.push(data.inviteUrl);
+          router.refresh();
+          return;
+        }
+
+        setServerMessage(
+          "Diese E-Mail entspricht keiner offenen Einladung. Bitte pruefe, ob du dich vertippt hast."
+        );
+        return;
+      } catch {
+        setServerMessage(
+          "Einladung konnte nicht geprueft werden. Bitte versuche es erneut."
+        );
+        return;
+      }
+    }
+
     // Einladung abschliessen: Passwort setzen + Einladung akzeptieren (Rolle setzen)
     const sessionUser = await supabase.auth.getUser();
     if (!sessionUser.data.user) {
@@ -114,10 +174,10 @@ export function UserAuthOverlay({
       return;
     }
 
-    const payload = values as InviteValues;
+    const payload = values;
     const { error: pwError } = await supabase.auth.updateUser({
-      password: payload.password,
-      data: { full_name: payload.fullName.trim() },
+      password: payload.password ?? "",
+      data: { full_name: (payload.fullName ?? "").trim() },
     });
     if (pwError) {
       setServerMessage(pwError.message);
@@ -153,15 +213,52 @@ export function UserAuthOverlay({
           />
         </div>
         <p className="text-sm text-muted-foreground">
-          {mode === "login"
-            ? "Bitte anmelden."
-            : "Einladung abschliessen: Passwort setzen und Konto aktivieren."}
+          {inviteToken
+            ? "Einladung abschliessen: Passwort setzen und Konto aktivieren."
+            : mode === "login"
+              ? "Bitte anmelden."
+              : "Registrieren ist nur mit Einladung moeglich."}
         </p>
       </div>
       {invitedRole ? (
         <p className="mb-4 rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-300">
           Du wurdest als <strong>{invitedRole.toUpperCase()}</strong> eingeladen.
         </p>
+      ) : null}
+
+      {!inviteToken ? (
+        <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg border border-border/50 bg-muted/20 p-1">
+          <button
+            type="button"
+            onClick={() => {
+              setServerMessage(null);
+              setInviteCta(null);
+              setMode("login");
+              form.reset({ email: initialEmail, password: "" });
+            }}
+            className={`rounded-md px-3 py-2 text-sm transition-colors ${
+              mode === "login" ? "bg-background shadow-sm" : "text-muted-foreground hover:bg-accent/40"
+            }`}
+          >
+            Anmelden
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setServerMessage(null);
+              setInviteCta(null);
+              setMode("register");
+              form.reset({ email: initialEmail });
+            }}
+            className={`rounded-md px-3 py-2 text-sm transition-colors ${
+              mode === "register"
+                ? "bg-background shadow-sm"
+                : "text-muted-foreground hover:bg-accent/40"
+            }`}
+          >
+            Registrieren
+          </button>
+        </div>
       ) : null}
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -183,7 +280,7 @@ export function UserAuthOverlay({
               </p>
             ) : null}
           </div>
-        ) : (
+        ) : inviteToken ? (
           <div className="space-y-3">
             <div className="space-y-1 rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-sm">
               <p className="text-xs text-muted-foreground">E-Mail</p>
@@ -209,25 +306,45 @@ export function UserAuthOverlay({
               ) : null}
             </div>
           </div>
+        ) : (
+          <div className="space-y-2">
+            <label htmlFor="registerEmail" className="text-sm font-medium">
+              E-Mail (Einladung)
+            </label>
+            <input
+              id="registerEmail"
+              type="email"
+              className="w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none transition-all duration-200 focus:border-primary"
+              {...form.register("email" as const)}
+            />
+            {"email" in form.formState.errors ? (
+              <p className="text-xs text-red-400">
+                {(form.formState.errors as unknown as { email?: { message?: string } }).email
+                  ?.message ?? ""}
+              </p>
+            ) : null}
+          </div>
         )}
 
-        <div className="space-y-2">
-          <label htmlFor="password" className="text-sm font-medium">
-            Passwort
-          </label>
-          <input
-            id="password"
-            type="password"
-            className="w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none transition-all duration-200 focus:border-primary"
-            {...form.register("password" as const)}
-          />
-          {"password" in form.formState.errors ? (
-            <p className="text-xs text-red-400">
-              {(form.formState.errors as unknown as { password?: { message?: string } }).password
-                ?.message ?? ""}
-            </p>
-          ) : null}
-        </div>
+        {mode === "login" || inviteToken ? (
+          <div className="space-y-2">
+            <label htmlFor="password" className="text-sm font-medium">
+              Passwort
+            </label>
+            <input
+              id="password"
+              type="password"
+              className="w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none transition-all duration-200 focus:border-primary"
+              {...form.register("password" as const)}
+            />
+            {"password" in form.formState.errors ? (
+              <p className="text-xs text-red-400">
+                {(form.formState.errors as unknown as { password?: { message?: string } }).password
+                  ?.message ?? ""}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {serverMessage ? (
           <p className="rounded-md border border-border/50 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
@@ -256,7 +373,11 @@ export function UserAuthOverlay({
           className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {mode === "login" ? "Anmelden" : "Passwort setzen & starten"}
+          {mode === "login"
+            ? "Anmelden"
+            : inviteToken
+              ? "Passwort setzen & starten"
+              : "Einladung pruefen"}
         </button>
 
         {mode === "login" ? (
