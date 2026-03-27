@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useAppStore } from "@/shared/stores/useAppStore";
 import { useUser } from "@/shared/hooks/useUser";
 import {
@@ -10,31 +10,20 @@ import {
 export function usePermissions() {
   const user = useUser();
   const activeRole = useAppStore((state) => state.activeRole);
-  const setActiveRole = useAppStore((state) => state.setActiveRole);
   const roleTestingEnabled = useAppStore((state) => state.roleTestingEnabled);
   const rolePermissions = useAppStore((state) => state.rolePermissions);
   const roleSidebarItems = useAppStore((state) => state.roleSidebarItems);
   const roleSectionVisibility = useAppStore((state) => state.roleSectionVisibility);
 
-  // Nur Owner darf eine abweichende Test-Rolle nutzen. Alle anderen werden auf ihre echte Rolle synchronisiert.
-  useEffect(() => {
-    if (!user.roleKey) return;
-
-    // Non-Owner: niemals eine Test-Rolle zulassen (auch nicht über localStorage).
-    if (user.roleKey !== "owner") {
-      if (activeRole !== user.roleKey) setActiveRole(user.roleKey);
-      return;
-    }
-
-    // Owner: wenn Testmodus AUS ist, immer Owner-Ansicht erzwingen.
-    if (!roleTestingEnabled && activeRole !== "owner") {
-      setActiveRole("owner");
-    }
-  }, [activeRole, roleTestingEnabled, setActiveRole, user.roleKey]);
-
   return useMemo(() => {
+    // Sicherheit: Non-Owner kann niemals eine Test-Rolle "effektiv" nutzen,
+    // selbst wenn activeRole manipuliert wurde.
     const effectiveRoleKey =
-      user.roleKey === "owner" ? (roleTestingEnabled ? activeRole : "owner") : user.roleKey;
+      user.roleKey === "owner"
+        ? roleTestingEnabled
+          ? activeRole
+          : "owner"
+        : user.roleKey;
     const permissions = rolePermissions[effectiveRoleKey] ?? [];
     const sidebarItems = roleSidebarItems[effectiveRoleKey];
     const sectionVisibility = roleSectionVisibility[effectiveRoleKey];

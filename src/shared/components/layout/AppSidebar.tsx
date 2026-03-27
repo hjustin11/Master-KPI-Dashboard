@@ -137,7 +137,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { state, toggleSidebar } = useSidebar();
   const user = useUser();
-  const { hasPermission, canAccessSidebarItem } = usePermissions();
+  const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole } = usePermissions();
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
   const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
   const setRoleTestingEnabled = useAppStore(
@@ -146,9 +146,7 @@ export function AppSidebar() {
   const customRoleKeys = useAppStore((stateFromStore) => stateFromStore.customRoleKeys);
   const roleLabels = useAppStore((stateFromStore) => stateFromStore.roleLabels);
   const setActiveRole = useAppStore((stateFromStore) => stateFromStore.setActiveRole);
-  const roleLabel = useAppStore(
-    (stateFromStore) => stateFromStore.roleLabels[activeRole] ?? activeRole
-  );
+  const roleLabel = roleLabels[effectiveRole] ?? effectiveRole;
   const roleOptions = [
     ...ROLE_OPTIONS.map((item) => ({
       value: item.value,
@@ -375,7 +373,9 @@ export function AppSidebar() {
                       <DropdownMenuItem
                         key={role.value}
                         onClick={() => setActiveRole(role.value)}
-                        className={role.value === activeRole ? "bg-primary/10 text-primary" : ""}
+                        className={
+                          role.value === activeRole ? "bg-primary/10 text-primary" : ""
+                        }
                       >
                         Als {role.label} testen
                       </DropdownMenuItem>
@@ -398,7 +398,7 @@ export function MobileSidebarTrigger() {
   const router = useRouter();
   const pathname = usePathname();
   const user = useUser();
-  const { hasPermission, canAccessSidebarItem } = usePermissions();
+  const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole } = usePermissions();
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
   const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
   const setRoleTestingEnabled = useAppStore(
@@ -407,9 +407,7 @@ export function MobileSidebarTrigger() {
   const customRoleKeys = useAppStore((stateFromStore) => stateFromStore.customRoleKeys);
   const roleLabels = useAppStore((stateFromStore) => stateFromStore.roleLabels);
   const setActiveRole = useAppStore((stateFromStore) => stateFromStore.setActiveRole);
-  const roleLabel = useAppStore(
-    (stateFromStore) => stateFromStore.roleLabels[activeRole] ?? activeRole
-  );
+  const roleLabel = roleLabels[effectiveRole] ?? effectiveRole;
   const roleOptions = [
     ...ROLE_OPTIONS.map((item) => ({
       value: item.value,
