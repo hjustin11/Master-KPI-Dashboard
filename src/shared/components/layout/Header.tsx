@@ -1,7 +1,115 @@
+"use client";
+
+import { Bell, Search, User } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Breadcrumbs } from "@/shared/components/layout/Breadcrumbs";
+import { MobileSidebarTrigger } from "@/shared/components/layout/AppSidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { LogoutMenuItem } from "@/shared/components/auth/LogoutMenuItem";
+import { useUser } from "@/shared/hooks/useUser";
+import { ROLE_OPTIONS } from "@/shared/lib/access-control";
+import { useAppStore } from "@/shared/stores/useAppStore";
 export function Header() {
+  const router = useRouter();
+  const user = useUser();
+  const activeRole = useAppStore((state) => state.activeRole);
+  const customRoleKeys = useAppStore((state) => state.customRoleKeys);
+  const roleLabels = useAppStore((state) => state.roleLabels);
+  const setActiveRole = useAppStore((state) => state.setActiveRole);
+  const roleOptions = [
+    ...ROLE_OPTIONS.map((item) => ({
+      value: item.value,
+      label: roleLabels[item.value] ?? item.label,
+    })),
+    ...customRoleKeys.map((key) => ({
+      value: key,
+      label: roleLabels[key] ?? key,
+    })),
+  ];
+
   return (
-    <header className="flex h-14 items-center border-b bg-background px-4">
-      <h1 className="text-sm font-medium">Dashboard</h1>
+    <header className="sticky top-0 z-40 h-14 border-b border-border/50 bg-background/80 backdrop-blur-md">
+      <div className="flex h-14 items-center gap-3 px-4 md:px-6">
+        <div className="hidden md:block">
+          <SidebarTrigger />
+        </div>
+
+        <div className="md:hidden">
+          <MobileSidebarTrigger />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <Breadcrumbs />
+        </div>
+
+        <div className="hidden items-center gap-2 md:flex">
+          <button
+            type="button"
+            className="flex h-9 items-center gap-2 rounded-md border border-border bg-muted/40 px-3 text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted/60"
+          >
+            <Search className="h-4 w-4" />
+            <span>Suchen...</span>
+            <span className="rounded border border-border px-1.5 py-0.5 text-[11px]">
+              Cmd+K
+            </span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon-sm" className="md:hidden">
+            <Search className="h-4 w-4" />
+            <span className="sr-only">Suche</span>
+          </Button>
+          <Button variant="ghost" size="icon-sm">
+            <Bell className="h-4 w-4" />
+            <span className="sr-only">Benachrichtigungen</span>
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger className="rounded-full">
+              <Avatar size="sm">
+                <AvatarFallback>{user.initials}</AvatarFallback>
+              </Avatar>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
+                <User className="h-4 w-4" />
+                Profil
+              </DropdownMenuItem>
+              {user.roleKey === "owner" ? (
+                <>
+                  <DropdownMenuSeparator />
+                  {activeRole !== "owner" ? (
+                    <DropdownMenuItem onClick={() => setActiveRole("owner")}>
+                      Owner-Ansicht wiederherstellen
+                    </DropdownMenuItem>
+                  ) : null}
+                  {roleOptions.map((role) => (
+                    <DropdownMenuItem
+                      key={role.value}
+                      onClick={() => setActiveRole(role.value)}
+                      className={role.value === activeRole ? "bg-primary/10 text-primary" : ""}
+                    >
+                      Als {role.label} testen
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              ) : null}
+              <DropdownMenuSeparator />
+              <LogoutMenuItem />
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
     </header>
   );
 }

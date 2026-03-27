@@ -1,10 +1,16 @@
-export default function LoginPage() {
-  return (
-    <main>
-      <h1 className="text-2xl font-semibold">Login</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Anmeldeseite fuer Benutzerzugang.
-      </p>
-    </main>
-  );
+import { redirect } from "next/navigation";
+import { UserAuthOverlay } from "@/shared/components/auth/UserAuthOverlay";
+import { createClient } from "@/shared/lib/supabase/server";
+
+export default async function LoginPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    redirect("/");
+  }
+
+  return <UserAuthOverlay initialMode="login" />;
 }
