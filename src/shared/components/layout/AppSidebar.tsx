@@ -107,6 +107,13 @@ const navItems: NavItem[] = [
     requiredPermissions: ["export_data"],
     children: [
       { label: "Marktplätze", href: "/analytics/marketplaces" },
+      { label: "Otto", href: "/analytics/marketplaces/otto" },
+      { label: "eBay", href: "/analytics/marketplaces/ebay" },
+      { label: "Kaufland", href: "/analytics/marketplaces/kaufland" },
+      { label: "Fressnapf", href: "/analytics/marketplaces/fressnapf" },
+      { label: "MediaMarkt & Saturn", href: "/analytics/marketplaces/mediamarkt-saturn" },
+      { label: "ZooPlus", href: "/analytics/marketplaces/zooplus" },
+      { label: "TikTok", href: "/analytics/marketplaces/tiktok" },
       { label: "Artikelprognose", href: "/analytics/article-forecast" },
       { label: "Performance", href: "/analytics/performance" },
     ],
