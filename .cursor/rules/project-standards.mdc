@@ -1,0 +1,45 @@
+---
+description: E-Commerce BI Dashboard Standards und Architekturvorgaben
+alwaysApply: true
+---
+
+# E-Commerce BI Dashboard Regeln
+
+## Tech Stack
+- Next.js App Router mit TypeScript und React.
+- Tailwind CSS + shadcn/ui fuer UI.
+- Supabase fuer Auth, DB und RLS.
+- Recharts fuer Charts.
+- React Query fuer Server State.
+- TanStack Table fuer Tabellen.
+- Zustand fuer Client State.
+- Zod fuer Validierung.
+
+## Architektur
+- Feature-basiert unter `src/features/`.
+- Jedes Feature enthaelt `components/`, `hooks/`, `lib/`, `types/`, `README.md`.
+- Geteilter Code liegt unter `src/shared/`.
+- shadcn/ui liegt unter `src/shared/components/ui/`.
+- Seiten-Routing liegt unter `src/app/(dashboard)/`.
+
+## Code-Konventionen
+- Nur striktes TypeScript, kein `any`.
+- Komponenten als benannte Exports.
+- Server Components als Standard, `use client` nur wenn noetig.
+- Daten-Fetching ueber React-Query Hooks.
+- Formulare mit `react-hook-form` + `zod`.
+- Keine Inline-Styles, nur Tailwind-Klassen.
+- Kommentare auf Deutsch, Variablen auf Englisch.
+
+## Feature-Arbeitsweise
+- Vor Arbeiten in einem Feature zuerst `README.md` des Features lesen.
+- Shared-Komponenten immer aus `@/shared/` importieren.
+- Feature-spezifische Komponenten im jeweiligen Feature-Ordner erstellen.
+- Dateien ausserhalb des aktuellen Features nur nach expliziter Anweisung aendern.
+
+## Namenskonventionen
+- Komponenten: PascalCase (z. B. `OrderTable.tsx`).
+- Hooks: camelCase mit `use`-Praefix (z. B. `useAmazonOrders.ts`).
+- Utils: camelCase (z. B. `formatCurrency.ts`).
+- Types: PascalCase + `.types.ts` (z. B. `amazon.types.ts`).
+- Konstanten: UPPER_SNAKE_CASE.

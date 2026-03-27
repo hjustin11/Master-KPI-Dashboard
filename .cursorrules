@@ -1,0 +1,11 @@
+Antworten fuer dieses Projekt bitte standardmaessig auf Deutsch.
+
+Projektstruktur:
+- App Router unter src/app mit Route-Groups fuer (auth) und (dashboard)
+- Feature-first unter src/features/<feature>
+- Shared Code unter src/shared
+
+Konventionen:
+- Neue Seiten im Dashboard-Bereich unter src/app/(dashboard)
+- Wiederverwendbare UI-/Layout-Bausteine unter src/shared/components
+- API-Handler unter src/app/api/<domain>/route.ts
