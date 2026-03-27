@@ -41,7 +41,7 @@ export default function SettingsProfilePage() {
       <div className="space-y-2">
         <h1 className="text-2xl font-bold tracking-tight">Mein Profil</h1>
         <p className="text-muted-foreground">
-          Passe deine persoenlichen Einstellungen und Benachrichtigungen an.
+          Passe deine persönlichen Einstellungen und Benachrichtigungen an.
         </p>
       </div>
 

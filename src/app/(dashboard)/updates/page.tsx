@@ -38,7 +38,7 @@ export default function UpdatesPage() {
       {
         date: "2026-03-26",
         title: "Einladungs-Flow verbessert",
-        text: "Einladung akzeptieren, Passwort setzen und Rolle uebernehmen.",
+        text: "Einladung akzeptieren, Passwort setzen und Rolle übernehmen.",
       },
     ],
     []
@@ -113,7 +113,7 @@ export default function UpdatesPage() {
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
         <p className="text-sm text-muted-foreground">
-          Updates, Neuerungen und Vorschlaege fuer Verbesserungen.
+          Updates, Neuerungen und Vorschläge für Verbesserungen.
         </p>
       </div>
 
@@ -135,7 +135,7 @@ export default function UpdatesPage() {
       <section className="space-y-3 rounded-xl border border-border/50 bg-card/80 p-4 backdrop-blur-sm md:p-5">
         <h2 className="text-base font-semibold">Vorschlag / Wunschfunktion</h2>
         <p className="text-sm text-muted-foreground">
-          Sende Verbesserungen oder Feature-Wuensche. Der Owner sieht sie in seiner Inbox.
+          Sende Verbesserungen oder Feature-Wünsche. Der Owner sieht sie in seiner Inbox.
         </p>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="grid gap-3 md:grid-cols-2">

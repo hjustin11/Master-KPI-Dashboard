@@ -1,3 +1,3 @@
 # Amazon Feature
 
-Domain fuer Amazon-Daten (Orders, Produkte, KPIs).
+Domain für Amazon-Daten (Orders, Produkte, KPIs).

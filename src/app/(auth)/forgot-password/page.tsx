@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
     }
 
     setMessage(
-      "Wenn die E-Mail existiert, wurde ein Link zum Zuruecksetzen des Passworts versendet."
+      "Wenn die E-Mail existiert, wurde ein Link zum Zurücksetzen des Passworts versendet."
     );
     setLoading(false);
   };

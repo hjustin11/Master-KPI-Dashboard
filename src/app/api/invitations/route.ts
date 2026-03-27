@@ -54,12 +54,7 @@ function isOwnerRole(user: {
 }) {
   const appRole = user.app_metadata?.role;
   const userRole = user.user_metadata?.role;
-  const email = user.email?.toLowerCase();
-  return (
-    appRole === "owner" ||
-    userRole === "owner" ||
-    email === "justin.heidebluth@petrhein.de"
-  );
+  return appRole === "owner" || userRole === "owner";
 }
 
 export async function GET() {
@@ -69,7 +64,7 @@ export async function GET() {
   }
   if (!isOwnerRole(user)) {
     return NextResponse.json(
-      { error: "Nur Owner duerfen Einladungen ansehen." },
+      { error: "Nur Owner dürfen Einladungen ansehen." },
       { status: 403 }
     );
   }
@@ -100,7 +95,7 @@ export async function POST(request: Request) {
   }
   if (!isOwnerRole(user)) {
     return NextResponse.json(
-      { error: "Nur Owner duerfen Einladungen versenden." },
+      { error: "Nur Owner dürfen Einladungen versenden." },
       { status: 403 }
     );
   }
@@ -142,10 +137,12 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
+    const details = process.env.NODE_ENV !== "production" ? error.message : undefined;
     return NextResponse.json(
       {
         error:
-          "Einladung konnte nicht gespeichert werden. Bitte pruefe die Supabase-Tabelle 'invitations'.",
+          "Einladung konnte nicht gespeichert werden. Bitte prüfe die Supabase-Tabelle 'invitations'.",
+        details,
       },
       { status: 500 }
     );
@@ -214,7 +211,7 @@ export async function POST(request: Request) {
   return NextResponse.json(
     {
       invitation: data,
-      message: `Einladung gespeichert und Supabase-E-Mail fuer ${appName} erfolgreich versendet.`,
+      message: "Einladung gesendet.",
     },
     { status: 201 }
   );

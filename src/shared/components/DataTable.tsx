@@ -120,7 +120,7 @@ export function DataTable<TData, TValue>({
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
           >
-            Zurueck
+            Zurück
           </Button>
           <Button
             variant="outline"

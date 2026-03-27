@@ -15,7 +15,19 @@ function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
 }
 
 function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
-  return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
+  const { nativeButton, render, ...rest } = props
+  const resolvedNativeButton =
+    nativeButton ?? (render ? false : true)
+  const resolvedRender =
+    render ?? (resolvedNativeButton ? <button type="button" /> : undefined)
+  return (
+    <MenuPrimitive.Trigger
+      data-slot="dropdown-menu-trigger"
+      nativeButton={resolvedNativeButton}
+      render={resolvedRender}
+      {...rest}
+    />
+  )
 }
 
 function DropdownMenuContent({

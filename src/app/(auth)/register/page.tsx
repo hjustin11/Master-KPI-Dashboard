@@ -72,7 +72,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
     redirect("/login");
   }
 
-  // Wenn man ueber den Invite-Link kommt, ist man oft bereits eingeloggt (Magic Link Session).
+  // Wenn man über den Invite-Link kommt, ist man oft bereits eingeloggt (Magic Link Session).
   // Dann muss hier das Passwort gesetzt werden, statt zu redirecten.
   if (user && user.email?.toLowerCase() !== initialEmail.toLowerCase()) {
     redirect("/");

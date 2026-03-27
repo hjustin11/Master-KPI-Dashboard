@@ -115,7 +115,7 @@ export default function SettingsUsersPage() {
         <input
           value={textOverrides[textKey] ?? ""}
           onChange={(event) => setTextOverride(textKey, event.target.value)}
-          placeholder="Text ueberschreiben..."
+          placeholder="Text überschreiben..."
           className="w-full rounded-md border border-border/50 bg-background px-2 py-1 text-xs outline-none focus:border-primary"
         />
         <button
@@ -160,13 +160,13 @@ export default function SettingsUsersPage() {
   const parseJsonSafely = async <T,>(response: Response): Promise<T> => {
     const raw = await response.text();
     if (!raw) {
-      throw new Error("Leere Serverantwort. Bitte API-Konfiguration pruefen.");
+      throw new Error("Leere Serverantwort. Bitte API-Konfiguration prüfen.");
     }
     try {
       return JSON.parse(raw) as T;
     } catch {
       throw new Error(
-        "Serverantwort war kein gueltiges JSON. Bitte API-Logs pruefen."
+        "Serverantwort war kein gültiges JSON. Bitte API-Logs prüfen."
       );
     }
   };
@@ -237,7 +237,7 @@ export default function SettingsUsersPage() {
       setInviteMessage(
         payload.message ??
           payload.warning ??
-          "Einladung erstellt. Bitte E-Mail-Status pruefen."
+          "Einladung erstellt. Bitte E-Mail-Status prüfen."
       );
       setInviteEmail("");
       setInviteRole("viewer");
@@ -318,7 +318,7 @@ export default function SettingsUsersPage() {
       <div className="space-y-3 rounded-xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm">
         <h1 className="text-xl font-semibold">Owner Bereich</h1>
         <p className="text-muted-foreground">
-          Nur Owner koennen Einladungen, Rollen und Rechte verwalten.
+          Nur Owner können Einladungen, Rollen und Rechte verwalten.
         </p>
       </div>
     );
@@ -339,9 +339,9 @@ export default function SettingsUsersPage() {
             {dashboardEditMode ? "Dashboard Bearbeiten: AN" : "Dashboard Bearbeiten: AUS"}
           </button>
         </div>
-        {text("users.page.description", "Owner-Bereich fuer Einladungen, Rollen und Berechtigungen.") ? (
+        {text("users.page.description", "Owner-Bereich für Einladungen, Rollen und Berechtigungen.") ? (
           <p className="text-sm text-muted-foreground">
-            {text("users.page.description", "Owner-Bereich fuer Einladungen, Rollen und Berechtigungen.")}
+            {text("users.page.description", "Owner-Bereich für Einladungen, Rollen und Berechtigungen.")}
           </p>
         ) : null}
         <TextEditor textKey="users.page.title" />
@@ -376,7 +376,7 @@ export default function SettingsUsersPage() {
         <p className="text-sm text-muted-foreground">
           {text(
             "users.rolesManage.description",
-            "Aendere die Rollenbezeichnungen und fuege fuer Tests eigene Rollen hinzu oder entferne sie wieder."
+            "Ändere die Rollenbezeichnungen und füge für Tests eigene Rollen hinzu oder entferne sie wieder."
           )}
         </p>
         <TextEditor textKey="users.rolesManage.title" />
@@ -471,7 +471,7 @@ export default function SettingsUsersPage() {
                             disabled={!dashboardEditMode || !canManageRoles}
                             className="rounded-md border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 transition-all duration-200 hover:bg-red-500/10"
                           >
-                            Loeschen
+                            Löschen
                           </button>
                         </td>
                       </tr>
@@ -715,7 +715,7 @@ export default function SettingsUsersPage() {
         </div>
         {!isPermissionEditMode ? (
           <p className="text-xs text-muted-foreground">
-            Hinweis: Aktiviere "Berechtigung Bearbeiten", um Rollenrechte zu aendern.
+            Hinweis: Aktiviere "Berechtigung Bearbeiten", um Rollenrechte zu ändern.
           </p>
         ) : null}
       </section>

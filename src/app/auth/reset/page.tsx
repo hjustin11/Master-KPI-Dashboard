@@ -52,7 +52,7 @@ export default function ResetPasswordPage() {
 
       {hasSession === false ? (
         <p className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
-          Bitte oeffne zuerst den Reset-Link aus deiner E-Mail.
+                      Bitte öffne zuerst den Reset-Link aus deiner E-Mail.
         </p>
       ) : null}
 

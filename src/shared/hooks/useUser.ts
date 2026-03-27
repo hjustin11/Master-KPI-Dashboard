@@ -19,11 +19,6 @@ const DEFAULT_USER: DashboardUser = {
   initials: "U",
 };
 
-function bootstrapOwnerRole(email: string, roleKey: string) {
-  if (email.toLowerCase() === "justin.heidebluth@petrhein.de") return "owner";
-  return roleKey;
-}
-
 function buildInitials(name: string, email: string) {
   const source = name.trim() || email.trim();
   if (!source) return "U";
@@ -65,7 +60,7 @@ export function useUser() {
         (authUser.user_metadata?.role as string | undefined) ??
         (authUser.app_metadata?.role as string | undefined) ??
         "viewer";
-      const roleKey = bootstrapOwnerRole(email, rawRoleKey);
+      const roleKey = rawRoleKey;
 
       setUser({
         id: authUser.id,

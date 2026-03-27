@@ -9,18 +9,7 @@ function isOwnerUser(user: {
 }) {
   const appRole = user.app_metadata?.role;
   const userRole = user.user_metadata?.role;
-  const email = user.email?.toLowerCase();
-  return (
-    appRole === "owner" ||
-    userRole === "owner" ||
-    email === "justin.heidebluth@petrhein.de"
-  );
-}
-
-function resolveDisplayedRole(email: string, role: string) {
-  // Bootstrap: dieser Account ist Owner, auch wenn Metadaten (noch) nicht gesetzt sind.
-  if (email.toLowerCase() === "justin.heidebluth@petrhein.de") return "owner";
-  return role || "viewer";
+  return appRole === "owner" || userRole === "owner";
 }
 
 async function getCurrentUser() {
@@ -40,7 +29,7 @@ export async function GET() {
   }
   if (!isOwnerUser(currentUser)) {
     return NextResponse.json(
-      { error: "Nur Owner duerfen Benutzer verwalten." },
+      { error: "Nur Owner dürfen Benutzer verwalten." },
       { status: 403 }
     );
   }
@@ -58,12 +47,10 @@ export async function GET() {
     data.users?.map((item) => ({
       id: item.id,
       email: item.email ?? "",
-      role: resolveDisplayedRole(
-        item.email ?? "",
+      role:
         ((item.app_metadata?.role as string | undefined) ??
           (item.user_metadata?.role as string | undefined) ??
-          "viewer")
-      ),
+          "viewer") || "viewer",
       createdAt: item.created_at,
     })) ?? [];
 
@@ -77,7 +64,7 @@ export async function DELETE(request: Request) {
   }
   if (!isOwnerUser(currentUser)) {
     return NextResponse.json(
-      { error: "Nur Owner duerfen Benutzer entfernen." },
+      { error: "Nur Owner dürfen Benutzer entfernen." },
       { status: 403 }
     );
   }

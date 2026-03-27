@@ -28,7 +28,6 @@ export function UserAuthOverlay({
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [inviteCta, setInviteCta] = useState<{ role: string; url: string } | null>(null);
-  const [hasSession, setHasSession] = useState<boolean | null>(null);
 
   type FormValues = { email: string; password?: string; fullName?: string };
 
@@ -84,13 +83,6 @@ export function UserAuthOverlay({
 
   const isLoading = form.formState.isSubmitting;
 
-  useEffect(() => {
-    const supabase = createClient();
-    void supabase.auth.getSession().then(({ data }) => {
-      setHasSession(Boolean(data.session));
-    });
-  }, []);
-
   const onSubmit = async (values: FormValues) => {
     setServerMessage(null);
     setInviteCta(null);
@@ -118,7 +110,7 @@ export function UserAuthOverlay({
             if ("invited" in data && data.invited) {
               setInviteCta({ role: data.role, url: data.inviteUrl });
               setServerMessage(
-                `Du hast eine Einladung als ${data.role.toUpperCase()}. Bitte Registrierung abschliessen.`
+                `Du hast eine Einladung als ${data.role.toUpperCase()}. Bitte Registrierung abschließen.`
               );
               return;
             }
@@ -135,7 +127,7 @@ export function UserAuthOverlay({
       return;
     }
 
-    // "Registrieren" im Login-Menue (invite-only): E-Mail gegen Einladungen pruefen und weiterleiten.
+    // "Registrieren" im Login-Menü (invite-only): E-Mail gegen Einladungen prüfen und weiterleiten.
     if (!inviteToken) {
       try {
         const res = await fetch("/api/invitations/lookup", {
@@ -154,51 +146,51 @@ export function UserAuthOverlay({
         }
 
         setServerMessage(
-          "Diese E-Mail entspricht keiner offenen Einladung. Bitte pruefe, ob du dich vertippt hast."
+          "Diese E-Mail entspricht keiner offenen Einladung. Bitte prüfe, ob du dich vertippt hast."
         );
         return;
       } catch {
         setServerMessage(
-          "Einladung konnte nicht geprueft werden. Bitte versuche es erneut."
+          "Einladung konnte nicht geprüft werden. Bitte versuche es erneut."
         );
         return;
       }
     }
 
     // Einladung abschliessen: Passwort setzen + Einladung akzeptieren (Rolle setzen)
-    const sessionUser = await supabase.auth.getUser();
-    if (!sessionUser.data.user) {
-      setServerMessage(
-        "Du bist nicht eingeloggt. Bitte oeffne den Einladungslink aus deiner E-Mail erneut."
-      );
-      return;
-    }
-
-    const payload = values;
-    const { error: pwError } = await supabase.auth.updateUser({
-      password: payload.password ?? "",
-      data: { full_name: (payload.fullName ?? "").trim() },
-    });
-    if (pwError) {
-      setServerMessage(pwError.message);
-      return;
-    }
-
-    if (inviteToken) {
-      const res = await fetch("/api/invitations/accept", {
+    try {
+      const res = await fetch("/api/invitations/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: inviteToken }),
+        body: JSON.stringify({
+          token: inviteToken,
+          email: initialEmail,
+          fullName: values.fullName,
+          password: values.password,
+        }),
       });
-      const text = await res.text();
+      const payload = (await res.json()) as { message?: string; role?: string; error?: string };
       if (!res.ok) {
-        setServerMessage(text || "Einladung konnte nicht akzeptiert werden.");
+        setServerMessage(payload.error ?? "Registrierung konnte nicht abgeschlossen werden.");
         return;
       }
-    }
 
-    router.push("/");
-    router.refresh();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: initialEmail,
+        password: values.password ?? "",
+      });
+      if (error) {
+        setServerMessage("Registrierung abgeschlossen. Bitte jetzt anmelden.");
+        router.push(`/login?email=${encodeURIComponent(initialEmail)}`);
+        router.refresh();
+        return;
+      }
+
+      router.push("/");
+      router.refresh();
+    } catch {
+      setServerMessage("Registrierung konnte nicht abgeschlossen werden. Bitte versuche es erneut.");
+    }
   };
 
   return (
@@ -217,7 +209,7 @@ export function UserAuthOverlay({
             ? "Einladung abschliessen: Passwort setzen und Konto aktivieren."
             : mode === "login"
               ? "Bitte anmelden."
-              : "Registrieren ist nur mit Einladung moeglich."}
+              : "Registrieren ist nur mit Einladung möglich."}
         </p>
       </div>
       {invitedRole ? (
@@ -356,15 +348,8 @@ export function UserAuthOverlay({
             href={inviteCta.url}
             className="inline-flex w-full items-center justify-center rounded-md border border-border/60 bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent/40"
           >
-            Registrierung abschliessen (Rolle: {inviteCta.role.toUpperCase()})
+            Registrierung abschließen (Rolle: {inviteCta.role.toUpperCase()})
           </Link>
-        ) : null}
-
-        {mode === "register" && hasSession === false ? (
-          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
-            Hinweis: Du musst den Einladungslink aus der E-Mail oeffnen, damit du hier das Passwort
-            setzen kannst.
-          </p>
         ) : null}
 
         <button
@@ -377,7 +362,7 @@ export function UserAuthOverlay({
             ? "Anmelden"
             : inviteToken
               ? "Passwort setzen & starten"
-              : "Einladung pruefen"}
+              : "Einladung prüfen"}
         </button>
 
         {mode === "login" ? (

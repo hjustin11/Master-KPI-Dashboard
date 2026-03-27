@@ -39,7 +39,7 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       sidebarOpen: true,
       dashboardEditMode: false,
-      activeRole: "owner",
+      activeRole: "viewer",
       rolePermissions: INITIAL_ROLE_PERMISSIONS as Record<string, PermissionKey[]>,
       roleSidebarItems:
         INITIAL_ROLE_SIDEBAR_ITEMS as Record<string, Record<SidebarItemKey, boolean>>,

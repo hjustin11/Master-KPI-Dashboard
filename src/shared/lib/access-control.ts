@@ -40,7 +40,7 @@ export const PERMISSION_CONFIG: Array<{ key: PermissionKey; label: string }> = [
 ];
 
 export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey; label: string }> = [
-  { key: "overview", label: "Uebersicht" },
+  { key: "overview", label: "Übersicht" },
   { key: "amazon", label: "Amazon" },
   { key: "xentral", label: "Xentral" },
   { key: "advertising", label: "Werbung" },

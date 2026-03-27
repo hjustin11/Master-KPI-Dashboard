@@ -1,3 +1,3 @@
 # Advertising Feature
 
-Domain fuer Kampagnen, Spendings und ROAS.
+Domain für Kampagnen, Spendings und ROAS.

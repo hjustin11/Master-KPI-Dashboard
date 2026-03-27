@@ -1,3 +1,3 @@
 # Updates Feature
 
-Domain fuer Changelog, Releases und interne Neuigkeiten.
+Domain für Changelog, Releases und interne Neuigkeiten.

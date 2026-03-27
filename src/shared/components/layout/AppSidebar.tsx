@@ -65,7 +65,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { key: "overview", label: "Uebersicht", href: "/", icon: LayoutDashboard },
+  { key: "overview", label: "Übersicht", href: "/", icon: LayoutDashboard },
   {
     key: "amazon",
     label: "Amazon",
@@ -294,44 +294,56 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-border/50 p-3">
         <DropdownMenu>
           <DropdownMenuTrigger
-            className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-all duration-200 hover:bg-accent/60",
-              collapsed && "justify-center"
-            )}
+            render={
+              <div
+                role="button"
+                tabIndex={0}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-all duration-200 hover:bg-accent/60",
+                  collapsed && "justify-center"
+                )}
+              />
+            }
           >
-            <Avatar size="sm">
-              <AvatarFallback>{user.initials}</AvatarFallback>
-            </Avatar>
-            {!collapsed ? (
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{user.fullName}</p>
-                <div className="mt-0.5 flex items-center justify-between gap-2">
-                  <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
-                  {canRoleSwitch ? (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => cycleRole("prev")}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-                        aria-label="Vorherige Rolle"
-                        title="Vorherige Rolle"
-                      >
-                        <ChevronLeft className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => cycleRole("next")}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-                        aria-label="Naechste Rolle"
-                        title="Naechste Rolle"
-                      >
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : null}
+              <Avatar size="sm">
+                <AvatarFallback>{user.initials}</AvatarFallback>
+              </Avatar>
+              {!collapsed ? (
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{user.fullName}</p>
+                  <div className="mt-0.5 flex items-center justify-between gap-2">
+                    <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
+                    {canRoleSwitch ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            cycleRole("prev");
+                          }}
+                          className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                          aria-label="Vorherige Rolle"
+                          title="Vorherige Rolle"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            cycleRole("next");
+                          }}
+                          className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                          aria-label="Nächste Rolle"
+                          title="Nächste Rolle"
+                        >
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="end" className="w-56">
             <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
@@ -408,7 +420,7 @@ export function MobileSidebarTrigger() {
     <Sheet>
       <SheetTrigger render={<Button variant="ghost" size="icon-sm" className="md:hidden" />}>
         <PanelLeft className="h-4 w-4" />
-        <span className="sr-only">Sidebar oeffnen</span>
+        <span className="sr-only">Sidebar öffnen</span>
       </SheetTrigger>
       <SheetContent side="left" className="w-[280px] border-r border-border/50 bg-card/80 backdrop-blur-sm">
         <SheetHeader className="pb-2">
@@ -474,41 +486,55 @@ export function MobileSidebarTrigger() {
         </nav>
         <div className="mt-auto border-t border-border/50 p-4">
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-all duration-200 hover:bg-accent/60">
-              <span className="flex items-center gap-2">
-                <Avatar size="sm">
-                  <AvatarFallback>{user.initials}</AvatarFallback>
-                </Avatar>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm">{user.fullName}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {roleLabel}
+            <DropdownMenuTrigger
+              render={
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-all duration-200 hover:bg-accent/60"
+                />
+              }
+            >
+                <span className="flex items-center gap-2">
+                  <Avatar size="sm">
+                    <AvatarFallback>{user.initials}</AvatarFallback>
+                  </Avatar>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm">{user.fullName}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {roleLabel}
+                    </span>
+                    {canRoleSwitch ? (
+                      <div className="mt-1 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            cycleRole("prev");
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                          aria-label="Vorherige Rolle"
+                          title="Vorherige Rolle"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            cycleRole("next");
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                          aria-label="Nächste Rolle"
+                          title="Nächste Rolle"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : null}
                   </span>
-                  {canRoleSwitch ? (
-                    <div className="mt-1 flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => cycleRole("prev")}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-                        aria-label="Vorherige Rolle"
-                        title="Vorherige Rolle"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => cycleRole("next")}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-                        aria-label="Naechste Rolle"
-                        title="Naechste Rolle"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : null}
                 </span>
-              </span>
-              <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+                <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem onClick={() => router.push("/settings/profile")}>

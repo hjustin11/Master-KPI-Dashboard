@@ -1,3 +1,3 @@
 # Auth Feature
 
-Domain fuer Login, Registrierung, Rollen und Berechtigungen.
+Domain für Login, Registrierung, Rollen und Berechtigungen.

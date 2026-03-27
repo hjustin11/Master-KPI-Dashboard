@@ -9,12 +9,7 @@ function isOwnerUser(user: {
 }) {
   const appRole = user.app_metadata?.role;
   const userRole = user.user_metadata?.role;
-  const email = user.email?.toLowerCase();
-  return (
-    appRole === "owner" ||
-    userRole === "owner" ||
-    email === "justin.heidebluth@petrhein.de"
-  );
+  return appRole === "owner" || userRole === "owner";
 }
 
 type FeatureRequestRow = {
@@ -137,7 +132,7 @@ export async function PATCH(request: Request) {
   const ownerReply = typeof body.ownerReply === "string" ? body.ownerReply : undefined;
 
   if (!nextStatus && ownerReply === undefined) {
-    return NextResponse.json({ error: "Keine Aenderungen uebergeben." }, { status: 400 });
+    return NextResponse.json({ error: "Keine Änderungen übergeben." }, { status: 400 });
   }
 
   const admin = createAdminClient();

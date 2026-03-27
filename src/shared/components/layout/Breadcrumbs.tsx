@@ -28,7 +28,7 @@ export function Breadcrumbs() {
   const cleanPath = pathname === "/" ? [] : pathname.split("/").filter(Boolean);
 
   const items = [
-    { label: "Uebersicht", href: "/" },
+    { label: "Übersicht", href: "/" },
     ...cleanPath.map((segment, index) => ({
       label: segmentLabels[segment] ?? segment,
       href: `/${cleanPath.slice(0, index + 1).join("/")}`,
