@@ -27,6 +27,7 @@ export function UserAuthOverlay({
   const router = useRouter();
   const [mode] = useState<AuthMode>(initialMode);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
+  const [inviteCta, setInviteCta] = useState<{ role: string; url: string } | null>(null);
   const [hasSession, setHasSession] = useState<boolean | null>(null);
 
   const schema = useMemo(() => {
@@ -65,12 +66,37 @@ export function UserAuthOverlay({
 
   const onSubmit = async (values: LoginValues | InviteValues) => {
     setServerMessage(null);
+    setInviteCta(null);
     const supabase = createClient();
 
     if (mode === "login") {
       const payload = values as LoginValues;
       const { error } = await supabase.auth.signInWithPassword(payload);
       if (error) {
+        // Wenn der User eingeladen wurde (Invite-only), leite ihn zur Registrierung/Invite-Abschluss.
+        const errorText = error.message.toLowerCase();
+        if (errorText.includes("invalid login credentials")) {
+          try {
+            const res = await fetch("/api/invitations/lookup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: payload.email }),
+            });
+            const data = (await res.json()) as
+              | { invited: true; role: string; inviteUrl: string }
+              | { invited: false };
+            if ("invited" in data && data.invited) {
+              setInviteCta({ role: data.role, url: data.inviteUrl });
+              setServerMessage(
+                `Du hast eine Einladung als ${data.role.toUpperCase()}. Bitte Registrierung abschliessen.`
+              );
+              return;
+            }
+          } catch {
+            // ignore, fallback to default error
+          }
+        }
+
         setServerMessage(error.message);
         return;
       }
@@ -207,6 +233,14 @@ export function UserAuthOverlay({
           <p className="rounded-md border border-border/50 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             {serverMessage}
           </p>
+        ) : null}
+        {mode === "login" && inviteCta ? (
+          <Link
+            href={inviteCta.url}
+            className="inline-flex w-full items-center justify-center rounded-md border border-border/60 bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent/40"
+          >
+            Registrierung abschliessen (Rolle: {inviteCta.role.toUpperCase()})
+          </Link>
         ) : null}
 
         {mode === "register" && hasSession === false ? (

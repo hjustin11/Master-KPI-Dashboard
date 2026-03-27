@@ -156,6 +156,7 @@ export async function POST(request: Request) {
     data: {
       role,
       invited_by: user.id,
+      invite_token: token,
     },
   });
 
