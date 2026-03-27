@@ -2,21 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 
-function isOwnerUser(user: {
-  email?: string | null;
-  app_metadata?: Record<string, unknown>;
-  user_metadata?: Record<string, unknown>;
-}) {
-  const appRole = user.app_metadata?.role;
-  const userRole = user.user_metadata?.role;
-  if (appRole === "owner" || userRole === "owner") return true;
-  const email = (user.email ?? "").toLowerCase();
-  const ownerEmails =
-    process.env.OWNER_EMAILS?.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean) ??
-    [];
-  return Boolean(email) && ownerEmails.includes(email);
-}
-
 async function getCurrentUser() {
   const supabase = await createServerSupabase();
   const {
@@ -24,7 +9,23 @@ async function getCurrentUser() {
     error,
   } = await supabase.auth.getUser();
   if (error || !user) return null;
-  return user;
+  return { user, supabase };
+}
+
+async function isOwnerUser(args: {
+  user: { id: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> };
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>;
+}) {
+  const { user, supabase } = args;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.role === "owner") return true;
+  const appRole = user.app_metadata?.role;
+  const userRole = user.user_metadata?.role;
+  return appRole === "owner" || userRole === "owner";
 }
 
 export async function GET() {
@@ -32,7 +33,7 @@ export async function GET() {
   if (!currentUser) {
     return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
   }
-  if (!isOwnerUser(currentUser)) {
+  if (!(await isOwnerUser(currentUser))) {
     return NextResponse.json(
       { error: "Nur Owner dürfen Benutzer verwalten." },
       { status: 403 }
@@ -76,7 +77,7 @@ export async function DELETE(request: Request) {
   if (!currentUser) {
     return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
   }
-  if (!isOwnerUser(currentUser)) {
+  if (!(await isOwnerUser(currentUser))) {
     return NextResponse.json(
       { error: "Nur Owner dürfen Benutzer entfernen." },
       { status: 403 }
@@ -90,7 +91,7 @@ export async function DELETE(request: Request) {
       { status: 400 }
     );
   }
-  if (body.userId === currentUser.id) {
+  if (body.userId === currentUser.user.id) {
     return NextResponse.json(
       { error: "Owner kann sich nicht selbst loeschen." },
       { status: 400 }

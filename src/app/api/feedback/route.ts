@@ -2,19 +2,20 @@ import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 
-function isOwnerUser(user: {
-  email?: string | null;
-  app_metadata?: Record<string, unknown>;
-  user_metadata?: Record<string, unknown>;
+async function isOwnerUser(args: {
+  user: { id: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> };
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>;
 }) {
+  const { user, supabase } = args;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.role === "owner") return true;
   const appRole = user.app_metadata?.role;
   const userRole = user.user_metadata?.role;
-  if (appRole === "owner" || userRole === "owner") return true;
-  const email = (user.email ?? "").toLowerCase();
-  const ownerEmails =
-    process.env.OWNER_EMAILS?.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean) ??
-    [];
-  return Boolean(email) && ownerEmails.includes(email);
+  return appRole === "owner" || userRole === "owner";
 }
 
 type FeatureRequestRow = {
@@ -39,7 +40,7 @@ export async function GET() {
     return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
   }
 
-  if (!isOwnerUser(user)) {
+  if (!(await isOwnerUser({ user, supabase }))) {
     return NextResponse.json({ error: "Nur Owner." }, { status: 403 });
   }
 
@@ -116,7 +117,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
   }
 
-  if (!isOwnerUser(user)) {
+  if (!(await isOwnerUser({ user, supabase }))) {
     return NextResponse.json({ error: "Nur Owner." }, { status: 403 });
   }
 

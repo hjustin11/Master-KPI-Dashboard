@@ -44,30 +44,33 @@ async function getAuthenticatedUser() {
   if (error || !user) {
     return null;
   }
-  return user;
+  return { user, supabase };
 }
 
-function isOwnerRole(user: {
-  email?: string | null;
-  app_metadata?: Record<string, unknown>;
-  user_metadata?: Record<string, unknown>;
+async function isOwnerRole(args: {
+  user: { id: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> };
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>;
 }) {
+  const { user, supabase } = args;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.role === "owner") return true;
+
+  // Fallback: falls profiles noch nicht existiert
   const appRole = user.app_metadata?.role;
   const userRole = user.user_metadata?.role;
-  if (appRole === "owner" || userRole === "owner") return true;
-  const email = (user.email ?? "").toLowerCase();
-  const ownerEmails =
-    process.env.OWNER_EMAILS?.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean) ??
-    [];
-  return Boolean(email) && ownerEmails.includes(email);
+  return appRole === "owner" || userRole === "owner";
 }
 
 export async function GET() {
-  const user = await getAuthenticatedUser();
-  if (!user) {
+  const auth = await getAuthenticatedUser();
+  if (!auth) {
     return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
   }
-  if (!isOwnerRole(user)) {
+  if (!(await isOwnerRole(auth))) {
     return NextResponse.json(
       { error: "Nur Owner dürfen Einladungen ansehen." },
       { status: 403 }
@@ -94,17 +97,17 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const user = await getAuthenticatedUser();
-  if (!user) {
+  const auth = await getAuthenticatedUser();
+  if (!auth) {
     return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
   }
-  if (!isOwnerRole(user)) {
+  if (!(await isOwnerRole(auth))) {
     const details =
       process.env.NODE_ENV !== "production"
         ? {
-            email: user.email ?? null,
-            appRole: (user.app_metadata?.role as string | undefined) ?? null,
-            userRole: (user.user_metadata?.role as string | undefined) ?? null,
+            profileRole: null,
+            appRole: (auth.user.app_metadata?.role as string | undefined) ?? null,
+            userRole: (auth.user.user_metadata?.role as string | undefined) ?? null,
           }
         : undefined;
     return NextResponse.json(
@@ -139,7 +142,7 @@ export async function POST(request: Request) {
     role,
     token,
     status: "pending",
-    invited_by: user.id,
+    invited_by: auth.user.id,
     expires_at: expiresAt,
   };
 
@@ -166,7 +169,7 @@ export async function POST(request: Request) {
     redirectTo: inviteUrl,
     data: {
       role,
-      invited_by: user.id,
+      invited_by: auth.user.id,
       invite_token: token,
     },
   });
