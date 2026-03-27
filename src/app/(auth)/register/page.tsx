@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { UserAuthOverlay } from "@/shared/components/auth/UserAuthOverlay";
 import { createClient } from "@/shared/lib/supabase/server";
+import { createAdminClient } from "@/shared/lib/supabase/admin";
 
 type RegisterPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -34,6 +35,40 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
   }
 
   if (!inviteToken || !initialEmail) {
+    redirect("/login");
+  }
+
+  // Verifikation: Registrierung ist NUR gueltig, wenn ein pending Invite in der DB existiert.
+  try {
+    const admin = createAdminClient();
+    const { data: inviteRow, error: inviteError } = await admin
+      .from("invitations")
+      .select("email,role,status,expires_at")
+      .eq("token", inviteToken)
+      .maybeSingle();
+
+    if (inviteError || !inviteRow) {
+      redirect("/login");
+    }
+
+    const rowEmail = String(inviteRow.email ?? "").toLowerCase();
+    const providedEmail = String(initialEmail ?? "").toLowerCase();
+    if (!rowEmail || rowEmail !== providedEmail) {
+      redirect("/login");
+    }
+
+    if (inviteRow.status !== "pending") {
+      redirect("/login");
+    }
+
+    const expiresAt = new Date(inviteRow.expires_at as string).getTime();
+    if (Number.isFinite(expiresAt) && expiresAt < Date.now()) {
+      redirect("/login");
+    }
+
+    // Rolle aus DB gewinnt, Query-Param ist nur "Anzeige".
+    invitedRole = (inviteRow.role as string | undefined) ?? invitedRole;
+  } catch {
     redirect("/login");
   }
 
