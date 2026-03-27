@@ -46,7 +46,7 @@ export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey; label: string }> 
   { key: "advertising", label: "Werbung" },
   { key: "analytics", label: "Analytics" },
   { key: "settings", label: "Einstellungen" },
-  { key: "updates", label: "Tasks" },
+  { key: "updates", label: "Update & Feedback" },
 ];
 
 export const DASHBOARD_SECTION_CONFIG: Array<{ key: DashboardSectionKey; label: string }> = [

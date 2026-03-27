@@ -14,6 +14,7 @@ import {
 type AppState = {
   sidebarOpen: boolean;
   dashboardEditMode: boolean;
+  roleTestingEnabled: boolean;
   activeRole: string;
   rolePermissions: Record<string, PermissionKey[]>;
   roleSidebarItems: Record<string, Record<SidebarItemKey, boolean>>;
@@ -23,6 +24,7 @@ type AppState = {
   textOverrides: Record<string, string>;
   setSidebarOpen: (open: boolean) => void;
   setDashboardEditMode: (enabled: boolean) => void;
+  setRoleTestingEnabled: (enabled: boolean) => void;
   setActiveRole: (roleKey: string) => void;
   setRoleLabel: (roleKey: string, label: string) => void;
   toggleRolePermission: (roleKey: string, permission: PermissionKey) => void;
@@ -39,7 +41,10 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       sidebarOpen: true,
       dashboardEditMode: false,
-      activeRole: "viewer",
+      // Owner soll standardmäßig immer "Owner" sehen.
+      // Test-Rollen werden nur genutzt, wenn roleTestingEnabled aktiv ist.
+      roleTestingEnabled: false,
+      activeRole: "owner",
       rolePermissions: INITIAL_ROLE_PERMISSIONS as Record<string, PermissionKey[]>,
       roleSidebarItems:
         INITIAL_ROLE_SIDEBAR_ITEMS as Record<string, Record<SidebarItemKey, boolean>>,
@@ -56,6 +61,7 @@ export const useAppStore = create<AppState>()(
       textOverrides: {},
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setDashboardEditMode: (enabled) => set({ dashboardEditMode: enabled }),
+      setRoleTestingEnabled: (enabled) => set({ roleTestingEnabled: enabled }),
       setActiveRole: (roleKey) => set({ activeRole: roleKey }),
       setRoleLabel: (roleKey, label) =>
         set((state) => {

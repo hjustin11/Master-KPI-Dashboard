@@ -22,6 +22,8 @@ export function Header() {
   const router = useRouter();
   const user = useUser();
   const activeRole = useAppStore((state) => state.activeRole);
+  const roleTestingEnabled = useAppStore((state) => state.roleTestingEnabled);
+  const setRoleTestingEnabled = useAppStore((state) => state.setRoleTestingEnabled);
   const customRoleKeys = useAppStore((state) => state.customRoleKeys);
   const roleLabels = useAppStore((state) => state.roleLabels);
   const setActiveRole = useAppStore((state) => state.setActiveRole);
@@ -88,20 +90,31 @@ export function Header() {
               {user.roleKey === "owner" ? (
                 <>
                   <DropdownMenuSeparator />
-                  {activeRole !== "owner" ? (
-                    <DropdownMenuItem onClick={() => setActiveRole("owner")}>
-                      Owner-Ansicht wiederherstellen
-                    </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setRoleTestingEnabled(!roleTestingEnabled)}
+                    className={roleTestingEnabled ? "bg-primary/10 text-primary" : ""}
+                  >
+                    Rollen-Testmodus: {roleTestingEnabled ? "AN" : "AUS"}
+                  </DropdownMenuItem>
+
+                  {roleTestingEnabled ? (
+                    <>
+                      {activeRole !== "owner" ? (
+                        <DropdownMenuItem onClick={() => setActiveRole("owner")}>
+                          Owner-Ansicht wiederherstellen
+                        </DropdownMenuItem>
+                      ) : null}
+                      {roleOptions.map((role) => (
+                        <DropdownMenuItem
+                          key={role.value}
+                          onClick={() => setActiveRole(role.value)}
+                          className={role.value === activeRole ? "bg-primary/10 text-primary" : ""}
+                        >
+                          Als {role.label} testen
+                        </DropdownMenuItem>
+                      ))}
+                    </>
                   ) : null}
-                  {roleOptions.map((role) => (
-                    <DropdownMenuItem
-                      key={role.value}
-                      onClick={() => setActiveRole(role.value)}
-                      className={role.value === activeRole ? "bg-primary/10 text-primary" : ""}
-                    >
-                      Als {role.label} testen
-                    </DropdownMenuItem>
-                  ))}
                 </>
               ) : null}
               <DropdownMenuSeparator />

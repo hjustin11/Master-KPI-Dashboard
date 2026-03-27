@@ -20,7 +20,7 @@ const segmentLabels: Record<string, string> = {
   profile: "Profil",
   users: "Benutzer",
   system: "System",
-  updates: "Tasks",
+  updates: "Update & Feedback",
 };
 
 export function Breadcrumbs() {

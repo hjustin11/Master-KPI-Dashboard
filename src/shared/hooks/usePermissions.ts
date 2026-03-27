@@ -11,20 +11,30 @@ export function usePermissions() {
   const user = useUser();
   const activeRole = useAppStore((state) => state.activeRole);
   const setActiveRole = useAppStore((state) => state.setActiveRole);
+  const roleTestingEnabled = useAppStore((state) => state.roleTestingEnabled);
   const rolePermissions = useAppStore((state) => state.rolePermissions);
   const roleSidebarItems = useAppStore((state) => state.roleSidebarItems);
   const roleSectionVisibility = useAppStore((state) => state.roleSectionVisibility);
 
   // Nur Owner darf eine abweichende Test-Rolle nutzen. Alle anderen werden auf ihre echte Rolle synchronisiert.
   useEffect(() => {
-    if (!user.roleKey || user.roleKey === "owner") return;
-    if (activeRole !== user.roleKey) {
-      setActiveRole(user.roleKey);
+    if (!user.roleKey) return;
+
+    // Non-Owner: niemals eine Test-Rolle zulassen (auch nicht über localStorage).
+    if (user.roleKey !== "owner") {
+      if (activeRole !== user.roleKey) setActiveRole(user.roleKey);
+      return;
     }
-  }, [activeRole, setActiveRole, user.roleKey]);
+
+    // Owner: wenn Testmodus AUS ist, immer Owner-Ansicht erzwingen.
+    if (!roleTestingEnabled && activeRole !== "owner") {
+      setActiveRole("owner");
+    }
+  }, [activeRole, roleTestingEnabled, setActiveRole, user.roleKey]);
 
   return useMemo(() => {
-    const effectiveRoleKey = user.roleKey === "owner" ? activeRole : user.roleKey;
+    const effectiveRoleKey =
+      user.roleKey === "owner" ? (roleTestingEnabled ? activeRole : "owner") : user.roleKey;
     const permissions = rolePermissions[effectiveRoleKey] ?? [];
     const sidebarItems = roleSidebarItems[effectiveRoleKey];
     const sectionVisibility = roleSectionVisibility[effectiveRoleKey];
@@ -43,5 +53,12 @@ export function usePermissions() {
       canViewAnalytics: hasPermission("export_data") && canAccessSidebarItem("analytics"),
       canManageUsers: hasPermission("manage_users"),
     };
-  }, [activeRole, rolePermissions, roleSidebarItems, roleSectionVisibility, user.roleKey]);
+  }, [
+    activeRole,
+    roleTestingEnabled,
+    rolePermissions,
+    roleSidebarItems,
+    roleSectionVisibility,
+    user.roleKey,
+  ]);
 }

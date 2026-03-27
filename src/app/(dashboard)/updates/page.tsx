@@ -32,8 +32,8 @@ export default function UpdatesPage() {
     () => [
       {
         date: "2026-03-27",
-        title: "Tasks Bereich gestartet",
-        text: "Updates & Vorschlaege sind jetzt zentral gebuendelt.",
+        title: "Update & Feedback gestartet",
+        text: "Updates & Vorschläge sind jetzt zentral gebündelt.",
       },
       {
         date: "2026-03-26",
@@ -111,7 +111,7 @@ export default function UpdatesPage() {
   return (
     <div className="flex w-full max-w-none flex-col gap-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Tasks</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Update & Feedback</h1>
         <p className="text-sm text-muted-foreground">
           Updates, Neuerungen und Vorschläge für Verbesserungen.
         </p>

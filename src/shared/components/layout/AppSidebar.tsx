@@ -121,7 +121,7 @@ const navItems: NavItem[] = [
   },
   {
     key: "updates",
-    label: "Tasks",
+    label: "Update & Feedback",
     href: "/updates",
     icon: Bell,
   },
@@ -139,6 +139,10 @@ export function AppSidebar() {
   const user = useUser();
   const { hasPermission, canAccessSidebarItem } = usePermissions();
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
+  const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
+  const setRoleTestingEnabled = useAppStore(
+    (stateFromStore) => stateFromStore.setRoleTestingEnabled
+  );
   const customRoleKeys = useAppStore((stateFromStore) => stateFromStore.customRoleKeys);
   const roleLabels = useAppStore((stateFromStore) => stateFromStore.roleLabels);
   const setActiveRole = useAppStore((stateFromStore) => stateFromStore.setActiveRole);
@@ -164,7 +168,7 @@ export function AppSidebar() {
   // Verhindert Hydration-Mismatch: initial immer expanded rendern,
   // erst nach dem Client-Mount den echten Sidebar-State verwenden.
   const collapsed = isHydrated ? state === "collapsed" : false;
-  const canRoleSwitch = user.roleKey === "owner";
+  const canRoleSwitch = user.roleKey === "owner" && roleTestingEnabled;
 
   const cycleRole = (direction: "prev" | "next") => {
     if (!canRoleSwitch) return;
@@ -350,23 +354,34 @@ export function AppSidebar() {
               <User className="h-4 w-4" />
               Profil
             </DropdownMenuItem>
-            {canRoleSwitch ? (
+            {user.roleKey === "owner" ? (
               <>
                 <DropdownMenuSeparator />
-                {activeRole !== "owner" ? (
-                  <DropdownMenuItem onClick={() => setActiveRole("owner")}>
-                    Owner-Ansicht wiederherstellen
-                  </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setRoleTestingEnabled(!roleTestingEnabled)}
+                  className={roleTestingEnabled ? "bg-primary/10 text-primary" : ""}
+                >
+                  Rollen-Testmodus: {roleTestingEnabled ? "AN" : "AUS"}
+                </DropdownMenuItem>
+
+                {roleTestingEnabled ? (
+                  <>
+                    {activeRole !== "owner" ? (
+                      <DropdownMenuItem onClick={() => setActiveRole("owner")}>
+                        Owner-Ansicht wiederherstellen
+                      </DropdownMenuItem>
+                    ) : null}
+                    {roleOptions.map((role) => (
+                      <DropdownMenuItem
+                        key={role.value}
+                        onClick={() => setActiveRole(role.value)}
+                        className={role.value === activeRole ? "bg-primary/10 text-primary" : ""}
+                      >
+                        Als {role.label} testen
+                      </DropdownMenuItem>
+                    ))}
+                  </>
                 ) : null}
-                {roleOptions.map((role) => (
-                  <DropdownMenuItem
-                    key={role.value}
-                    onClick={() => setActiveRole(role.value)}
-                    className={role.value === activeRole ? "bg-primary/10 text-primary" : ""}
-                  >
-                    Als {role.label} testen
-                  </DropdownMenuItem>
-                ))}
               </>
             ) : null}
             <DropdownMenuSeparator />
@@ -385,6 +400,10 @@ export function MobileSidebarTrigger() {
   const user = useUser();
   const { hasPermission, canAccessSidebarItem } = usePermissions();
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
+  const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
+  const setRoleTestingEnabled = useAppStore(
+    (stateFromStore) => stateFromStore.setRoleTestingEnabled
+  );
   const customRoleKeys = useAppStore((stateFromStore) => stateFromStore.customRoleKeys);
   const roleLabels = useAppStore((stateFromStore) => stateFromStore.roleLabels);
   const setActiveRole = useAppStore((stateFromStore) => stateFromStore.setActiveRole);
@@ -402,7 +421,7 @@ export function MobileSidebarTrigger() {
     })),
   ];
 
-  const canRoleSwitch = user.roleKey === "owner";
+  const canRoleSwitch = user.roleKey === "owner" && roleTestingEnabled;
 
   const cycleRole = (direction: "prev" | "next") => {
     if (!canRoleSwitch) return;
@@ -541,23 +560,34 @@ export function MobileSidebarTrigger() {
                 <User className="h-4 w-4" />
                 Profil
               </DropdownMenuItem>
-              {canRoleSwitch ? (
+              {user.roleKey === "owner" ? (
                 <>
                   <DropdownMenuSeparator />
-                  {activeRole !== "owner" ? (
-                    <DropdownMenuItem onClick={() => setActiveRole("owner")}>
-                      Owner-Ansicht wiederherstellen
-                    </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setRoleTestingEnabled(!roleTestingEnabled)}
+                    className={roleTestingEnabled ? "bg-primary/10 text-primary" : ""}
+                  >
+                    Rollen-Testmodus: {roleTestingEnabled ? "AN" : "AUS"}
+                  </DropdownMenuItem>
+
+                  {roleTestingEnabled ? (
+                    <>
+                      {activeRole !== "owner" ? (
+                        <DropdownMenuItem onClick={() => setActiveRole("owner")}>
+                          Owner-Ansicht wiederherstellen
+                        </DropdownMenuItem>
+                      ) : null}
+                      {roleOptions.map((role) => (
+                        <DropdownMenuItem
+                          key={role.value}
+                          onClick={() => setActiveRole(role.value)}
+                          className={role.value === activeRole ? "bg-primary/10 text-primary" : ""}
+                        >
+                          Als {role.label} testen
+                        </DropdownMenuItem>
+                      ))}
+                    </>
                   ) : null}
-                  {roleOptions.map((role) => (
-                    <DropdownMenuItem
-                      key={role.value}
-                      onClick={() => setActiveRole(role.value)}
-                      className={role.value === activeRole ? "bg-primary/10 text-primary" : ""}
-                    >
-                      Als {role.label} testen
-                    </DropdownMenuItem>
-                  ))}
                 </>
               ) : null}
               <DropdownMenuSeparator />

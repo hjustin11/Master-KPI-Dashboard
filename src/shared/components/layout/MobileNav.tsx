@@ -37,7 +37,12 @@ const moreItems: Array<{
 }> = [
   { key: "analytics", label: "Analytics", href: "/analytics", requiredPermissions: ["export_data"] },
   { key: "settings", label: "Einstellungen", href: "/settings" },
-  { key: "updates", label: "Tasks", href: "/updates", requiredPermissions: ["manage_users"] },
+  {
+    key: "updates",
+    label: "Update & Feedback",
+    href: "/updates",
+    requiredPermissions: ["manage_users"],
+  },
 ];
 
 function isActive(pathname: string, href: string) {
