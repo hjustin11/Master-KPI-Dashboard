@@ -8,6 +8,7 @@ import {
   BarChart3,
   Bell,
   ChevronLeft,
+  ChevronRight,
   ChevronsUpDown,
   LayoutDashboard,
   Megaphone,
@@ -123,7 +124,6 @@ const navItems: NavItem[] = [
     label: "Tasks",
     href: "/updates",
     icon: Bell,
-    requiredPermissions: ["manage_users"],
   },
 ];
 
@@ -164,6 +164,19 @@ export function AppSidebar() {
   // Verhindert Hydration-Mismatch: initial immer expanded rendern,
   // erst nach dem Client-Mount den echten Sidebar-State verwenden.
   const collapsed = isHydrated ? state === "collapsed" : false;
+  const canRoleSwitch = user.roleKey === "owner";
+
+  const cycleRole = (direction: "prev" | "next") => {
+    if (!canRoleSwitch) return;
+    const values = roleOptions.map((r) => r.value);
+    const currentIndex = values.indexOf(activeRole);
+    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex =
+      direction === "prev"
+        ? (safeIndex - 1 + values.length) % values.length
+        : (safeIndex + 1) % values.length;
+    setActiveRole(values[nextIndex] ?? "owner");
+  };
 
   return (
     <Sidebar collapsible="icon" className="hidden border-r border-border/50 bg-sidebar md:flex">
@@ -292,8 +305,32 @@ export function AppSidebar() {
             {!collapsed ? (
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{user.fullName}</p>
-                <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
-                {user.roleKey === "owner" ? (
+                <div className="mt-0.5 flex items-center justify-between gap-2">
+                  <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
+                  {canRoleSwitch ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => cycleRole("prev")}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                        aria-label="Vorherige Rolle"
+                        title="Vorherige Rolle"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => cycleRole("next")}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                        aria-label="Naechste Rolle"
+                        title="Naechste Rolle"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+                {canRoleSwitch ? (
                   <select
                     value={activeRole}
                     onChange={(event) => setActiveRole(event.target.value)}
@@ -314,7 +351,7 @@ export function AppSidebar() {
               <User className="h-4 w-4" />
               Profil
             </DropdownMenuItem>
-            {user.roleKey === "owner" ? (
+            {canRoleSwitch ? (
               <>
                 <DropdownMenuSeparator />
                 {activeRole !== "owner" ? (
@@ -365,6 +402,20 @@ export function MobileSidebarTrigger() {
       label: roleLabels[key] ?? key,
     })),
   ];
+
+  const canRoleSwitch = user.roleKey === "owner";
+
+  const cycleRole = (direction: "prev" | "next") => {
+    if (!canRoleSwitch) return;
+    const values = roleOptions.map((r) => r.value);
+    const currentIndex = values.indexOf(activeRole);
+    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex =
+      direction === "prev"
+        ? (safeIndex - 1 + values.length) % values.length
+        : (safeIndex + 1) % values.length;
+    setActiveRole(values[nextIndex] ?? "owner");
+  };
 
   return (
     <Sheet>
@@ -446,7 +497,29 @@ export function MobileSidebarTrigger() {
                   <span className="block truncate text-xs text-muted-foreground">
                     {roleLabel}
                   </span>
-                  {user.roleKey === "owner" ? (
+                  {canRoleSwitch ? (
+                    <div className="mt-1 flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => cycleRole("prev")}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                        aria-label="Vorherige Rolle"
+                        title="Vorherige Rolle"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => cycleRole("next")}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                        aria-label="Naechste Rolle"
+                        title="Naechste Rolle"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : null}
+                  {canRoleSwitch ? (
                     <select
                       value={activeRole}
                       onChange={(event) => setActiveRole(event.target.value)}
@@ -468,7 +541,7 @@ export function MobileSidebarTrigger() {
                 <User className="h-4 w-4" />
                 Profil
               </DropdownMenuItem>
-              {user.roleKey === "owner" ? (
+              {canRoleSwitch ? (
                 <>
                   <DropdownMenuSeparator />
                   {activeRole !== "owner" ? (

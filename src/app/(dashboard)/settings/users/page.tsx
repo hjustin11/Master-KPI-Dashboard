@@ -15,15 +15,6 @@ import {
 import { useAppStore } from "@/shared/stores/useAppStore";
 import { usePermissions } from "@/shared/hooks/usePermissions";
 
-type Invite = {
-  id: string;
-  email: string;
-  role: Role;
-  invitedAt: string;
-  expiresAt: string;
-  status: "pending" | "accepted";
-};
-
 type TeamMember = {
   id: string;
   email: string;
@@ -60,12 +51,10 @@ export default function SettingsUsersPage() {
   const [currentUserRole] = useState<Role>("owner");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<Role>("viewer");
-  const [invites, setInvites] = useState<Invite[]>([]);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [isSubmittingInvite, setIsSubmittingInvite] = useState(false);
-  const [isLoadingInvites, setIsLoadingInvites] = useState(true);
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [memberActionMessage, setMemberActionMessage] = useState<string | null>(null);
   const [memberActionError, setMemberActionError] = useState<string | null>(null);
@@ -183,47 +172,6 @@ export default function SettingsUsersPage() {
   };
 
   useEffect(() => {
-    const loadInvites = async () => {
-      setIsLoadingInvites(true);
-      setInviteError(null);
-      try {
-        const response = await fetch("/api/invitations");
-        const payload = await parseJsonSafely<{
-          invitations?: Array<{
-            id: string;
-            email: string;
-            role: Role;
-            status: "pending" | "accepted";
-            created_at: string;
-            expires_at: string;
-          }>;
-          error?: string;
-        }>(response);
-
-        if (!response.ok) {
-          throw new Error(payload.error ?? "Einladungen konnten nicht geladen werden.");
-        }
-
-        const mappedInvites: Invite[] =
-          payload.invitations?.map((item) => ({
-            id: item.id,
-            email: item.email,
-            role: item.role,
-            status: item.status,
-            invitedAt: item.created_at,
-            expiresAt: item.expires_at,
-          })) ?? [];
-
-        setInvites(mappedInvites);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unbekannter Fehler beim Laden.";
-        setInviteError(message);
-      } finally {
-        setIsLoadingInvites(false);
-      }
-    };
-
     const loadMembers = async () => {
       setIsLoadingMembers(true);
       setMemberActionError(null);
@@ -247,7 +195,6 @@ export default function SettingsUsersPage() {
     };
 
     if (canManageUsers) {
-      void loadInvites();
       void loadMembers();
     }
   }, [canManageUsers]);
@@ -285,18 +232,6 @@ export default function SettingsUsersPage() {
 
       if (!response.ok) {
         throw new Error(payload.error ?? "Einladung konnte nicht erstellt werden.");
-      }
-
-      if (payload.invitation) {
-        const invite: Invite = {
-          id: payload.invitation.id,
-          email: payload.invitation.email,
-          role: payload.invitation.role,
-          status: payload.invitation.status,
-          invitedAt: payload.invitation.created_at,
-          expiresAt: payload.invitation.expires_at,
-        };
-        setInvites((prev) => [invite, ...prev]);
       }
 
       setInviteMessage(
@@ -619,49 +554,6 @@ export default function SettingsUsersPage() {
             {inviteError}
           </p>
         ) : null}
-
-        {isLoadingInvites ? (
-          <p className="text-sm text-muted-foreground">Einladungen werden geladen...</p>
-        ) : invites.length ? (
-          <div className={TABLE_WRAP_CLASS}>
-            <table className="w-full text-sm">
-              <thead className="bg-muted/30 text-left text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 font-medium">E-Mail</th>
-                  <th className="px-3 py-2 font-medium">Rolle</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 font-medium">Eingeladen am</th>
-                  <th className="px-3 py-2 font-medium">Gueltig bis</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invites.map((invite) => (
-                  <tr key={invite.id} className="border-t border-border/40">
-                    <td className="px-3 py-2">{invite.email}</td>
-                    <td className="px-3 py-2 uppercase text-muted-foreground">
-                      {invite.role}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="rounded bg-blue-500/10 px-2 py-1 text-xs text-blue-400">
-                        {invite.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {new Date(invite.invitedAt).toLocaleString("de-DE")}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {new Date(invite.expiresAt).toLocaleString("de-DE")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Noch keine Einladungen verschickt.
-          </p>
-        )}
       </section>
       ) : null}
 

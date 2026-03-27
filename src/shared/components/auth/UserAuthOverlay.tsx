@@ -39,18 +39,19 @@ export function UserAuthOverlay({
 
     // Invitation completion: only set password (email comes from invite)
     return z.object({
+      fullName: z.string().min(2, "Bitte deinen Namen angeben."),
       password: z.string().min(6, "Das Passwort muss mindestens 6 Zeichen haben."),
     });
   }, [mode]);
 
   type LoginValues = { email: string; password: string };
-  type InviteValues = { password: string };
+  type InviteValues = { fullName: string; password: string };
 
   const form = useForm<LoginValues | InviteValues>({
     resolver: zodResolver(schema),
     defaultValues: (mode === "login"
       ? { email: initialEmail, password: "" }
-      : { password: "" }) as LoginValues | InviteValues,
+      : { fullName: "", password: "" }) as LoginValues | InviteValues,
   });
 
   const isLoading = form.formState.isSubmitting;
@@ -90,6 +91,7 @@ export function UserAuthOverlay({
     const payload = values as InviteValues;
     const { error: pwError } = await supabase.auth.updateUser({
       password: payload.password,
+      data: { full_name: payload.fullName.trim() },
     });
     if (pwError) {
       setServerMessage(pwError.message);
@@ -156,9 +158,30 @@ export function UserAuthOverlay({
             ) : null}
           </div>
         ) : (
-          <div className="space-y-1 rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-sm">
-            <p className="text-xs text-muted-foreground">E-Mail</p>
-            <p className="font-medium">{initialEmail}</p>
+          <div className="space-y-3">
+            <div className="space-y-1 rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-sm">
+              <p className="text-xs text-muted-foreground">E-Mail</p>
+              <p className="font-medium">{initialEmail}</p>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="fullName" className="text-sm font-medium">
+                Name
+              </label>
+              <input
+                id="fullName"
+                type="text"
+                autoComplete="name"
+                className="w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none transition-all duration-200 focus:border-primary"
+                {...form.register("fullName" as const)}
+              />
+              {"fullName" in form.formState.errors ? (
+                <p className="text-xs text-red-400">
+                  {(form.formState.errors as unknown as { fullName?: { message?: string } })
+                    .fullName?.message ?? ""}
+                </p>
+              ) : null}
+            </div>
           </div>
         )}
 

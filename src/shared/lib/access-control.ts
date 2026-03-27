@@ -46,7 +46,7 @@ export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey; label: string }> 
   { key: "advertising", label: "Werbung" },
   { key: "analytics", label: "Analytics" },
   { key: "settings", label: "Einstellungen" },
-  { key: "updates", label: "Updates" },
+  { key: "updates", label: "Tasks" },
 ];
 
 export const DASHBOARD_SECTION_CONFIG: Array<{ key: DashboardSectionKey; label: string }> = [
@@ -97,7 +97,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     advertising: true,
     analytics: true,
     settings: true,
-    updates: false,
+    updates: true,
   },
   analyst: {
     overview: true,
@@ -106,7 +106,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     advertising: false,
     analytics: true,
     settings: true,
-    updates: false,
+    updates: true,
   },
   viewer: {
     overview: true,
@@ -115,7 +115,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     advertising: false,
     analytics: false,
     settings: true,
-    updates: false,
+    updates: true,
   },
 };
 

@@ -17,6 +17,12 @@ function isOwnerUser(user: {
   );
 }
 
+function resolveDisplayedRole(email: string, role: string) {
+  // Bootstrap: dieser Account ist Owner, auch wenn Metadaten (noch) nicht gesetzt sind.
+  if (email.toLowerCase() === "justin.heidebluth@petrhein.de") return "owner";
+  return role || "viewer";
+}
+
 async function getCurrentUser() {
   const supabase = await createServerSupabase();
   const {
@@ -52,10 +58,12 @@ export async function GET() {
     data.users?.map((item) => ({
       id: item.id,
       email: item.email ?? "",
-      role:
-        (item.app_metadata?.role as string | undefined) ??
-        (item.user_metadata?.role as string | undefined) ??
-        "viewer",
+      role: resolveDisplayedRole(
+        item.email ?? "",
+        ((item.app_metadata?.role as string | undefined) ??
+          (item.user_metadata?.role as string | undefined) ??
+          "viewer")
+      ),
       createdAt: item.created_at,
     })) ?? [];
 
