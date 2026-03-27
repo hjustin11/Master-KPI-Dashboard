@@ -330,19 +330,6 @@ export function AppSidebar() {
                     </div>
                   ) : null}
                 </div>
-                {canRoleSwitch ? (
-                  <select
-                    value={activeRole}
-                    onChange={(event) => setActiveRole(event.target.value)}
-                    className="mt-1 w-full rounded-md border border-border/60 bg-background px-2 py-1 text-[11px] outline-none focus:border-primary"
-                  >
-                    {roleOptions.map((role) => (
-                      <option key={role.value} value={role.value}>
-                        {role.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
               </div>
             ) : null}
           </DropdownMenuTrigger>
@@ -518,19 +505,6 @@ export function MobileSidebarTrigger() {
                         <ChevronRight className="h-4 w-4" />
                       </button>
                     </div>
-                  ) : null}
-                  {canRoleSwitch ? (
-                    <select
-                      value={activeRole}
-                      onChange={(event) => setActiveRole(event.target.value)}
-                      className="mt-1 w-full rounded-md border border-border/60 bg-background px-2 py-1 text-[11px] outline-none focus:border-primary"
-                    >
-                      {roleOptions.map((role) => (
-                        <option key={role.value} value={role.value}>
-                          {role.label}
-                        </option>
-                      ))}
-                    </select>
                   ) : null}
                 </span>
               </span>
