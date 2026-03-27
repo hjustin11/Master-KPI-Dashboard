@@ -3,16 +3,13 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  const publicPaths = [
-    "/login",
-    "/register",
-    "/forgot-password",
-    "/auth/callback",
-    "/auth/reset",
-  ];
+  const publicPaths = ["/login", "/register", "/forgot-password", "/auth/callback", "/auth/reset"];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );
+  const isAuthPageThatShouldRedirectWhenLoggedIn =
+    request.nextUrl.pathname.startsWith("/login") ||
+    request.nextUrl.pathname.startsWith("/forgot-password");
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -36,7 +33,9 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (isPublicPath && user) {
+  // Wenn eingeloggt: normale Auth-Seiten (Login/Forgot) wegredirecten,
+  // aber Invite-Abschluss (/register) und Reset (/auth/reset) erlauben.
+  if (isPublicPath && user && isAuthPageThatShouldRedirectWhenLoggedIn) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

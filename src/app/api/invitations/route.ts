@@ -119,9 +119,10 @@ export async function POST(request: Request) {
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
   const appBaseUrl = resolveAppBaseUrl();
-  const inviteUrl = `${appBaseUrl}/register?invite=${token}&email=${encodeURIComponent(
+  const nextPath = `/register?invite=${encodeURIComponent(token)}&email=${encodeURIComponent(
     email
   )}&role=${role}`;
+  const inviteUrl = `${appBaseUrl}/auth/callback?next=${encodeURIComponent(nextPath)}`;
   const appName = "Master Dashboard";
 
   const admin = createAdminClient();
