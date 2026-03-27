@@ -20,24 +20,62 @@ const mainItems: Array<{
   key: SidebarItemKey;
   label: string;
   href: string;
+  /** Pfadpräfix für aktiven Zustand (z. B. /amazon für alle /amazon/*). */
+  activeGroup?: string;
   icon: typeof BarChart3;
   requiredPermissions?: PermissionKey[];
 }> = [
-  { key: "amazon", label: "Amazon", href: "/amazon", icon: ShoppingCart, requiredPermissions: ["manage_integrations"] },
-  { key: "xentral", label: "Xentral", href: "/xentral", icon: Package, requiredPermissions: ["manage_integrations"] },
-  { key: "advertising", label: "Werbung", href: "/advertising", icon: Megaphone, requiredPermissions: ["manage_integrations"] },
-  { key: "analytics", label: "Analytics", href: "/analytics", icon: BarChart3, requiredPermissions: ["export_data"] },
+  {
+    key: "amazon",
+    label: "Amazon",
+    href: "/amazon/orders",
+    activeGroup: "/amazon",
+    icon: ShoppingCart,
+    requiredPermissions: ["manage_integrations"],
+  },
+  {
+    key: "xentral",
+    label: "Xentral",
+    href: "/xentral/products",
+    activeGroup: "/xentral",
+    icon: Package,
+    requiredPermissions: ["manage_integrations"],
+  },
+  {
+    key: "advertising",
+    label: "Werbung",
+    href: "/advertising/campaigns",
+    activeGroup: "/advertising",
+    icon: Megaphone,
+    requiredPermissions: ["manage_integrations"],
+  },
+  {
+    key: "analytics",
+    label: "Analytics",
+    href: "/analytics/marketplaces",
+    activeGroup: "/analytics",
+    icon: BarChart3,
+    requiredPermissions: ["export_data"],
+  },
 ];
 
 const moreItems: Array<{
   key: SidebarItemKey;
   label: string;
   href: string;
+  /** z. B. /settings für Hervorhebung aller Unterseiten */
+  activePrefix?: string;
   requiredPermissions?: PermissionKey[];
 }> = [
   { key: "analytics", label: "Marktplätze", href: "/analytics/marketplaces", requiredPermissions: ["export_data"] },
   { key: "analytics", label: "Artikelprognose", href: "/analytics/article-forecast", requiredPermissions: ["export_data"] },
-  { key: "settings", label: "Einstellungen", href: "/settings" },
+  { key: "analytics", label: "Performance", href: "/analytics/performance", requiredPermissions: ["export_data"] },
+  {
+    key: "settings",
+    label: "Administration",
+    href: "/settings/users",
+    activePrefix: "/settings/users",
+  },
   {
     key: "updates",
     label: "Update & Feedback",
@@ -64,18 +102,20 @@ export function MobileNav() {
       canAccessSidebarItem(item.key) &&
       (item.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true)
   );
-  const moreActive = visibleMoreItems.some((item) => isActive(pathname, item.href));
+  const moreActive = visibleMoreItems.some((item) =>
+    isActive(pathname, item.activePrefix ?? item.href)
+  );
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/80 backdrop-blur-lg md:hidden">
       <div className="grid h-16 grid-cols-5">
         {visibleMainItems.map((item) => {
           const Icon = item.icon;
-          const active = isActive(pathname, item.href);
+          const active = isActive(pathname, item.activeGroup ?? item.href);
 
           return (
             <Link
-              key={item.href}
+              key={item.key}
               href={item.href}
               className={cn(
                 "flex flex-col items-center justify-center gap-1 text-[11px] transition-colors duration-150",
@@ -115,7 +155,7 @@ export function MobileNav() {
                   href={item.href}
                   className={cn(
                     "block rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent/60",
-                    isActive(pathname, item.href) ? "bg-primary/10 text-primary" : ""
+                    isActive(pathname, item.activePrefix ?? item.href) ? "bg-primary/10 text-primary" : ""
                   )}
                 >
                   {item.label}

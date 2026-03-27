@@ -9,6 +9,7 @@ type XentralArticleRow = {
   sku: string;
   name: string;
   stock: number;
+  price?: number | null;
 };
 
 const XENTRAL_ARTICLES_CACHE_KEY = "xentral_articles_cache_v1";

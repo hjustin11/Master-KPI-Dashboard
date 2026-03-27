@@ -10,7 +10,6 @@ const segmentLabels: Record<string, string> = {
   products: "Produkte",
   returns: "Retouren",
   xentral: "Xentral",
-  inventory: "Lager",
   articles: "Artikel",
   advertising: "Werbung",
   campaigns: "Kampagnen",
@@ -25,24 +24,24 @@ const segmentLabels: Record<string, string> = {
   zooplus: "ZooPlus",
   tiktok: "TikTok",
   "article-forecast": "Artikelprognose",
-  settings: "Einstellungen",
+  settings: "Administration",
   profile: "Profil",
-  users: "Benutzer",
-  system: "System",
+  users: "Benutzerverwaltung",
   updates: "Update & Feedback",
 };
 
 export function Breadcrumbs() {
   const pathname = usePathname();
-  const cleanPath = pathname === "/" ? [] : pathname.split("/").filter(Boolean);
+  const cleanPath = pathname.split("/").filter(Boolean);
 
-  const items = [
-    { label: "Übersicht", href: "/" },
-    ...cleanPath.map((segment, index) => ({
-      label: segmentLabels[segment] ?? segment,
-      href: `/${cleanPath.slice(0, index + 1).join("/")}`,
-    })),
-  ];
+  if (pathname === "/" || cleanPath.length === 0) {
+    return null;
+  }
+
+  const items = cleanPath.map((segment, index) => ({
+    label: segmentLabels[segment] ?? segment,
+    href: `/${cleanPath.slice(0, index + 1).join("/")}`,
+  }));
 
   return (
     <nav className="hidden items-center gap-1 text-sm text-muted-foreground md:flex">

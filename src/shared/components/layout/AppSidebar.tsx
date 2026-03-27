@@ -84,7 +84,6 @@ const navItems: NavItem[] = [
     requiredPermissions: ["manage_integrations"],
     children: [
       { label: "Artikel", href: "/xentral/products" },
-      { label: "Lager", href: "/xentral/inventory" },
       { label: "Bestellungen", href: "/xentral/orders" },
     ],
   },
@@ -107,27 +106,15 @@ const navItems: NavItem[] = [
     requiredPermissions: ["export_data"],
     children: [
       { label: "Marktplätze", href: "/analytics/marketplaces" },
-      { label: "Otto", href: "/analytics/marketplaces/otto" },
-      { label: "eBay", href: "/analytics/marketplaces/ebay" },
-      { label: "Kaufland", href: "/analytics/marketplaces/kaufland" },
-      { label: "Fressnapf", href: "/analytics/marketplaces/fressnapf" },
-      { label: "MediaMarkt & Saturn", href: "/analytics/marketplaces/mediamarkt-saturn" },
-      { label: "ZooPlus", href: "/analytics/marketplaces/zooplus" },
-      { label: "TikTok", href: "/analytics/marketplaces/tiktok" },
       { label: "Artikelprognose", href: "/analytics/article-forecast" },
       { label: "Performance", href: "/analytics/performance" },
     ],
   },
   {
     key: "settings",
-    label: "Einstellungen",
-    href: "/settings",
+    label: "Administration",
+    href: "/settings/users",
     icon: Settings,
-    children: [
-      { label: "Profil", href: "/settings/profile" },
-      { label: "Benutzer", href: "/settings/users", requiredPermissions: ["manage_users"] },
-      { label: "System", href: "/settings" },
-    ],
   },
   {
     key: "updates",
@@ -140,6 +127,38 @@ const navItems: NavItem[] = [
 function isActivePath(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Hauptklick Ziel = erster Unterpunkt (ohne separate Übersichtsseite). */
+const NAV_PRIMARY_CHILD_KEYS = new Set<SidebarItemKey>([
+  "amazon",
+  "xentral",
+  "advertising",
+  "analytics",
+]);
+
+function visibleNavChildren(
+  item: NavItem,
+  hasPermission: (permission: PermissionKey) => boolean
+) {
+  return (
+    item.children?.filter(
+      (child) => child.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true
+    ) ?? []
+  );
+}
+
+function resolveNavLink(
+  item: NavItem,
+  hasPermission: (permission: PermissionKey) => boolean
+): { primaryHref: string; activePrefix: string } {
+  if (NAV_PRIMARY_CHILD_KEYS.has(item.key)) {
+    const visible = visibleNavChildren(item, hasPermission);
+    const primary = visible[0]?.href ?? item.href;
+    const prefix = primary.replace(/\/[^/]+$/, "") || item.href;
+    return { primaryHref: primary, activePrefix: prefix };
+  }
+  return { primaryHref: item.href, activePrefix: item.href };
 }
 
 export function AppSidebar() {
@@ -203,9 +222,9 @@ export function AppSidebar() {
             <Image
               src="/brand/petrhein-icon-current.png"
               alt="PetRhein Icon"
-              width={28}
-              height={28}
-              className="h-7 w-7 object-contain"
+              width={36}
+              height={36}
+              className="h-9 w-9 object-contain"
             />
           ) : (
             <div className="min-w-0 flex-1">
@@ -213,9 +232,9 @@ export function AppSidebar() {
                 <Image
                   src="/brand/petrhein-logo-attached.png"
                   alt="PetRhein"
-                  width={166}
-                  height={34}
-                  className="h-8 w-auto object-contain"
+                  width={195}
+                  height={40}
+                  className="h-10 w-auto max-w-[min(100%,14rem)] object-contain"
                 />
               </div>
             </div>
@@ -243,25 +262,27 @@ export function AppSidebar() {
                 (item.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true)
             )
             .map((item) => {
-            const active = isActivePath(pathname, item.href);
+            const { primaryHref, activePrefix } = resolveNavLink(item, hasPermission);
+            const active = isActivePath(pathname, activePrefix);
             const Icon = item.icon;
+            const visibleChildren = visibleNavChildren(item, hasPermission);
 
             const baseLink = (
               <Link
-                href={item.href}
+                href={primaryHref}
                 className={cn(
-                  "group flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-all duration-200 hover:bg-accent/60",
+                  "group flex items-center gap-3 rounded-md px-3 py-2 text-base transition-all duration-200 hover:bg-accent/60",
                   active && "border-l-2 border-primary bg-primary/10 text-primary",
                   collapsed && "justify-center px-2"
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <Icon className="h-5 w-5 shrink-0" />
                 {!collapsed ? <span className="truncate">{item.label}</span> : null}
               </Link>
             );
 
             return (
-              <div key={item.href} className="space-y-1">
+              <div key={item.key} className="space-y-1">
                 {collapsed ? (
                   <Tooltip>
                     <TooltipTrigger render={<div />}>{baseLink}</TooltipTrigger>
@@ -271,23 +292,16 @@ export function AppSidebar() {
                   baseLink
                 )}
 
-                {!collapsed && item.children?.length ? (
+                {!collapsed && visibleChildren.length ? (
                   <div className="ml-7 space-y-1 border-l border-border pl-3">
-                    {item.children
-                      .filter(
-                        (child) =>
-                          child.requiredPermissions?.every((permission) =>
-                            hasPermission(permission)
-                          ) ?? true
-                      )
-                      .map((child) => {
+                    {visibleChildren.map((child) => {
                       const childActive = isActivePath(pathname, child.href);
                       return (
                         <Link
                           key={child.href}
                           href={child.href}
                           className={cn(
-                            "block rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
+                            "block rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
                             childActive && "text-primary"
                           )}
                         >
@@ -322,9 +336,9 @@ export function AppSidebar() {
               </Avatar>
               {!collapsed ? (
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{user.fullName}</p>
+                  <p className="truncate text-base font-medium">{user.fullName}</p>
                   <div className="mt-0.5 flex items-center justify-between gap-2">
-                    <p className="truncate text-xs text-muted-foreground">
+                    <p className="truncate text-sm text-muted-foreground">
                       {user.isLoading ? "Lade..." : roleLabel}
                     </p>
                     {canRoleSwitch ? (
@@ -473,40 +487,35 @@ export function MobileSidebarTrigger() {
             )
             .map((item) => {
             const Icon = item.icon;
-            const active = isActivePath(pathname, item.href);
+            const { primaryHref, activePrefix } = resolveNavLink(item, hasPermission);
+            const active = isActivePath(pathname, activePrefix);
+            const visibleChildren = visibleNavChildren(item, hasPermission);
             return (
-              <div key={item.href} className="space-y-1">
+              <div key={item.key} className="space-y-1">
                 <Link
-                  href={item.href}
+                  href={primaryHref}
                   className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-all duration-200 hover:bg-accent/60",
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-base transition-all duration-200 hover:bg-accent/60",
                     active && "border-l-2 border-primary bg-primary/10 text-primary"
                   )}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-5 w-5" />
                   <span>{item.label}</span>
                 </Link>
-                {item.children?.length ? (
+                {visibleChildren.length ? (
                   <div className="ml-7 space-y-1 border-l border-border/50 pl-3">
-                    {item.children
-                      .filter(
-                        (child) =>
-                          child.requiredPermissions?.every((permission) =>
-                            hasPermission(permission)
-                          ) ?? true
-                      )
-                      .map((child) => (
+                    {visibleChildren.map((child) => (
                       <Link
                         key={child.href}
                         href={child.href}
                         className={cn(
-                          "block rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
+                          "block rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
                           isActivePath(pathname, child.href) && "text-primary"
                         )}
                       >
                         {child.label}
                       </Link>
-                      ))}
+                    ))}
                   </div>
                 ) : null}
               </div>
@@ -529,8 +538,8 @@ export function MobileSidebarTrigger() {
                     <AvatarFallback>{user.initials}</AvatarFallback>
                   </Avatar>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm">{user.fullName}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
+                    <span className="block truncate text-base">{user.fullName}</span>
+                    <span className="block truncate text-sm text-muted-foreground">
                       {user.isLoading ? "Lade..." : roleLabel}
                     </span>
                     {canRoleSwitch ? (

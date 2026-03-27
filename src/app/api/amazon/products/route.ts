@@ -23,6 +23,8 @@ type ProductRow = {
   statusLabel: string;
   productType: string;
   isActive: boolean;
+  /** Aus Listings-Report/TSV, sonst null. */
+  price: number | null;
 };
 
 type ReportFallbackState = {
@@ -315,6 +317,15 @@ function parseListingsTsv(content: string) {
   const titleIdx = idx(["item-name", "item_name", "title", "product-name"]);
   const statusIdx = idx(["status", "item-status"]);
   const productTypeIdx = idx(["product-id-type", "product_type"]);
+  const priceIdx = idx([
+    "price",
+    "standard-price",
+    "standard price",
+    "your-price",
+    "your price",
+    "list-price",
+    "list price",
+  ]);
 
   const rows: ProductRow[] = [];
   for (let i = 1; i < lines.length; i += 1) {
@@ -327,8 +338,15 @@ function parseListingsTsv(content: string) {
     const asin = value(asinIdx);
     const title = value(titleIdx);
     const productType = value(productTypeIdx);
+    let price: number | null = null;
+    const rawPrice = value(priceIdx);
+    if (rawPrice) {
+      const norm = rawPrice.replace(/\s/g, "").replace(",", ".");
+      const n = Number(norm);
+      if (Number.isFinite(n) && n >= 0) price = n;
+    }
     if (!sku && !asin && !title) continue;
-    rows.push({ sku, asin, title, statusLabel, productType, isActive });
+    rows.push({ sku, asin, title, statusLabel, productType, isActive, price });
   }
   return rows;
 }
@@ -551,6 +569,7 @@ export async function GET(request: Request) {
       productType: string;
       statusLabel: string;
       isActive: boolean;
+      price: number | null;
     }> = [];
 
     while (guard < 40) {
@@ -677,6 +696,7 @@ export async function GET(request: Request) {
           productType: summary?.productType ?? "",
           statusLabel: statuses.length ? statuses.join(", ") : "Unbekannt",
           isActive: active,
+          price: null,
         });
       }
 

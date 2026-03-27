@@ -45,7 +45,7 @@ export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey; label: string }> 
   { key: "xentral", label: "Xentral" },
   { key: "advertising", label: "Werbung" },
   { key: "analytics", label: "Analytics" },
-  { key: "settings", label: "Einstellungen" },
+  { key: "settings", label: "Administration" },
   { key: "updates", label: "Update & Feedback" },
 ];
 

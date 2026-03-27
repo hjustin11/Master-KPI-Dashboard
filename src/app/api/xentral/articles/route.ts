@@ -5,6 +5,8 @@ type XentralArticle = {
   sku: string;
   name: string;
   stock: number;
+  /** Verkaufspreis aus Xentral, falls im API-Objekt vorhanden (Referenz für Preisgleichheit). */
+  price: number | null;
 };
 
 const EXCLUDED_NAME_TERMS = [
@@ -132,9 +134,23 @@ function mapToArticles(payload: unknown): XentralArticle[] | null {
       asNumber(obj.on_hand) ??
       0;
 
+    const price =
+      asNumber(obj.verkaufspreis) ??
+      asNumber(obj.salesPrice) ??
+      asNumber((obj.sales as Record<string, unknown> | undefined)?.price) ??
+      asNumber(obj.price) ??
+      asNumber(obj.listPrice) ??
+      asNumber(obj.listprice) ??
+      asNumber(obj.uvp) ??
+      asNumber(obj.bruttopreis) ??
+      asNumber(obj.nettopreis) ??
+      asNumber(obj.unitPrice) ??
+      asNumber((obj.pricing as Record<string, unknown> | undefined)?.gross) ??
+      null;
+
     if (!sku && !name) continue;
     if (shouldExcludeArticle({ sku, name })) continue;
-    rows.push({ sku, name, stock });
+    rows.push({ sku, name, stock, price });
   }
 
   return rows;

@@ -2,7 +2,7 @@ export type Role = "owner" | "admin" | "manager" | "analyst" | "viewer";
 
 export const ROLE_CAPABILITIES: Record<Role, string[]> = {
   owner: [
-    "Vollen Zugriff auf alle Bereiche und Einstellungen",
+    "Vollen Zugriff auf alle Bereiche und die Administration",
     "Benutzer einladen und Rollen zuweisen",
     "Rollen- und Berechtigungsmodell verwalten",
     "Integrationen und Datenexport steuern",
