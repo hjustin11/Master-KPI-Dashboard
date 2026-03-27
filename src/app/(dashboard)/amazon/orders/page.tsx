@@ -185,10 +185,10 @@ export default function AmazonOrdersPage() {
     void loadOrders(from, to);
   }, []);
 
-  const handleModeChange = (value: string) => {
-    const nextMode = (value as RangeMode) || "today-yesterday";
-    setMode(nextMode);
-    if (nextMode === "today-yesterday") {
+  const handleModeChange = (value: RangeMode | null) => {
+    if (value === null) return;
+    setMode(value);
+    if (value === "today-yesterday") {
       const todayValue = toDateInputValue(new Date());
       const yesterdayValue = toDateInputValue(new Date(Date.now() - 24 * 60 * 60 * 1000));
       setFrom(yesterdayValue);
