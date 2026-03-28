@@ -580,9 +580,6 @@ export default function SettingsUsersPage() {
             </button>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Als Owner kannst du Benutzer aus dem System entfernen.
-        </p>
 
         {memberActionMessage ? (
           <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">

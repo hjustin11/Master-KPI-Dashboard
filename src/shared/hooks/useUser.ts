@@ -25,13 +25,6 @@ function isLocalHostName(hostname: string) {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0";
 }
 
-function parseEmailList(value: string | undefined) {
-  return (value ?? "")
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-}
-
 function buildInitials(name: string, email: string) {
   const source = name.trim() || email.trim();
   if (!source) return "U";
@@ -86,13 +79,11 @@ export function useUser() {
         (profile?.full_name as string | undefined) || fallbackFullName;
       let roleKey = (profile?.role as string | undefined) || fallbackRoleKey;
 
-      // Localhost-Testmodus: erlaubt einen definierten User lokal temporär als Owner zu behandeln.
-      // Aktivierung über .env.local (wird nicht nach Vercel gepusht).
+      // Lokal immer Owner in der UI (hostname localhost / 127.0.0.1). Betrifft nur den Browser —
+      // API-Routen prüfen weiter die echte Profil-Rolle in Supabase.
       try {
-        const enabled = process.env.NEXT_PUBLIC_LOCAL_TEST_MODE === "true";
-        const allowedEmails = parseEmailList(process.env.NEXT_PUBLIC_LOCAL_OWNER_EMAILS);
         const hostname = typeof window !== "undefined" ? window.location.hostname : "";
-        if (enabled && isLocalHostName(hostname) && allowedEmails.includes(email.toLowerCase())) {
+        if (isLocalHostName(hostname)) {
           roleKey = "owner";
         }
       } catch {

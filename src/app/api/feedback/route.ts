@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 
+function roleIsOwner(value: unknown): boolean {
+  return typeof value === "string" && value.toLowerCase() === "owner";
+}
+
 async function isOwnerUser(args: {
   user: { id: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> };
   supabase: Awaited<ReturnType<typeof createServerSupabase>>;
@@ -12,10 +16,10 @@ async function isOwnerUser(args: {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  if (profile?.role === "owner") return true;
+  if (roleIsOwner(profile?.role)) return true;
   const appRole = user.app_metadata?.role;
   const userRole = user.user_metadata?.role;
-  return appRole === "owner" || userRole === "owner";
+  return roleIsOwner(appRole) || roleIsOwner(userRole);
 }
 
 type FeatureRequestRow = {

@@ -17,7 +17,7 @@ type FeatureRequestItem = {
 
 export default function UpdatesPage() {
   const user = useUser();
-  const isOwner = user.roleKey === "owner";
+  const isOwner = user.roleKey?.toLowerCase() === "owner";
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -52,7 +52,7 @@ export default function UpdatesPage() {
       try {
         const res = await fetch("/api/feedback");
         const payload = (await res.json()) as { items?: FeatureRequestItem[]; error?: string };
-        if (!res.ok) throw new Error(payload.error ?? "Inbox konnte nicht geladen werden.");
+        if (!res.ok) throw new Error(payload.error ?? "Liste konnte nicht geladen werden.");
         setItems(payload.items ?? []);
       } catch (e) {
         setInboxError(e instanceof Error ? e.message : "Unbekannter Fehler.");
@@ -121,12 +121,21 @@ export default function UpdatesPage() {
         <h2 className="text-base font-semibold">Updates</h2>
         <div className="space-y-3">
           {updates.map((u) => (
-            <div key={u.date + u.title} className="rounded-lg border border-border/40 bg-background/40 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-medium">{u.title}</p>
-                <p className="text-xs text-muted-foreground">{u.date}</p>
+            <div
+              key={u.date + u.title}
+              className="flex overflow-hidden rounded-lg border border-border/60 bg-muted/20 shadow-sm dark:bg-muted/15"
+            >
+              <div
+                className="w-1 shrink-0 bg-amber-400/50 dark:bg-amber-500/35"
+                aria-hidden
+              />
+              <div className="min-w-0 flex-1 px-3 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium text-foreground">{u.title}</p>
+                  <p className="text-xs tabular-nums text-muted-foreground">{u.date}</p>
+                </div>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{u.text}</p>
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">{u.text}</p>
             </div>
           ))}
         </div>
@@ -135,7 +144,8 @@ export default function UpdatesPage() {
       <section className="space-y-3 rounded-xl border border-border/50 bg-card/80 p-4 backdrop-blur-sm md:p-5">
         <h2 className="text-base font-semibold">Vorschlag / Wunschfunktion</h2>
         <p className="text-sm text-muted-foreground">
-          Sende Verbesserungen oder Feature-Wünsche. Der Owner sieht sie in seiner Inbox.
+          Sende Verbesserungen oder Feature-Wünsche. Nur die Rolle <span className="font-medium">Owner</span> kann
+          alle Eingaben unter „Verbesserung und Wünsche“ einsehen und bearbeiten.
         </p>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="grid gap-3 md:grid-cols-2">
@@ -201,10 +211,10 @@ export default function UpdatesPage() {
         </form>
       </section>
 
-      {isOwner ? (
+      {isOwner && !user.isLoading ? (
         <section className="space-y-3 rounded-xl border border-border/50 bg-card/80 p-4 backdrop-blur-sm md:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-semibold">Owner Inbox (Chat-Bereich)</h2>
+            <h2 className="text-base font-semibold">Verbesserung und Wünsche</h2>
             <button
               type="button"
               onClick={() => {
@@ -213,7 +223,7 @@ export default function UpdatesPage() {
                 void fetch("/api/feedback")
                   .then(async (res) => {
                     const payload = (await res.json()) as { items?: FeatureRequestItem[]; error?: string };
-                    if (!res.ok) throw new Error(payload.error ?? "Inbox konnte nicht geladen werden.");
+                    if (!res.ok) throw new Error(payload.error ?? "Liste konnte nicht geladen werden.");
                     setItems(payload.items ?? []);
                   })
                   .catch((e) => setInboxError(e instanceof Error ? e.message : "Unbekannter Fehler."))
@@ -225,7 +235,7 @@ export default function UpdatesPage() {
             </button>
           </div>
           <p className="text-sm text-muted-foreground">
-            Hier siehst du alle eingereichten Vorschlaege. Du kannst Status setzen und antworten.
+            Nur sichtbar für die Rolle Owner: alle eingereichten Vorschläge, Status setzen und antworten.
           </p>
 
           {inboxError ? (
@@ -235,7 +245,7 @@ export default function UpdatesPage() {
           ) : null}
 
           {isLoadingInbox ? (
-            <p className="text-sm text-muted-foreground">Lade Inbox...</p>
+            <p className="text-sm text-muted-foreground">Lade Vorschläge…</p>
           ) : items.length ? (
             <div className="space-y-3">
               {items.map((item) => (

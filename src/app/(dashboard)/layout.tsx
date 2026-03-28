@@ -5,6 +5,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/shared/components/layout/AppSidebar";
 import { Header } from "@/shared/components/layout/Header";
 import { MobileNav } from "@/shared/components/layout/MobileNav";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function DashboardLayout({
   children,
@@ -53,6 +54,7 @@ export default function DashboardLayout({
           </div>
           <MobileNav />
         </main>
+        <Toaster richColors position="top-center" />
       </div>
     </SidebarProvider>
   );

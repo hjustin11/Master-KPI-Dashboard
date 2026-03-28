@@ -28,7 +28,9 @@ type DataTableProps<TData, TValue> = {
   columns: Array<ColumnDef<TData, TValue>>;
   data: TData[];
   filterColumn?: string;
-  /** Zusatz rechts neben der Suchleiste (z. B. Datumsfilter). */
+  /** Zwischen Suchfeld und rechtem Toolbar-Block (z. B. Aktionsbutton). */
+  toolbarBetween?: ReactNode;
+  /** Zusatz rechts (z. B. Datumsfilter); mit `toolbarBetween` bleibt am rechten Rand. */
   toolbarEnd?: ReactNode;
   className?: string;
   tableWrapClassName?: string;
@@ -38,12 +40,15 @@ type DataTableProps<TData, TValue> = {
 
 type ColumnMeta = {
   align?: "left" | "center" | "right";
+  /** Tabellenzelle vertikal (z. B. unten bei unterschiedlichen Zeilenhöhen). */
+  valign?: "top" | "middle" | "bottom";
 };
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   filterColumn,
+  toolbarBetween,
   toolbarEnd,
   className,
   tableWrapClassName,
@@ -85,7 +90,7 @@ export function DataTable<TData, TValue>({
         className
       )}
     >
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex w-full flex-wrap items-center gap-3">
         <div className="relative min-w-0 max-w-sm flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -99,6 +104,9 @@ export function DataTable<TData, TValue>({
             }
           />
         </div>
+        {toolbarBetween ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">{toolbarBetween}</div>
+        ) : null}
         {toolbarEnd ? (
           <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
             {toolbarEnd}
@@ -116,16 +124,19 @@ export function DataTable<TData, TValue>({
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
+                {headerGroup.headers.map((header) => {
+                  const meta = header.column.columnDef.meta as ColumnMeta | undefined;
+                  return (
                   <TableHead
                     key={header.id}
-                    className={
-                      ((header.column.columnDef.meta as ColumnMeta | undefined)?.align === "center"
+                    className={cn(
+                      meta?.align === "center"
                         ? "text-center"
-                        : (header.column.columnDef.meta as ColumnMeta | undefined)?.align === "right"
+                        : meta?.align === "right"
                           ? "text-right"
-                          : undefined)
-                    }
+                          : undefined,
+                      meta?.valign === "bottom" ? "align-bottom" : undefined
+                    )}
                   >
                     {header.isPlaceholder ? null : (
                       <button
@@ -168,7 +179,8 @@ export function DataTable<TData, TValue>({
                       </button>
                     )}
                   </TableHead>
-                ))}
+                );
+                })}
               </TableRow>
             ))}
           </TableHeader>
@@ -176,20 +188,24 @@ export function DataTable<TData, TValue>({
             {rows.length ? (
               rows.map((row) => (
                 <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
+                  {row.getVisibleCells().map((cell) => {
+                    const meta = cell.column.columnDef.meta as ColumnMeta | undefined;
+                    return (
                     <TableCell
                       key={cell.id}
-                      className={
-                        ((cell.column.columnDef.meta as ColumnMeta | undefined)?.align === "center"
+                      className={cn(
+                        meta?.align === "center"
                           ? "text-center"
-                          : (cell.column.columnDef.meta as ColumnMeta | undefined)?.align === "right"
+                          : meta?.align === "right"
                             ? "text-right"
-                            : undefined)
-                      }
+                            : undefined,
+                        meta?.valign === "bottom" ? "align-bottom" : undefined
+                      )}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
-                  ))}
+                    );
+                  })}
                 </TableRow>
               ))
             ) : (

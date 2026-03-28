@@ -1,5 +1,15 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import {
+  computeAddressValidation,
+  primaryAddressContext,
+  type ShippingAddressValidationStatus,
+} from "@/shared/lib/shippingAddressValidation";
+import {
+  extractPrimaryAddressFieldsOneToOne,
+  type XentralPrimaryAddressFields,
+} from "@/shared/lib/xentralPrimaryAddressFields";
+import { deriveXentralAppBaseFromApiBase } from "@/shared/lib/xentralSalesOrderWebLink";
 
 type XentralOrderRow = {
   id: string;
@@ -7,9 +17,16 @@ type XentralOrderRow = {
   orderDate: string | null;
   customer: string;
   marketplace: string;
-  status: string;
   total: number | null;
   currency: string | null;
+  addressValidation: ShippingAddressValidationStatus;
+  addressValidationIssues: string[];
+  /** Orange „bearbeitet“ in der UI; echte Logik folgt später (bis dahin false). */
+  addressEdited: boolean;
+  /** Primäre Liefer-/Rechnungsadresse: je Key ein Xentral-Feld, kein Fallback. */
+  addressPrimaryFields: XentralPrimaryAddressFields;
+  /** Bestellnummer (Marktplatz/Web), falls von Xentral geliefert. */
+  internetNumber: string;
 };
 
 function env(name: string) {
@@ -39,6 +56,27 @@ async function resolveXentralConfig() {
 
 function joinUrl(base: string, path: string) {
   return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+}
+
+/** Meta für Deep-Links ins Xentral-Web (Sales Order). */
+function buildSalesOrderWebLinkMeta(apiBaseUrl: string): {
+  xentralOrderWebBase: string | null;
+  xentralSalesOrderWebPath: string;
+} {
+  const explicit = (env("XENTRAL_APP_BASE_URL") || "").trim().replace(/\/+$/, "");
+  const derivedRaw = explicit || deriveXentralAppBaseFromApiBase(apiBaseUrl.trim());
+  const xentralOrderWebBase = derivedRaw.length > 0 ? derivedRaw : null;
+  let pathRaw = (env("XENTRAL_SALES_ORDER_WEB_PATH") || "/sales-orders").trim();
+  if (!pathRaw) pathRaw = "/sales-orders";
+  /** Vollständige Browser-URL als Vorlage (…&id=) — keine Basis-URL nötig. */
+  if (/^https?:\/\//i.test(pathRaw)) {
+    return {
+      xentralOrderWebBase: null,
+      xentralSalesOrderWebPath: pathRaw,
+    };
+  }
+  const xentralSalesOrderWebPath = pathRaw.startsWith("/") ? pathRaw : `/${pathRaw}`;
+  return { xentralOrderWebBase, xentralSalesOrderWebPath };
 }
 
 function pickFirstString(value: unknown): string | null {
@@ -106,6 +144,42 @@ function berlinRecentWindow(recentDays: number): { fromYmd: string; toYmd: strin
   return { fromYmd, toYmd };
 }
 
+const MAX_DATE_RANGE_DAYS = 366;
+
+function parseYmdQueryParam(value: string | null): string | null {
+  if (!value) return null;
+  const t = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
+}
+
+/**
+ * Optional: explizites Kalenderfenster (Europe/Berlin-Datum als yyyy-mm-dd).
+ * Zu breite Spannen werden auf {@link MAX_DATE_RANGE_DAYS} Tage begrenzt (ab toYmd rückwärts).
+ */
+function resolveRecentFetchWindow(searchParams: URLSearchParams, recentDays: number): {
+  fromYmd: string;
+  toYmd: string;
+  mode: "dateRange" | "recentDays";
+} {
+  const qFrom = parseYmdQueryParam(searchParams.get("fromYmd"));
+  const qTo = parseYmdQueryParam(searchParams.get("toYmd"));
+  if (qFrom && qTo) {
+    let fromYmd = qFrom;
+    let toYmd = qTo;
+    if (fromYmd > toYmd) [fromYmd, toYmd] = [toYmd, fromYmd];
+    const t0 = new Date(`${fromYmd}T12:00:00.000Z`).getTime();
+    const t1 = new Date(`${toYmd}T12:00:00.000Z`).getTime();
+    const spanDays = Math.floor((t1 - t0) / 86400000) + 1;
+    if (spanDays > MAX_DATE_RANGE_DAYS) {
+      const clampFrom = new Date(t1 - (MAX_DATE_RANGE_DAYS - 1) * 86400000);
+      fromYmd = formatBerlinYmdFromInstant(clampFrom);
+    }
+    return { fromYmd, toYmd, mode: "dateRange" };
+  }
+  const { fromYmd, toYmd } = berlinRecentWindow(recentDays);
+  return { fromYmd, toYmd, mode: "recentDays" };
+}
+
 function orderInBerlinWindow(row: XentralOrderRow, fromYmd: string, toYmd: string): boolean {
   const ymd = row.orderDate?.slice(0, 10) ?? "";
   if (!ymd) return false;
@@ -122,6 +196,48 @@ function extractAttributes(obj: Record<string, unknown>): Record<string, unknown
   const attrs = obj.attributes;
   if (attrs && typeof attrs === "object") return attrs as Record<string, unknown>;
   return obj;
+}
+
+/**
+ * Xentral liefert u. a. status: created | released | completed | canceled | unknown (API-Doku).
+ * Abgeschlossene / stornierte Aufträge sind oft schreibgeschützt — Adressvalidierung entfällt.
+ */
+function extractXentralSalesOrderStatus(a: Record<string, unknown>): string | null {
+  const raw = a.status;
+  if (typeof raw === "string") return raw.trim() || null;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    const nested =
+      pickFirstString(o.value) ?? pickFirstString(o.name) ?? pickFirstString(o.key) ?? pickFirstString(o.status);
+    if (nested?.trim()) return nested.trim();
+  }
+  return (
+    pickFirstString(a.orderStatus) ??
+    pickFirstString(a.order_status) ??
+    pickFirstString(a.state) ??
+    pickFirstString(a.belegstatus) ??
+    null
+  );
+}
+
+/** Nur offene (bearbeitbare) Aufträge: Adressprüfung. Abgeschlossen / versendet / storniert: keine Prüfung. */
+function shouldRunShippingAddressValidationForXentralOrder(status: string | null): boolean {
+  if (!status?.trim()) return true;
+  const n = status.trim().toLowerCase().replace(/\s+/g, " ");
+  const skip = new Set([
+    "completed",
+    "complete",
+    "abgeschlossen",
+    "canceled",
+    "cancelled",
+    "storniert",
+    "shipped",
+    "versendet",
+    "delivered",
+    "geliefert",
+  ]);
+  if (skip.has(n)) return false;
+  return true;
 }
 
 /** Projekt-keyName (Xentral) → lesbarer Marktplatz in der UI */
@@ -220,6 +336,29 @@ function mapToOrders(payload: unknown, projectById: Map<string, string>): Xentra
       pickFirstString(a.externalNumber) ??
       (id ? `#${id}` : "");
 
+    const internetNumberRaw =
+      pickFirstString(a.internetNumber) ??
+      pickFirstString(a.internet_number) ??
+      pickFirstString(a.internetnr) ??
+      pickFirstString(a.internetNr) ??
+      pickFirstString(a.onlineOrderNumber) ??
+      pickFirstString(a.online_order_number) ??
+      pickFirstString(a.externalOrderNumber) ??
+      pickFirstString(a.external_order_number) ??
+      pickFirstString(a.shopOrderNumber) ??
+      pickFirstString(a.shop_order_number) ??
+      pickFirstString(a.marketplaceOrderId) ??
+      pickFirstString(a.marketplace_order_id) ??
+      pickFirstString(a.channelOrderId) ??
+      pickFirstString(a.channel_order_id) ??
+      pickFirstString(a.reference) ??
+      pickFirstString(a.referenceNumber) ??
+      pickFirstString(a.reference_number) ??
+      pickFirstString(a.externalNumber) ??
+      pickFirstString(a.external_number) ??
+      "";
+    const internetNumber = internetNumberRaw.trim() || "—";
+
     const orderDateRaw =
       pickFirstString(a.orderDate) ??
       pickFirstString(a.order_date) ??
@@ -232,6 +371,11 @@ function mapToOrders(payload: unknown, projectById: Map<string, string>): Xentra
     const deliveryBlock = a.delivery as Record<string, unknown> | undefined;
     const billingFromFinancials = financials?.billingAddress as Record<string, unknown> | undefined;
     const shippingFromDelivery = deliveryBlock?.shippingAddress as Record<string, unknown> | undefined;
+    const billingAddressFlat = a.billingAddress as Record<string, unknown> | undefined;
+    const shippingAddressFlat = a.shippingAddress as Record<string, unknown> | undefined;
+
+    const shippingForValidation = shippingFromDelivery ?? shippingAddressFlat;
+    const billingForValidation = billingFromFinancials ?? billingAddressFlat;
 
     const customer =
       pickFirstString(a.customerName) ??
@@ -248,11 +392,23 @@ function mapToOrders(payload: unknown, projectById: Map<string, string>): Xentra
       pickFirstString(a.company) ??
       "—";
 
-    const status =
-      pickFirstString(a.status) ??
-      pickFirstString(a.state) ??
-      pickFirstString(a.orderStatus) ??
-      "—";
+    const { primaryBlock } = primaryAddressContext({
+      shipping: shippingForValidation,
+      billing: billingForValidation,
+    });
+    const addressPrimaryFields = extractPrimaryAddressFieldsOneToOne(
+      primaryBlock && typeof primaryBlock === "object" ? primaryBlock : undefined
+    );
+
+    const salesOrderStatus = extractXentralSalesOrderStatus(a);
+    const runAddressValidation = shouldRunShippingAddressValidationForXentralOrder(salesOrderStatus);
+    const { status: addressValidation, issues: addressValidationIssues } = runAddressValidation
+      ? computeAddressValidation({
+          shipping: shippingForValidation,
+          billing: billingForValidation,
+          customerDisplay: customer,
+        })
+      : { status: "ok" as ShippingAddressValidationStatus, issues: [] as string[] };
 
     const projectRef = a.project;
     const projectIdFromRef =
@@ -308,9 +464,13 @@ function mapToOrders(payload: unknown, projectById: Map<string, string>): Xentra
         : null,
       customer,
       marketplace,
-      status,
       total,
       currency,
+      addressValidation,
+      addressValidationIssues,
+      addressEdited: false,
+      addressPrimaryFields,
+      internetNumber,
     });
   }
 
@@ -534,6 +694,8 @@ export async function GET(request: Request) {
     );
   }
 
+  const linkMeta = buildSalesOrderWebLinkMeta(baseUrl);
+
   const firstItemsRaw = mapToOrders(first.json, projectById) ?? [];
   const firstItems = sortOrdersByDateDesc(firstItemsRaw);
   const totalCount = parseTotalCount(first.json) ?? firstItems.length;
@@ -571,12 +733,13 @@ export async function GET(request: Request) {
         order: "desc",
         fetched: sorted.length,
         cappedAt: maxItemsCap,
+        ...linkMeta,
       },
     });
   }
 
   if (recentDays > 0) {
-    const { fromYmd, toYmd } = berlinRecentWindow(recentDays);
+    const { fromYmd, toYmd, mode: recentMode } = resolveRecentFetchWindow(searchParams, recentDays);
     const matches: XentralOrderRow[] = firstItems.filter((r) => orderInBerlinWindow(r, fromYmd, toYmd));
 
     let emptyStreak = pageEntirelyBeforeBerlinFrom(firstItems, fromYmd) ? 1 : 0;
@@ -619,7 +782,7 @@ export async function GET(request: Request) {
       items: sorted,
       totalCount,
       meta: {
-        mode: "recentDays",
+        mode: recentMode,
         recentDays,
         fromYmd,
         toYmd,
@@ -629,6 +792,8 @@ export async function GET(request: Request) {
         fetched: sorted.length,
         stoppedEarly,
         emptyPageStreakCap: RECENT_DAYS_EMPTY_PAGE_STREAK,
+        maxDateRangeDays: MAX_DATE_RANGE_DAYS,
+        ...linkMeta,
       },
     });
   }
@@ -642,6 +807,7 @@ export async function GET(request: Request) {
       order: "desc",
       pageNumber,
       pageSize,
+      ...linkMeta,
     },
   });
 }
