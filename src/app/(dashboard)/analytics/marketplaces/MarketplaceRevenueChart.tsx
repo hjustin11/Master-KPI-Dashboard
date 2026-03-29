@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { eachDayOfInterval, format, parseISO } from "date-fns";
-import { de } from "date-fns/locale";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { getDateFnsLocale, intlLocaleTag } from "@/i18n/locale-formatting";
 import {
   Bar,
   CartesianGrid,
@@ -75,12 +76,16 @@ function ChartTooltipContent({
   label,
   formatCurrency,
   currency,
+  dfLocale,
+  ordersLabel,
 }: {
   active?: boolean;
   payload?: TooltipEntry[];
   label?: string;
   formatCurrency: (amount: number, currency: string) => string;
   currency: string;
+  dfLocale: ReturnType<typeof getDateFnsLocale>;
+  ordersLabel: string;
 }) {
   if (!active || !payload?.length) return null;
   const data = payload[0]?.payload as { date?: string } | undefined;
@@ -88,7 +93,7 @@ function ChartTooltipContent({
   let dateLabel = "—";
   if (dateRaw) {
     try {
-      dateLabel = format(parseISO(String(dateRaw)), "dd.MM.yyyy", { locale: de });
+      dateLabel = format(parseISO(String(dateRaw)), "P", { locale: dfLocale });
     } catch {
       dateLabel = String(dateRaw);
     }
@@ -103,7 +108,7 @@ function ChartTooltipContent({
           if (key === "orders") {
             return (
               <li key="orders" className="flex justify-between gap-6">
-                <span>{entry.name ?? "Bestellungen"}</span>
+                <span>{entry.name ?? ordersLabel}</span>
                 <span className="font-medium text-foreground">{entry.value}</span>
               </li>
             );
@@ -149,6 +154,10 @@ export function MarketplaceRevenueChart({
   /** z. B. nur Amazon: Kurve zeichnen; sonst nur Hinweis */
   chartActive: boolean;
 }) {
+  const { t, locale } = useTranslation();
+  const dfLocale = getDateFnsLocale(locale);
+  const intlTag = intlLocaleTag(locale);
+
   const dates = useMemo(() => enumerateYmd(periodFrom, periodTo), [periodFrom, periodTo]);
   const chartData = useMemo(
     () => mergeChartRows(dates, points, previousPoints, showPreviousLine),
@@ -196,7 +205,7 @@ export function MarketplaceRevenueChart({
   }, [periodFrom, periodTo]);
 
   const addBand = () => {
-    const label = draft.label.trim() || "Aktion";
+    const label = draft.label.trim() || t("analyticsChart.defaultBandLabel");
     let { from, to } = draft;
     if (from > to) [from, to] = [to, from];
     const next: MarketplaceActionBand = {
@@ -221,18 +230,14 @@ export function MarketplaceRevenueChart({
     <div className="space-y-4">
       <div>
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Umsatzverlauf &amp; Aktionen
+          {t("analyticsChart.title")}
         </p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Liniendiagramm (Umsatz) und Balken (tägliche Bestellungen). Farbflächen markieren Deals,
-          Saison oder Rabattkampagnen — frei benennbar, pro Marktplatz in diesem Browser gespeichert.
-        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{t("analyticsChart.subtitle")}</p>
       </div>
 
       {!chartActive ? (
         <div className="flex min-h-[220px] items-center justify-center rounded-lg border border-dashed border-border/70 bg-muted/15 px-4 text-center text-sm text-muted-foreground">
-          Für diesen Marktplatz liegen hier noch keine Tagesumsätze vor. Nach Anbindung erscheint die
-          Grafik; Aktionsbereiche können Sie schon jetzt anlegen.
+          {t("analyticsChart.noDataHint")}
         </div>
       ) : (
         <div className="h-[360px] w-full min-w-0 rounded-lg border border-border/50 bg-background/40 p-1 pr-2 pt-2">
@@ -243,7 +248,7 @@ export function MarketplaceRevenueChart({
                 dataKey="date"
                 tickFormatter={(v) => {
                   try {
-                    return format(parseISO(v as string), "dd.MM.");
+                    return format(parseISO(v as string), "dd.MM.", { locale: dfLocale });
                   } catch {
                     return String(v);
                   }
@@ -255,7 +260,7 @@ export function MarketplaceRevenueChart({
               <YAxis
                 yAxisId="amt"
                 tickFormatter={(v) =>
-                  `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 }).format(Number(v))} €`
+                  `${new Intl.NumberFormat(intlTag, { maximumFractionDigits: 0 }).format(Number(v))} €`
                 }
                 width={56}
                 tick={{ fontSize: 10 }}
@@ -272,6 +277,8 @@ export function MarketplaceRevenueChart({
                   <ChartTooltipContent
                     formatCurrency={formatCurrency}
                     currency={currency}
+                    dfLocale={dfLocale}
+                    ordersLabel={t("analyticsChart.tooltipOrders")}
                   />
                 }
               />
@@ -291,7 +298,7 @@ export function MarketplaceRevenueChart({
               <Bar
                 yAxisId="ord"
                 dataKey="orders"
-                name="Bestellungen / Tag"
+                name={t("analyticsChart.ordersPerDay")}
                 fill="#94a3b8"
                 fillOpacity={0.4}
                 radius={[2, 2, 0, 0]}
@@ -302,7 +309,7 @@ export function MarketplaceRevenueChart({
                   yAxisId="amt"
                   type="monotone"
                   dataKey="prevAmount"
-                  name="Vorperiode (gleiche Tagesposition)"
+                  name={t("analyticsChart.prevPeriodLine")}
                   stroke="#64748b"
                   strokeWidth={2}
                   dot={false}
@@ -314,7 +321,7 @@ export function MarketplaceRevenueChart({
                 yAxisId="amt"
                 type="monotone"
                 dataKey="amount"
-                name="Umsatz / Tag"
+                name={t("analyticsChart.revenuePerDay")}
                 stroke="hsl(210 100% 52%)"
                 strokeWidth={2.5}
                 dot={false}
@@ -328,7 +335,7 @@ export function MarketplaceRevenueChart({
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border border-border/50 bg-background/50 px-2.5 py-2">
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Summe Zeitraum
+              {t("analyticsChart.sumPeriod")}
             </p>
             <p className="mt-0.5 text-base font-semibold tabular-nums">
               {formatCurrency(summaryLine.sumAmt, currency)}
@@ -336,7 +343,7 @@ export function MarketplaceRevenueChart({
           </div>
           <div className="rounded-lg border border-border/50 bg-background/50 px-2.5 py-2">
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Ø / Kalendertag
+              {t("analyticsChart.avgPerCalendarDay")}
             </p>
             <p className="mt-0.5 text-base font-semibold tabular-nums">
               {formatCurrency(summaryLine.avgPerDay, currency)}
@@ -344,7 +351,7 @@ export function MarketplaceRevenueChart({
           </div>
           <div className="rounded-lg border border-border/50 bg-background/50 px-2.5 py-2">
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Spitzenumsatz / Tag
+              {t("analyticsChart.peakPerDay")}
             </p>
             <p className="mt-0.5 text-base font-semibold tabular-nums">
               {formatCurrency(summaryLine.maxAmt, currency)}
@@ -352,7 +359,7 @@ export function MarketplaceRevenueChart({
           </div>
           <div className="rounded-lg border border-border/50 bg-background/50 px-2.5 py-2">
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Tage mit Umsatz &gt; 0
+              {t("analyticsChart.daysWithRevenueGt0")}
             </p>
             <p className="mt-0.5 text-base font-semibold tabular-nums">
               {summaryLine.activeDays} / {chartData.length}
@@ -363,24 +370,24 @@ export function MarketplaceRevenueChart({
 
       <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Aktions- / Deal-Bereich
+          {t("analyticsChart.actionBandTitle")}
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-12 lg:items-end">
           <div className="space-y-1.5 lg:col-span-4">
             <Label htmlFor="band-label" className="text-xs">
-              Bezeichnung
+              {t("analyticsChart.labelField")}
             </Label>
             <Input
               id="band-label"
               value={draft.label}
               onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
-              placeholder="z. B. Ostern, -20 % Promo"
+              placeholder={t("analyticsChart.labelPlaceholder")}
               className="h-9 text-sm"
             />
           </div>
           <div className="space-y-1.5 lg:col-span-2">
             <Label htmlFor="band-from" className="text-xs">
-              Von
+              {t("dates.from")}
             </Label>
             <Input
               id="band-from"
@@ -392,7 +399,7 @@ export function MarketplaceRevenueChart({
           </div>
           <div className="space-y-1.5 lg:col-span-2">
             <Label htmlFor="band-to" className="text-xs">
-              Bis
+              {t("dates.to")}
             </Label>
             <Input
               id="band-to"
@@ -404,7 +411,7 @@ export function MarketplaceRevenueChart({
           </div>
           <div className="space-y-1.5 lg:col-span-2">
             <Label htmlFor="band-color" className="text-xs">
-              Farbe
+              {t("analyticsChart.color")}
             </Label>
             <Input
               id="band-color"
@@ -416,7 +423,7 @@ export function MarketplaceRevenueChart({
           </div>
           <div className="lg:col-span-2">
             <Button type="button" className="w-full" size="sm" onClick={addBand}>
-              Bereich hinzufügen
+              {t("analyticsChart.addBand")}
             </Button>
           </div>
         </div>
@@ -444,7 +451,7 @@ export function MarketplaceRevenueChart({
                   variant="ghost"
                   size="icon-sm"
                   className="shrink-0 text-muted-foreground hover:text-destructive"
-                  aria-label={`${b.label} entfernen`}
+                  aria-label={t("analyticsChart.removeBandAria", { label: b.label })}
                   onClick={() => removeBand(b.id)}
                 >
                   <Trash2 className="size-4" />
@@ -454,8 +461,7 @@ export function MarketplaceRevenueChart({
           </ul>
         ) : (
           <p className="mt-3 border-t border-border/50 pt-3 text-[11px] text-muted-foreground">
-            Noch keine Bereiche — z. B. Feiertags-Deal vom–bis ergänzen; die Fläche erscheint in der
-            Grafik.
+            {t("analyticsChart.noBandsYet")}
           </p>
         )}
       </div>

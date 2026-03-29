@@ -2,30 +2,39 @@ export type Role = "owner" | "admin" | "manager" | "analyst" | "viewer";
 
 export const ROLE_CAPABILITIES: Record<Role, string[]> = {
   owner: [
-    "Vollen Zugriff auf alle Bereiche und die Administration",
+    "Voller technischer Zugriff (Entwickler / Gründer-Stack)",
     "Benutzer einladen und Rollen zuweisen",
     "Rollen- und Berechtigungsmodell verwalten",
     "Integrationen und Datenexport steuern",
   ],
   admin: [
-    "Dashboard und Integrationen verwalten",
-    "Benutzerverwaltung (ohne Owner-Rechte)",
+    "Team Lead: Dashboard und Integrationen mitsteuern",
+    "Benutzerverwaltung ohne Entwickler-Rechte",
     "Datenexport in Reports",
   ],
   manager: [
-    "Operative Dashboards und KPI-Ansichten",
+    "Operations: operative Dashboards und KPIs",
     "Integrationsstatus einsehen",
     "Reports exportieren",
   ],
   analyst: [
-    "Analyse- und KPI-Bereiche nutzen",
+    "Insights: Analyse- und KPI-Bereiche",
     "Auswertungen und Exporte erstellen",
   ],
-  viewer: ["Lesender Zugriff auf freigegebene Dashboard-Bereiche"],
+  viewer: ["Mitglied: lesender Zugriff auf freigegebene Bereiche"],
+};
+
+/** Einladungs-E-Mail (DE); UI nutzt i18n `roles.*`. */
+const ROLE_EMAIL_LABELS: Record<Role, string> = {
+  owner: "Entwickler",
+  admin: "Team Lead",
+  manager: "Operations",
+  analyst: "Insights",
+  viewer: "Mitglied",
 };
 
 export function getRoleLabel(role: Role): string {
-  return role.toUpperCase();
+  return ROLE_EMAIL_LABELS[role] ?? role;
 }
 
 export function buildInvitationEmailHtml({

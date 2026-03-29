@@ -33,7 +33,7 @@ export function KPICard({
       )}
     >
       <p className="text-sm text-muted-foreground">{title}</p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+      <p className="mt-2 text-xl font-semibold tracking-tight">{value}</p>
       {trendLabel ? (
         <div
           className={cn(

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/shared/lib/supabase/client";
 import { useUser } from "@/shared/hooks/useUser";
+import { DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboardUi";
 
 type ProfileFormState = {
   fullName: string;
@@ -107,7 +108,7 @@ export default function SettingsProfilePage() {
   return (
     <div className="w-full max-w-none space-y-6">
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold tracking-tight">Mein Profil</h1>
+        <h1 className={DASHBOARD_PAGE_TITLE}>Mein Profil</h1>
         <p className="text-muted-foreground">
           Passe deine persönlichen Einstellungen und Benachrichtigungen an.
         </p>

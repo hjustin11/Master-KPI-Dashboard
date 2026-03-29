@@ -10,12 +10,18 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
+  Cat,
   Megaphone,
+  Monitor,
   Package,
   PanelLeft,
   Settings,
+  ShoppingBag,
   ShoppingCart,
+  PawPrint,
+  Store,
   User,
+  Video,
 } from "lucide-react";
 import {
   Sidebar,
@@ -53,72 +59,126 @@ import {
   type SidebarItemKey,
 } from "@/shared/lib/access-control";
 import { useAppStore } from "@/shared/stores/useAppStore";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { resolveRoleLabel } from "@/i18n/resolve-role-label";
 
 type NavItem = {
   key: SidebarItemKey;
-  label: string;
+  labelKey: string;
   href: string;
   icon: ComponentType<{ className?: string }>;
   requiredPermissions?: PermissionKey[];
-  children?: Array<{ label: string; href: string; requiredPermissions?: PermissionKey[] }>;
+  children?: Array<{ labelKey: string; href: string; requiredPermissions?: PermissionKey[] }>;
 };
 
 const navItems: NavItem[] = [
   {
     key: "amazon",
-    label: "Amazon",
+    labelKey: "nav.amazon",
     href: "/amazon",
     icon: ShoppingCart,
     requiredPermissions: ["manage_integrations"],
     children: [
-      { label: "Bestellungen", href: "/amazon/orders" },
-      { label: "Produkte", href: "/amazon/products" },
-      { label: "Retouren", href: "/amazon/returns" },
+      { labelKey: "nav.amazonOrders", href: "/amazon/orders" },
+      { labelKey: "nav.amazonProducts", href: "/amazon/products" },
+      { labelKey: "nav.amazonReturns", href: "/amazon/returns" },
     ],
   },
   {
+    key: "otto",
+    labelKey: "nav.otto",
+    href: "/otto",
+    icon: ShoppingBag,
+    requiredPermissions: ["manage_integrations"],
+    children: [{ labelKey: "nav.ottoOrders", href: "/otto/orders" }],
+  },
+  {
+    key: "kaufland",
+    labelKey: "nav.kaufland",
+    href: "/kaufland",
+    icon: Store,
+    requiredPermissions: ["manage_integrations"],
+    children: [
+      { labelKey: "nav.kauflandOrders", href: "/kaufland/orders" },
+      { labelKey: "nav.kauflandUnits", href: "/kaufland/units" },
+    ],
+  },
+  {
+    key: "fressnapf",
+    labelKey: "nav.fressnapf",
+    href: "/fressnapf",
+    icon: PawPrint,
+    requiredPermissions: ["manage_integrations"],
+    children: [{ labelKey: "nav.fressnapfOrders", href: "/fressnapf/orders" }],
+  },
+  {
+    key: "mediamarktSaturn",
+    labelKey: "nav.mediamarktSaturn",
+    href: "/mediamarkt-saturn",
+    icon: Monitor,
+    requiredPermissions: ["manage_integrations"],
+    children: [{ labelKey: "nav.mediamarktSaturnOrders", href: "/mediamarkt-saturn/orders" }],
+  },
+  {
+    key: "zooplus",
+    labelKey: "nav.zooplus",
+    href: "/zooplus",
+    icon: Cat,
+    requiredPermissions: ["manage_integrations"],
+    children: [{ labelKey: "nav.zooplusOrders", href: "/zooplus/orders" }],
+  },
+  {
+    key: "tiktok",
+    labelKey: "nav.tiktok",
+    href: "/tiktok",
+    icon: Video,
+    requiredPermissions: ["manage_integrations"],
+    children: [{ labelKey: "nav.tiktokOrders", href: "/tiktok/orders" }],
+  },
+  {
     key: "xentral",
-    label: "Xentral",
+    labelKey: "nav.xentral",
     href: "/xentral",
     icon: Package,
     requiredPermissions: ["manage_integrations"],
     children: [
-      { label: "Artikel", href: "/xentral/products" },
-      { label: "Bestellungen", href: "/xentral/orders" },
+      { labelKey: "nav.xentralProducts", href: "/xentral/products" },
+      { labelKey: "nav.xentralOrders", href: "/xentral/orders" },
     ],
   },
   {
     key: "advertising",
-    label: "Werbung",
+    labelKey: "nav.advertising",
     href: "/advertising",
     icon: Megaphone,
     requiredPermissions: ["manage_integrations"],
     children: [
-      { label: "Kampagnen", href: "/advertising/campaigns" },
-      { label: "Performance", href: "/advertising/performance" },
+      { labelKey: "nav.adCampaigns", href: "/advertising/campaigns" },
+      { labelKey: "nav.adPerformance", href: "/advertising/performance" },
     ],
   },
   {
     key: "analytics",
-    label: "Analytics",
+    labelKey: "nav.analytics",
     href: "/analytics",
     icon: BarChart3,
     requiredPermissions: ["export_data"],
     children: [
-      { label: "Marktplätze", href: "/analytics/marketplaces" },
-      { label: "Artikelprognose", href: "/analytics/article-forecast" },
-      { label: "Performance", href: "/analytics/performance" },
+      { labelKey: "nav.analyticsMarketplaces", href: "/analytics/marketplaces" },
+      { labelKey: "nav.analyticsArticleForecast", href: "/analytics/article-forecast" },
+      { labelKey: "nav.analyticsProcurement", href: "/analytics/procurement" },
+      { labelKey: "nav.analyticsPerformance", href: "/analytics/performance" },
     ],
   },
   {
     key: "settings",
-    label: "Administration",
+    labelKey: "nav.settings",
     href: "/settings/users",
     icon: Settings,
   },
   {
     key: "updates",
-    label: "Update & Feedback",
+    labelKey: "nav.updates",
     href: "/updates",
     icon: Bell,
   },
@@ -132,6 +192,12 @@ function isActivePath(pathname: string, href: string) {
 /** Hauptklick Ziel = erster Unterpunkt (ohne separate Übersichtsseite). */
 const NAV_PRIMARY_CHILD_KEYS = new Set<SidebarItemKey>([
   "amazon",
+  "otto",
+  "kaufland",
+  "fressnapf",
+  "mediamarktSaturn",
+  "zooplus",
+  "tiktok",
   "xentral",
   "advertising",
   "analytics",
@@ -164,6 +230,7 @@ function resolveNavLink(
 export function AppSidebar() {
   const router = useRouter();
   const pathname = usePathname();
+  const { t, locale } = useTranslation();
   const { state, toggleSidebar } = useSidebar();
   const user = useUser();
   const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole } = usePermissions();
@@ -175,15 +242,15 @@ export function AppSidebar() {
   const customRoleKeys = useAppStore((stateFromStore) => stateFromStore.customRoleKeys);
   const roleLabels = useAppStore((stateFromStore) => stateFromStore.roleLabels);
   const setActiveRole = useAppStore((stateFromStore) => stateFromStore.setActiveRole);
-  const roleLabel = roleLabels[effectiveRole] ?? effectiveRole;
+  const roleLabel = resolveRoleLabel(effectiveRole, roleLabels[effectiveRole], locale);
   const roleOptions = [
     ...ROLE_OPTIONS.map((item) => ({
       value: item.value,
-      label: roleLabels[item.value] ?? item.label,
+      label: resolveRoleLabel(item.value, roleLabels[item.value], locale),
     })),
     ...customRoleKeys.map((key) => ({
       value: key,
-      label: roleLabels[key] ?? key,
+      label: resolveRoleLabel(key, roleLabels[key], locale),
     })),
   ];
   const isHydrated = useSyncExternalStore(
@@ -229,13 +296,16 @@ export function AppSidebar() {
           ) : (
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-center">
-                <Image
-                  src="/brand/petrhein-logo-attached.png"
-                  alt="PetRhein"
-                  width={195}
-                  height={40}
-                  className="h-10 w-auto max-w-[min(100%,14rem)] object-contain"
-                />
+                <div className="relative h-10 w-full max-w-[min(100%,14rem)] shrink-0">
+                  <Image
+                    src="/brand/petrhein-logo-attached.png"
+                    alt="PetRhein"
+                    fill
+                    priority
+                    className="object-contain"
+                    sizes="(max-width: 768px) 224px, 224px"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -271,13 +341,13 @@ export function AppSidebar() {
               <Link
                 href={primaryHref}
                 className={cn(
-                  "group flex items-center gap-3 rounded-md px-3 py-2 text-base transition-all duration-200 hover:bg-accent/60",
+                  "group flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-all duration-200 hover:bg-accent/60",
                   active && "border-l-2 border-primary bg-primary/10 text-primary",
                   collapsed && "justify-center px-2"
                 )}
               >
-                <Icon className="h-5 w-5 shrink-0" />
-                {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                <Icon className="h-4 w-4 shrink-0" />
+                {!collapsed ? <span className="truncate">{t(item.labelKey)}</span> : null}
               </Link>
             );
 
@@ -286,7 +356,7 @@ export function AppSidebar() {
                 {collapsed ? (
                   <Tooltip>
                     <TooltipTrigger render={<div />}>{baseLink}</TooltipTrigger>
-                    <TooltipContent side="right">{item.label}</TooltipContent>
+                    <TooltipContent side="right">{t(item.labelKey)}</TooltipContent>
                   </Tooltip>
                 ) : (
                   baseLink
@@ -301,11 +371,11 @@ export function AppSidebar() {
                           key={child.href}
                           href={child.href}
                           className={cn(
-                            "block rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
+                            "block rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
                             childActive && "text-primary"
                           )}
                         >
-                          {child.label}
+                          {t(child.labelKey)}
                         </Link>
                       );
                     })}
@@ -336,10 +406,10 @@ export function AppSidebar() {
               </Avatar>
               {!collapsed ? (
                 <div className="min-w-0">
-                  <p className="truncate text-base font-medium">{user.fullName}</p>
+                  <p className="truncate text-sm font-medium">{user.fullName}</p>
                   <div className="mt-0.5 flex items-center justify-between gap-2">
-                    <p className="truncate text-sm text-muted-foreground">
-                      {user.isLoading ? "Lade..." : roleLabel}
+                    <p className="truncate text-xs text-muted-foreground">
+                      {user.isLoading ? t("common.loading") : roleLabel}
                     </p>
                     {canRoleSwitch ? (
                       <div className="flex items-center gap-1">
@@ -350,8 +420,8 @@ export function AppSidebar() {
                             cycleRole("prev");
                           }}
                           className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-                          aria-label="Vorherige Rolle"
-                          title="Vorherige Rolle"
+                          aria-label={t("sidebar.prevRole")}
+                          title={t("sidebar.prevRole")}
                         >
                           <ChevronLeft className="h-3.5 w-3.5" />
                         </button>
@@ -362,8 +432,8 @@ export function AppSidebar() {
                             cycleRole("next");
                           }}
                           className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-                          aria-label="Nächste Rolle"
-                          title="Nächste Rolle"
+                          aria-label={t("sidebar.nextRole")}
+                          title={t("sidebar.nextRole")}
                         >
                           <ChevronRight className="h-3.5 w-3.5" />
                         </button>
@@ -376,7 +446,7 @@ export function AppSidebar() {
           <DropdownMenuContent side="top" align="end" className="w-56">
             <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
               <User className="h-4 w-4" />
-              Profil
+              {t("header.profile")}
             </DropdownMenuItem>
             {!user.isLoading && user.roleKey === "owner" ? (
               <>
@@ -385,14 +455,14 @@ export function AppSidebar() {
                   onClick={() => setRoleTestingEnabled(!roleTestingEnabled)}
                   className={roleTestingEnabled ? "bg-primary/10 text-primary" : ""}
                 >
-                  Rollen-Testmodus: {roleTestingEnabled ? "AN" : "AUS"}
+                  {t("header.roleTestMode")}: {roleTestingEnabled ? t("common.on") : t("common.off")}
                 </DropdownMenuItem>
 
                 {roleTestingEnabled ? (
                   <>
                     {activeRole !== "owner" ? (
                       <DropdownMenuItem onClick={() => setActiveRole("owner")}>
-                        Owner-Ansicht wiederherstellen
+                        {t("header.restoreDeveloperView")}
                       </DropdownMenuItem>
                     ) : null}
                     {roleOptions.map((role) => (
@@ -403,7 +473,7 @@ export function AppSidebar() {
                           role.value === activeRole ? "bg-primary/10 text-primary" : ""
                         }
                       >
-                        Als {role.label} testen
+                        {t("header.testAs", { role: role.label })}
                       </DropdownMenuItem>
                     ))}
                   </>
@@ -423,6 +493,7 @@ export function AppSidebar() {
 export function MobileSidebarTrigger() {
   const router = useRouter();
   const pathname = usePathname();
+  const { t, locale } = useTranslation();
   const user = useUser();
   const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole } = usePermissions();
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
@@ -433,15 +504,15 @@ export function MobileSidebarTrigger() {
   const customRoleKeys = useAppStore((stateFromStore) => stateFromStore.customRoleKeys);
   const roleLabels = useAppStore((stateFromStore) => stateFromStore.roleLabels);
   const setActiveRole = useAppStore((stateFromStore) => stateFromStore.setActiveRole);
-  const roleLabel = roleLabels[effectiveRole] ?? effectiveRole;
+  const roleLabel = resolveRoleLabel(effectiveRole, roleLabels[effectiveRole], locale);
   const roleOptions = [
     ...ROLE_OPTIONS.map((item) => ({
       value: item.value,
-      label: roleLabels[item.value] ?? item.label,
+      label: resolveRoleLabel(item.value, roleLabels[item.value], locale),
     })),
     ...customRoleKeys.map((key) => ({
       value: key,
-      label: roleLabels[key] ?? key,
+      label: resolveRoleLabel(key, roleLabels[key], locale),
     })),
   ];
 
@@ -463,20 +534,22 @@ export function MobileSidebarTrigger() {
     <Sheet>
       <SheetTrigger render={<Button variant="ghost" size="icon-sm" className="md:hidden" />}>
         <PanelLeft className="h-4 w-4" />
-        <span className="sr-only">Sidebar öffnen</span>
+        <span className="sr-only">{t("sidebar.openMenu")}</span>
       </SheetTrigger>
       <SheetContent side="left" className="w-[280px] border-r border-border/50 bg-card/80 backdrop-blur-sm">
         <SheetHeader className="pb-2">
           <SheetTitle className="flex items-center gap-2">
-            <Image
-              src="/brand/petrhein-logo-attached.png"
-              alt="PetRhein"
-              width={144}
-              height={32}
-              className="h-8 w-auto object-contain"
-            />
+            <span className="relative block h-8 w-40 max-w-full shrink-0">
+              <Image
+                src="/brand/petrhein-logo-attached.png"
+                alt="PetRhein"
+                fill
+                className="object-contain object-left"
+                sizes="160px"
+              />
+            </span>
           </SheetTitle>
-          <SheetDescription>Navigation</SheetDescription>
+          <SheetDescription className="text-xs">{t("sidebar.navigation")}</SheetDescription>
         </SheetHeader>
         <nav className="space-y-1 px-4 pb-4">
           {navItems
@@ -492,15 +565,15 @@ export function MobileSidebarTrigger() {
             const visibleChildren = visibleNavChildren(item, hasPermission);
             return (
               <div key={item.key} className="space-y-1">
-                <Link
+                  <Link
                   href={primaryHref}
                   className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-base transition-all duration-200 hover:bg-accent/60",
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-all duration-200 hover:bg-accent/60",
                     active && "border-l-2 border-primary bg-primary/10 text-primary"
                   )}
                 >
-                  <Icon className="h-5 w-5" />
-                  <span>{item.label}</span>
+                  <Icon className="h-4 w-4" />
+                  <span>{t(item.labelKey)}</span>
                 </Link>
                 {visibleChildren.length ? (
                   <div className="ml-7 space-y-1 border-l border-border/50 pl-3">
@@ -509,15 +582,15 @@ export function MobileSidebarTrigger() {
                         key={child.href}
                         href={child.href}
                         className={cn(
-                          "block rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
-                          isActivePath(pathname, child.href) && "text-primary"
-                        )}
-                      >
-                        {child.label}
-                      </Link>
-                    ))}
-                  </div>
-                ) : null}
+                            "block rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
+                            isActivePath(pathname, child.href) && "text-primary"
+                          )}
+                        >
+                          {t(child.labelKey)}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
               </div>
             );
             })}
@@ -538,9 +611,9 @@ export function MobileSidebarTrigger() {
                     <AvatarFallback>{user.initials}</AvatarFallback>
                   </Avatar>
                   <span className="min-w-0">
-                    <span className="block truncate text-base">{user.fullName}</span>
-                    <span className="block truncate text-sm text-muted-foreground">
-                      {user.isLoading ? "Lade..." : roleLabel}
+                    <span className="block truncate text-sm">{user.fullName}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {user.isLoading ? t("common.loading") : roleLabel}
                     </span>
                     {canRoleSwitch ? (
                       <div className="mt-1 flex items-center gap-1">
@@ -551,8 +624,8 @@ export function MobileSidebarTrigger() {
                             cycleRole("prev");
                           }}
                           className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-                          aria-label="Vorherige Rolle"
-                          title="Vorherige Rolle"
+                          aria-label={t("sidebar.prevRole")}
+                          title={t("sidebar.prevRole")}
                         >
                           <ChevronLeft className="h-4 w-4" />
                         </button>
@@ -563,8 +636,8 @@ export function MobileSidebarTrigger() {
                             cycleRole("next");
                           }}
                           className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-                          aria-label="Nächste Rolle"
-                          title="Nächste Rolle"
+                          aria-label={t("sidebar.nextRole")}
+                          title={t("sidebar.nextRole")}
                         >
                           <ChevronRight className="h-4 w-4" />
                         </button>
@@ -577,7 +650,7 @@ export function MobileSidebarTrigger() {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
                 <User className="h-4 w-4" />
-                Profil
+                {t("header.profile")}
               </DropdownMenuItem>
               {!user.isLoading && user.roleKey === "owner" ? (
                 <>
@@ -586,14 +659,14 @@ export function MobileSidebarTrigger() {
                     onClick={() => setRoleTestingEnabled(!roleTestingEnabled)}
                     className={roleTestingEnabled ? "bg-primary/10 text-primary" : ""}
                   >
-                    Rollen-Testmodus: {roleTestingEnabled ? "AN" : "AUS"}
+                    {t("header.roleTestMode")}: {roleTestingEnabled ? t("common.on") : t("common.off")}
                   </DropdownMenuItem>
 
                   {roleTestingEnabled ? (
                     <>
                       {activeRole !== "owner" ? (
                         <DropdownMenuItem onClick={() => setActiveRole("owner")}>
-                          Owner-Ansicht wiederherstellen
+                          {t("header.restoreDeveloperView")}
                         </DropdownMenuItem>
                       ) : null}
                       {roleOptions.map((role) => (
@@ -602,7 +675,7 @@ export function MobileSidebarTrigger() {
                           onClick={() => setActiveRole(role.value)}
                           className={role.value === activeRole ? "bg-primary/10 text-primary" : ""}
                         >
-                          Als {role.label} testen
+                          {t("header.testAs", { role: role.label })}
                         </DropdownMenuItem>
                       ))}
                     </>

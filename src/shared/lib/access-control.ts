@@ -10,6 +10,12 @@ export type PermissionKey =
 export type SidebarItemKey =
   | "overview"
   | "amazon"
+  | "otto"
+  | "kaufland"
+  | "fressnapf"
+  | "mediamarktSaturn"
+  | "zooplus"
+  | "tiktok"
   | "xentral"
   | "advertising"
   | "analytics"
@@ -23,38 +29,45 @@ export type DashboardSectionKey =
   | "permissions"
   | "sidebar-visibility";
 
-export const ROLE_OPTIONS: Array<{ value: Role; label: string }> = [
-  { value: "owner", label: "Owner" },
-  { value: "admin", label: "Admin" },
-  { value: "manager", label: "Manager" },
-  { value: "analyst", label: "Analyst" },
-  { value: "viewer", label: "Viewer" },
+/** Anzeigenamen kommen aus i18n (`roles.*`), nicht aus festen Labels. */
+export const ROLE_OPTIONS: Array<{ value: Role }> = [
+  { value: "owner" },
+  { value: "admin" },
+  { value: "manager" },
+  { value: "analyst" },
+  { value: "viewer" },
 ];
 
-export const PERMISSION_CONFIG: Array<{ key: PermissionKey; label: string }> = [
-  { key: "view_dashboard", label: "Dashboard ansehen" },
-  { key: "manage_integrations", label: "Integrationen verwalten" },
-  { key: "manage_users", label: "Benutzer verwalten" },
-  { key: "manage_roles", label: "Rollen & Rechte verwalten" },
-  { key: "export_data", label: "Daten exportieren" },
+export const PERMISSION_CONFIG: Array<{ key: PermissionKey }> = [
+  { key: "view_dashboard" },
+  { key: "manage_integrations" },
+  { key: "manage_users" },
+  { key: "manage_roles" },
+  { key: "export_data" },
 ];
 
-export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey; label: string }> = [
-  { key: "overview", label: "Übersicht" },
-  { key: "amazon", label: "Amazon" },
-  { key: "xentral", label: "Xentral" },
-  { key: "advertising", label: "Werbung" },
-  { key: "analytics", label: "Analytics" },
-  { key: "settings", label: "Administration" },
-  { key: "updates", label: "Update & Feedback" },
+export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey }> = [
+  { key: "overview" },
+  { key: "amazon" },
+  { key: "otto" },
+  { key: "kaufland" },
+  { key: "fressnapf" },
+  { key: "mediamarktSaturn" },
+  { key: "zooplus" },
+  { key: "tiktok" },
+  { key: "xentral" },
+  { key: "advertising" },
+  { key: "analytics" },
+  { key: "settings" },
+  { key: "updates" },
 ];
 
-export const DASHBOARD_SECTION_CONFIG: Array<{ key: DashboardSectionKey; label: string }> = [
-  { key: "roles-manage", label: "Rollen verwalten" },
-  { key: "invite", label: "Benutzer einladen" },
-  { key: "members", label: "Teammitglieder" },
-  { key: "permissions", label: "Rollen & Berechtigungen" },
-  { key: "sidebar-visibility", label: "Sidebar-Sichtbarkeit" },
+export const DASHBOARD_SECTION_CONFIG: Array<{ key: DashboardSectionKey }> = [
+  { key: "roles-manage" },
+  { key: "invite" },
+  { key: "members" },
+  { key: "permissions" },
+  { key: "sidebar-visibility" },
 ];
 
 export const INITIAL_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
@@ -75,6 +88,12 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   owner: {
     overview: true,
     amazon: true,
+    otto: true,
+    kaufland: true,
+    fressnapf: true,
+    mediamarktSaturn: true,
+    zooplus: true,
+    tiktok: true,
     xentral: true,
     advertising: true,
     analytics: true,
@@ -84,6 +103,12 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   admin: {
     overview: true,
     amazon: true,
+    otto: true,
+    kaufland: true,
+    fressnapf: true,
+    mediamarktSaturn: true,
+    zooplus: true,
+    tiktok: true,
     xentral: true,
     advertising: true,
     analytics: true,
@@ -93,6 +118,12 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   manager: {
     overview: true,
     amazon: true,
+    otto: true,
+    kaufland: true,
+    fressnapf: true,
+    mediamarktSaturn: true,
+    zooplus: true,
+    tiktok: true,
     xentral: true,
     advertising: true,
     analytics: true,
@@ -102,6 +133,12 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   analyst: {
     overview: true,
     amazon: false,
+    otto: false,
+    kaufland: false,
+    fressnapf: false,
+    mediamarktSaturn: false,
+    zooplus: false,
+    tiktok: false,
     xentral: false,
     advertising: false,
     analytics: true,
@@ -111,6 +148,12 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   viewer: {
     overview: true,
     amazon: false,
+    otto: false,
+    kaufland: false,
+    fressnapf: false,
+    mediamarktSaturn: false,
+    zooplus: false,
+    tiktok: false,
     xentral: false,
     advertising: false,
     analytics: false,

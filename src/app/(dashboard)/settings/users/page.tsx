@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
+import { toast } from "sonner";
 import { type Role } from "@/shared/lib/invitations";
 import {
   DASHBOARD_SECTION_CONFIG,
@@ -14,6 +15,16 @@ import {
 } from "@/shared/lib/access-control";
 import { useAppStore } from "@/shared/stores/useAppStore";
 import { usePermissions } from "@/shared/hooks/usePermissions";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { resolveRoleLabel } from "@/i18n/resolve-role-label";
+import { saveDashboardAccessConfigToServer } from "@/shared/lib/dashboard-access-config";
+import type { SettingsUsersSectionId } from "@/shared/lib/settings-users-section-order";
+import { cn } from "@/lib/utils";
+import {
+  DASHBOARD_COMPACT_CARD,
+  DASHBOARD_PAGE_TITLE,
+  DASHBOARD_PLAIN_TABLE_WRAP,
+} from "@/shared/lib/dashboardUi";
 
 type TeamMember = {
   id: string;
@@ -22,18 +33,8 @@ type TeamMember = {
   createdAt: string;
 };
 
-const SECTION_CLASS =
-  "w-full space-y-3 rounded-xl border border-border/50 bg-card/80 p-4 backdrop-blur-sm md:p-5";
-const TABLE_WRAP_CLASS =
-  "overflow-x-auto rounded-lg border border-border/50 [&_th]:px-2.5 [&_th]:py-2 [&_td]:px-2.5 [&_td]:py-2";
-const SECTION_ORDER_KEY = "settings-users-section-order-v1";
-const DEFAULT_SECTION_ORDER = [
-  "roles-manage",
-  "invite",
-  "members",
-  "permissions",
-  "sidebar-visibility",
-] as const;
+const SECTION_CLASS = cn("w-full space-y-3", DASHBOARD_COMPACT_CARD);
+const TABLE_WRAP_CLASS = DASHBOARD_PLAIN_TABLE_WRAP;
 const ORDER_CLASSES = [
   "order-1",
   "order-2",
@@ -45,10 +46,11 @@ const ORDER_CLASSES = [
   "order-8",
   "order-9",
 ] as const;
-type SectionId = (typeof DEFAULT_SECTION_ORDER)[number];
+type SectionId = SettingsUsersSectionId;
 
 export default function SettingsUsersPage() {
-  const [currentUserRole] = useState<Role>("owner");
+  const { t, locale } = useTranslation();
+  const dateLocale = locale === "de" ? "de-DE" : locale === "zh" ? "zh-CN" : "en-US";
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<Role>("viewer");
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -59,8 +61,8 @@ export default function SettingsUsersPage() {
   const [memberActionMessage, setMemberActionMessage] = useState<string | null>(null);
   const [memberActionError, setMemberActionError] = useState<string | null>(null);
   const [isPermissionEditMode, setIsPermissionEditMode] = useState(false);
-  const [sectionOrder, setSectionOrder] =
-    useState<SectionId[]>(DEFAULT_SECTION_ORDER as unknown as SectionId[]);
+  const sectionOrder = useAppStore((state) => state.settingsUsersSectionOrder);
+  const setSettingsUsersSectionOrder = useAppStore((state) => state.setSettingsUsersSectionOrder);
 
   const rolePermissions = useAppStore((state) => state.rolePermissions);
   const roleSidebarItems = useAppStore((state) => state.roleSidebarItems);
@@ -92,9 +94,9 @@ export default function SettingsUsersPage() {
     () =>
       testRoleKeys.map((roleKey) => ({
         value: roleKey,
-        label: roleLabels[roleKey] ?? roleKey,
+        label: resolveRoleLabel(roleKey, roleLabels[roleKey], locale),
       })),
-    [testRoleKeys, roleLabels]
+    [testRoleKeys, roleLabels, locale]
   );
 
   const [newCustomRoleLabel, setNewCustomRoleLabel] = useState("");
@@ -115,7 +117,7 @@ export default function SettingsUsersPage() {
         <input
           value={textOverrides[textKey] ?? ""}
           onChange={(event) => setTextOverride(textKey, event.target.value)}
-          placeholder="Text überschreiben..."
+          placeholder={t("settingsUsers.textOverridePlaceholder")}
           className="w-full rounded-md border border-border/50 bg-background px-2 py-1 text-xs outline-none focus:border-primary"
         />
         <button
@@ -123,53 +125,32 @@ export default function SettingsUsersPage() {
           onClick={() => setTextOverride(textKey, "")}
           className="rounded-md border border-border/60 px-2 py-1 text-xs hover:bg-accent/40"
         >
-          Entfernen
+          {t("settingsUsers.removeOverride")}
         </button>
         <button
           type="button"
           onClick={() => removeTextOverride(textKey)}
           className="rounded-md border border-border/60 px-2 py-1 text-xs hover:bg-accent/40"
         >
-          Reset
+          {t("settingsUsers.resetOverride")}
         </button>
       </div>
     ) : null;
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const raw = window.localStorage.getItem(SECTION_ORDER_KEY);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as string[];
-      const valid = parsed.filter((item): item is SectionId =>
-        (DEFAULT_SECTION_ORDER as readonly string[]).includes(item)
-      );
-      if (valid.length === DEFAULT_SECTION_ORDER.length) {
-        setSectionOrder(valid);
+  const parseJsonSafely = useCallback(
+    async <T,>(response: Response): Promise<T> => {
+      const raw = await response.text();
+      if (!raw) {
+        throw new Error(t("settingsUsers.errors.emptyResponse"));
       }
-    } catch {
-      // Ignoriert invalide Daten im LocalStorage.
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(SECTION_ORDER_KEY, JSON.stringify(sectionOrder));
-  }, [sectionOrder]);
-
-  const parseJsonSafely = async <T,>(response: Response): Promise<T> => {
-    const raw = await response.text();
-    if (!raw) {
-      throw new Error("Leere Serverantwort. Bitte API-Konfiguration prüfen.");
-    }
-    try {
-      return JSON.parse(raw) as T;
-    } catch {
-      throw new Error(
-        "Serverantwort war kein gültiges JSON. Bitte API-Logs prüfen."
-      );
-    }
-  };
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        throw new Error(t("settingsUsers.errors.invalidJson"));
+      }
+    },
+    [t]
+  );
 
   useEffect(() => {
     const loadMembers = async () => {
@@ -182,12 +163,14 @@ export default function SettingsUsersPage() {
           error?: string;
         }>(response);
         if (!response.ok) {
-          throw new Error(payload.error ?? "Benutzer konnten nicht geladen werden.");
+          throw new Error(payload.error ?? t("settingsUsers.errors.loadUsersFailed"));
         }
         setMembers(payload.users ?? []);
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Unbekannter Fehler beim Laden.";
+          error instanceof Error
+            ? error.message
+            : t("settingsUsers.errors.loadUsersUnknown");
         setMemberActionError(message);
       } finally {
         setIsLoadingMembers(false);
@@ -197,7 +180,7 @@ export default function SettingsUsersPage() {
     if (canManageUsers) {
       void loadMembers();
     }
-  }, [canManageUsers]);
+  }, [canManageUsers, parseJsonSafely, t]);
 
   const handleInvite = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -231,19 +214,19 @@ export default function SettingsUsersPage() {
       }>(response);
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "Einladung konnte nicht erstellt werden.");
+        throw new Error(payload.error ?? t("settingsUsers.errors.inviteFailed"));
       }
 
       setInviteMessage(
         payload.message ??
           payload.warning ??
-          "Einladung erstellt. Bitte E-Mail-Status prüfen."
+          t("settingsUsers.errors.inviteSuccessDefault")
       );
       setInviteEmail("");
       setInviteRole("viewer");
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unbekannter Fehler beim Einladen.";
+        error instanceof Error ? error.message : t("settingsUsers.errors.inviteUnknown");
       setInviteError(message);
     } finally {
       setIsSubmittingInvite(false);
@@ -263,13 +246,15 @@ export default function SettingsUsersPage() {
         response
       );
       if (!response.ok) {
-        throw new Error(payload.error ?? "Benutzer konnte nicht entfernt werden.");
+        throw new Error(payload.error ?? t("settingsUsers.errors.removeUserFailed"));
       }
       setMembers((prev) => prev.filter((member) => member.id !== userId));
-      setMemberActionMessage(payload.message ?? "Benutzer entfernt.");
+      setMemberActionMessage(payload.message ?? t("settingsUsers.memberRemoved"));
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unbekannter Fehler beim Entfernen.";
+        error instanceof Error
+          ? error.message
+          : t("settingsUsers.errors.removeUserUnknown");
       setMemberActionError(message);
     }
   };
@@ -294,15 +279,36 @@ export default function SettingsUsersPage() {
 
   const moveSection = (sectionId: SectionId, direction: "up" | "down") => {
     if (!dashboardEditMode) return;
-    setSectionOrder((prev) => {
-      const index = prev.indexOf(sectionId);
-      if (index < 0) return prev;
-      const targetIndex = direction === "up" ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
-      return next;
-    });
+    const prev = useAppStore.getState().settingsUsersSectionOrder;
+    const index = prev.indexOf(sectionId);
+    if (index < 0) return;
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= prev.length) return;
+    const next = [...prev];
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    setSettingsUsersSectionOrder(next);
+  };
+
+  const handleToggleDashboardEdit = async () => {
+    if (dashboardEditMode) {
+      const s = useAppStore.getState();
+      const result = await saveDashboardAccessConfigToServer({
+        rolePermissions: s.rolePermissions,
+        roleSidebarItems: s.roleSidebarItems,
+        roleSectionVisibility: s.roleSectionVisibility,
+        roleLabels: s.roleLabels,
+        customRoleKeys: s.customRoleKeys,
+        textOverrides: s.textOverrides,
+        settingsUsersSectionOrder: s.settingsUsersSectionOrder,
+      });
+      if (!result.ok) {
+        toast.error(t("settingsUsers.dashboardConfigSaveFailed", { message: result.error }));
+      } else {
+        toast.success(t("settingsUsers.dashboardConfigSaved"));
+      }
+      setIsPermissionEditMode(false);
+    }
+    setDashboardEditMode(!dashboardEditMode);
   };
 
   const getSectionOrderClass = (sectionId: SectionId) => {
@@ -316,10 +322,8 @@ export default function SettingsUsersPage() {
   if (!canManageUsers) {
     return (
       <div className="space-y-3 rounded-xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm">
-        <h1 className="text-xl font-semibold">Owner Bereich</h1>
-        <p className="text-muted-foreground">
-          Nur Owner können Einladungen, Rollen und Rechte verwalten.
-        </p>
+        <h1 className="text-xl font-semibold">{t("settingsUsers.accessDeniedTitle")}</h1>
+        <p className="text-muted-foreground">{t("settingsUsers.accessDeniedBody")}</p>
       </div>
     );
   }
@@ -328,20 +332,20 @@ export default function SettingsUsersPage() {
     <div className="flex w-full max-w-none flex-col gap-4">
       <div className="space-y-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {text("users.page.title", "Benutzerverwaltung")}
+          <h1 className={DASHBOARD_PAGE_TITLE}>
+            {text("users.page.title", t("settingsUsers.pageTitle"))}
           </h1>
           <button
             type="button"
-            onClick={() => setDashboardEditMode(!dashboardEditMode)}
+            onClick={() => void handleToggleDashboardEdit()}
             className="rounded-md border border-border/70 bg-background px-3 py-2 text-sm transition-colors hover:bg-accent/40"
           >
-            {dashboardEditMode ? "Dashboard Bearbeiten: AN" : "Dashboard Bearbeiten: AUS"}
+            {dashboardEditMode ? t("settingsUsers.dashboardEditOn") : t("settingsUsers.dashboardEditOff")}
           </button>
         </div>
-        {text("users.page.description", "Owner-Bereich für Einladungen, Rollen und Berechtigungen.") ? (
+        {text("users.page.description", t("settingsUsers.pageDescription")) ? (
           <p className="text-sm text-muted-foreground">
-            {text("users.page.description", "Owner-Bereich für Einladungen, Rollen und Berechtigungen.")}
+            {text("users.page.description", t("settingsUsers.pageDescription"))}
           </p>
         ) : null}
         <TextEditor textKey="users.page.title" />
@@ -352,7 +356,7 @@ export default function SettingsUsersPage() {
       <section className={`${SECTION_CLASS} ${getSectionOrderClass("roles-manage")}`}>
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-base font-semibold">
-            {text("users.rolesManage.title", "Rollen verwalten (Labels + eigene Rollen)")}
+            {text("users.rolesManage.title", t("settingsUsers.rolesManageTitle"))}
           </h2>
           <div className="flex items-center gap-1">
             <button
@@ -374,25 +378,24 @@ export default function SettingsUsersPage() {
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          {text(
-            "users.rolesManage.description",
-            "Ändere die Rollenbezeichnungen und füge für Tests eigene Rollen hinzu oder entferne sie wieder."
-          )}
+          {text("users.rolesManage.description", t("settingsUsers.rolesManageDescription"))}
         </p>
         <TextEditor textKey="users.rolesManage.title" />
         <TextEditor textKey="users.rolesManage.description" />
 
         <div className="space-y-4">
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-foreground">Standardrollen</h3>
+            <h3 className="text-sm font-medium text-foreground">{t("settingsUsers.standardRoles")}</h3>
             <div className="grid gap-3 md:grid-cols-2">
               {ROLE_OPTIONS.map((role) => (
                 <label key={role.value} className="space-y-2 text-sm">
                   <span className="block text-muted-foreground">
-                    {role.label} (Key: {role.value})
+                    {resolveRoleLabel(role.value, roleLabels[role.value], locale)} ({t("settingsUsers.roleKeyLabel")}:{" "}
+                    {role.value})
                   </span>
                   <input
-                    value={roleLabels[role.value] ?? role.label}
+                    value={roleLabels[role.value] ?? ""}
+                    placeholder={resolveRoleLabel(role.value, "", locale)}
                     onChange={(event) => setRoleLabel(role.value, event.target.value)}
                     disabled={!dashboardEditMode || !canManageRoles}
                     className="w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
@@ -403,7 +406,7 @@ export default function SettingsUsersPage() {
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-foreground">Eigene Rollen</h3>
+            <h3 className="text-sm font-medium text-foreground">{t("settingsUsers.customRoles")}</h3>
 
             <form
               className="grid gap-3 md:grid-cols-[1fr_220px_auto]"
@@ -418,7 +421,7 @@ export default function SettingsUsersPage() {
               <input
                 value={newCustomRoleLabel}
                 onChange={(event) => setNewCustomRoleLabel(event.target.value)}
-                placeholder="Name der neuen Rolle"
+                placeholder={t("settingsUsers.newRolePlaceholder")}
                 className="rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
               />
               <select
@@ -431,7 +434,8 @@ export default function SettingsUsersPage() {
               >
                 {ROLE_OPTIONS.map((role) => (
                   <option key={role.value} value={role.value}>
-                    Vorlage: {role.label}
+                    {t("settingsUsers.templatePrefix")}:{" "}
+                    {resolveRoleLabel(role.value, roleLabels[role.value], locale)}
                   </option>
                 ))}
               </select>
@@ -440,17 +444,17 @@ export default function SettingsUsersPage() {
                 disabled={!dashboardEditMode || !canManageRoles || !newCustomRoleLabel.trim()}
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Rolle anlegen
+                {t("settingsUsers.createRole")}
               </button>
             </form>
 
             {customRoleKeys.length ? (
               <div className={TABLE_WRAP_CLASS}>
-                <table className="w-full text-sm">
+                <table className="w-full text-xs">
                   <thead className="bg-muted/30 text-left text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2 font-medium">Rolle</th>
-                      <th className="px-3 py-2 font-medium">Aktion</th>
+                      <th className="px-3 py-2 font-medium">{t("settingsUsers.roleColumn")}</th>
+                      <th className="px-3 py-2 font-medium">{t("settingsUsers.actionColumn")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -458,7 +462,8 @@ export default function SettingsUsersPage() {
                       <tr key={roleKey} className="border-t border-border/40">
                         <td className="px-3 py-2">
                           <input
-                            value={roleLabels[roleKey] ?? roleKey}
+                            value={roleLabels[roleKey] ?? ""}
+                            placeholder={resolveRoleLabel(roleKey, "", locale)}
                             onChange={(event) => setRoleLabel(roleKey, event.target.value)}
                             disabled={!dashboardEditMode || !canManageRoles}
                             className="w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
@@ -471,7 +476,7 @@ export default function SettingsUsersPage() {
                             disabled={!dashboardEditMode || !canManageRoles}
                             className="rounded-md border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 transition-all duration-200 hover:bg-red-500/10"
                           >
-                            Löschen
+                            {t("settingsUsers.deleteRole")}
                           </button>
                         </td>
                       </tr>
@@ -480,9 +485,7 @@ export default function SettingsUsersPage() {
                 </table>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Keine eigenen Rollen vorhanden.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("settingsUsers.noCustomRoles")}</p>
             )}
           </div>
         </div>
@@ -492,7 +495,7 @@ export default function SettingsUsersPage() {
       {canViewSection("invite") ? (
       <section className={`${SECTION_CLASS} ${getSectionOrderClass("invite")}`}>
         <div className="flex items-start justify-between gap-3">
-          <h2 className="text-base font-semibold">Benutzer einladen</h2>
+          <h2 className="text-base font-semibold">{t("settingsUsers.inviteTitle")}</h2>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -515,7 +518,7 @@ export default function SettingsUsersPage() {
         <form onSubmit={handleInvite} className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
           <input
             type="email"
-            placeholder="name@unternehmen.de"
+            placeholder={t("settingsUsers.inviteEmailPlaceholder")}
             value={inviteEmail}
             onChange={(event) => setInviteEmail(event.target.value)}
             className="rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
@@ -529,7 +532,7 @@ export default function SettingsUsersPage() {
           >
             {inviteRoleOptions.map((role) => (
               <option key={role.value} value={role.value}>
-                {role.label}
+                {resolveRoleLabel(role.value, roleLabels[role.value], locale)}
               </option>
             ))}
           </select>
@@ -539,7 +542,7 @@ export default function SettingsUsersPage() {
             disabled={isSubmittingInvite}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all duration-200 hover:opacity-90"
           >
-            {isSubmittingInvite ? "Sende..." : "Einladung senden"}
+            {isSubmittingInvite ? t("settingsUsers.inviteSending") : t("settingsUsers.inviteSend")}
           </button>
         </form>
 
@@ -560,7 +563,7 @@ export default function SettingsUsersPage() {
       {canViewSection("members") ? (
       <section className={`${SECTION_CLASS} ${getSectionOrderClass("members")}`}>
         <div className="flex items-start justify-between gap-3">
-          <h2 className="text-base font-semibold">Teammitglieder</h2>
+          <h2 className="text-base font-semibold">{t("settingsUsers.membersTitle")}</h2>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -594,27 +597,27 @@ export default function SettingsUsersPage() {
         ) : null}
 
         {isLoadingMembers ? (
-          <p className="text-sm text-muted-foreground">Benutzer werden geladen...</p>
+          <p className="text-sm text-muted-foreground">{t("settingsUsers.loadingUsers")}</p>
         ) : members.length ? (
           <div className={TABLE_WRAP_CLASS}>
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead className="bg-muted/30 text-left text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 font-medium">E-Mail</th>
-                  <th className="px-3 py-2 font-medium">Rolle</th>
-                  <th className="px-3 py-2 font-medium">Erstellt am</th>
-                  <th className="px-3 py-2 font-medium text-right">Aktion</th>
+                  <th className="px-3 py-2 font-medium">{t("settingsUsers.emailColumn")}</th>
+                  <th className="px-3 py-2 font-medium">{t("settingsUsers.roleColumnMember")}</th>
+                  <th className="px-3 py-2 font-medium">{t("settingsUsers.createdAt")}</th>
+                  <th className="px-3 py-2 font-medium text-right">{t("settingsUsers.actionColumn")}</th>
                 </tr>
               </thead>
               <tbody>
                 {members.map((member) => (
                   <tr key={member.id} className="border-t border-border/40">
                     <td className="px-3 py-2">{member.email}</td>
-                    <td className="px-3 py-2 uppercase text-muted-foreground">
-                      {member.role}
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {resolveRoleLabel(member.role, roleLabels[member.role], locale)}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
-                      {new Date(member.createdAt).toLocaleString("de-DE")}
+                      {new Date(member.createdAt).toLocaleString(dateLocale)}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <button
@@ -622,7 +625,7 @@ export default function SettingsUsersPage() {
                         onClick={() => handleRemoveUser(member.id)}
                         className="rounded-md border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 transition-all duration-200 hover:bg-red-500/10"
                       >
-                        Entfernen
+                        {t("settingsUsers.removeUser")}
                       </button>
                     </td>
                   </tr>
@@ -631,7 +634,7 @@ export default function SettingsUsersPage() {
             </table>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Keine Benutzer gefunden.</p>
+          <p className="text-sm text-muted-foreground">{t("settingsUsers.noUsersFound")}</p>
         )}
       </section>
       ) : null}
@@ -639,7 +642,7 @@ export default function SettingsUsersPage() {
       {canViewSection("permissions") ? (
       <section className={`${SECTION_CLASS} ${getSectionOrderClass("permissions")}`}>
         <div className="flex items-start justify-between gap-3">
-          <h2 className="text-base font-semibold">Rollen & Berechtigungen</h2>
+          <h2 className="text-base font-semibold">{t("settingsUsers.permissionsTitle")}</h2>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -659,9 +662,7 @@ export default function SettingsUsersPage() {
             </button>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Owner kann Berechtigungen je Rolle aktivieren oder entziehen.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("settingsUsers.permissionsOwnerHint")}</p>
         <div className="flex justify-end">
           <button
             type="button"
@@ -669,15 +670,15 @@ export default function SettingsUsersPage() {
             disabled={!dashboardEditMode}
             className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs transition-colors hover:bg-accent/40"
           >
-            {isPermissionEditMode ? "Berechtigung Bearbeiten: AN" : "Berechtigung Bearbeiten: AUS"}
+            {isPermissionEditMode ? t("settingsUsers.permissionEditOn") : t("settingsUsers.permissionEditOff")}
           </button>
         </div>
 
         <div className={TABLE_WRAP_CLASS}>
-          <table className="w-full text-sm">
+          <table className="w-full text-xs">
             <thead className="bg-muted/30 text-left text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 font-medium">Berechtigung</th>
+                <th className="px-3 py-2 font-medium">{t("settingsUsers.permissionColumn")}</th>
                 {testRoleOptions.map((role) => (
                   <th key={role.value} className="px-3 py-2 text-center font-medium">
                     {role.label}
@@ -688,7 +689,7 @@ export default function SettingsUsersPage() {
             <tbody>
               {PERMISSION_CONFIG.map((permission) => (
                 <tr key={permission.key} className="border-t border-border/40">
-                  <td className="px-3 py-2">{permission.label}</td>
+                  <td className="px-3 py-2">{t(`permissions.${permission.key}`)}</td>
                   {testRoleOptions.map((role) => {
                     const checked =
                       rolePermissions[role.value]?.includes(permission.key) ?? false;
@@ -711,9 +712,7 @@ export default function SettingsUsersPage() {
           </table>
         </div>
         {!isPermissionEditMode ? (
-          <p className="text-xs text-muted-foreground">
-            Hinweis: Aktiviere "Berechtigung Bearbeiten", um Rollenrechte zu ändern.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("settingsUsers.permissionHintNote")}</p>
         ) : null}
       </section>
       ) : null}
@@ -721,7 +720,7 @@ export default function SettingsUsersPage() {
       {canViewSection("sidebar-visibility") ? (
       <section className={`${SECTION_CLASS} ${getSectionOrderClass("sidebar-visibility")}`}>
         <div className="flex items-start justify-between gap-3">
-          <h2 className="text-base font-semibold">Sidebar-Sichtbarkeit pro Rolle</h2>
+          <h2 className="text-base font-semibold">{t("settingsUsers.sidebarVisibilityTitle")}</h2>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -741,14 +740,12 @@ export default function SettingsUsersPage() {
             </button>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Im Bearbeitungsmodus kannst du steuern, welche Sidebar-Bereiche je Rolle sichtbar sind.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("settingsUsers.sidebarVisibilityDescription")}</p>
         <div className={TABLE_WRAP_CLASS}>
-          <table className="w-full text-sm">
+          <table className="w-full text-xs">
             <thead className="bg-muted/30 text-left text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 font-medium">Sidebar Bereich</th>
+                <th className="px-3 py-2 font-medium">{t("settingsUsers.sidebarAreaColumn")}</th>
                 {testRoleOptions.map((role) => (
                   <th key={role.value} className="px-3 py-2 text-center font-medium">
                     {role.label}
@@ -759,7 +756,7 @@ export default function SettingsUsersPage() {
             <tbody>
               {SIDEBAR_ITEM_CONFIG.map((item) => (
                 <tr key={item.key} className="border-t border-border/40">
-                  <td className="px-3 py-2">{item.label}</td>
+                  <td className="px-3 py-2">{t(`sidebarItems.${item.key}`)}</td>
                   {testRoleOptions.map((role) => {
                     const checked = Boolean(roleSidebarItems[role.value]?.[item.key]);
                     const disabled =
@@ -785,15 +782,13 @@ export default function SettingsUsersPage() {
 
       {canManageRoles ? (
         <section className={SECTION_CLASS}>
-          <h2 className="text-base font-semibold">Karten-Sichtbarkeit pro Rolle</h2>
-          <p className="text-sm text-muted-foreground">
-            Lege fest, welche Karten im Benutzerbereich je Rolle sichtbar sind.
-          </p>
+          <h2 className="text-base font-semibold">{t("settingsUsers.cardVisibilityTitle")}</h2>
+          <p className="text-sm text-muted-foreground">{t("settingsUsers.cardVisibilityDescription")}</p>
           <div className={TABLE_WRAP_CLASS}>
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead className="bg-muted/30 text-left text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Bereich</th>
+                  <th className="px-3 py-2 font-medium">{t("settingsUsers.areaColumn")}</th>
                   {testRoleOptions.map((role) => (
                     <th key={role.value} className="px-3 py-2 text-center font-medium">
                       {role.label}
@@ -804,7 +799,7 @@ export default function SettingsUsersPage() {
               <tbody>
                 {DASHBOARD_SECTION_CONFIG.map((section) => (
                   <tr key={section.key} className="border-t border-border/40">
-                    <td className="px-3 py-2">{section.label}</td>
+                    <td className="px-3 py-2">{t(`dashboardSections.${section.key}`)}</td>
                     {testRoleOptions.map((role) => {
                       const checked = Boolean(roleSectionVisibility[role.value]?.[section.key]);
                       const disabled = role.value === "owner" || !dashboardEditMode;

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
+import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,7 +12,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { DataTable } from "@/shared/components/DataTable";
+import {
+  DASHBOARD_COMPACT_CARD,
+  DASHBOARD_PAGE_SHELL,
+  DASHBOARD_PAGE_TITLE,
+} from "@/shared/lib/dashboardUi";
+import {
+  DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
+  readLocalJsonCache,
+  writeLocalJsonCache,
+} from "@/shared/lib/dashboardClientCache";
+import type { AmazonSpApiClientError } from "@/shared/lib/amazonSpApiClientError";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { intlLocaleTag } from "@/i18n/locale-formatting";
 
 type RangeMode = "today-yesterday" | "custom";
 
@@ -27,9 +42,9 @@ type AmazonOrderRow = {
 type OrdersResponse = {
   items?: AmazonOrderRow[];
   error?: string;
+  missingKeys?: string[];
+  hint?: string;
 };
-
-const AMAZON_ORDERS_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
 
 type CachedOrdersPayload = {
   savedAt: number;
@@ -40,23 +55,6 @@ function toDateInputValue(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
     .toISOString()
     .slice(0, 10);
-}
-
-function formatDateTime(value: string) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("de-DE", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
-}
-
-function formatAmount(amount: number, currency: string) {
-  return new Intl.NumberFormat("de-DE", {
-    style: "currency",
-    currency: currency || "EUR",
-  }).format(amount || 0);
 }
 
 function statusVariant(status: string): "default" | "secondary" | "outline" | "destructive" {
@@ -71,6 +69,28 @@ function fulfillmentVariant(value: string): "default" | "secondary" {
 }
 
 export default function AmazonOrdersPage() {
+  const { t, locale } = useTranslation();
+  const intlTag = intlLocaleTag(locale);
+
+  const formatDateTime = useCallback((value: string) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return new Intl.DateTimeFormat(intlTag, {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(date);
+  }, [intlTag]);
+
+  const formatAmount = useCallback(
+    (amount: number, currency: string) =>
+      new Intl.NumberFormat(intlTag, {
+        style: "currency",
+        currency: currency || "EUR",
+      }).format(amount || 0),
+    [intlTag]
+  );
+
   const now = new Date();
   const yesterday = new Date();
   yesterday.setDate(now.getDate() - 1);
@@ -80,7 +100,16 @@ export default function AmazonOrdersPage() {
   const [to, setTo] = useState<string>(toDateInputValue(now));
   const [rows, setRows] = useState<AmazonOrderRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+  const [error, setError] = useState<AmazonSpApiClientError | null>(null);
+  const [hasMounted, setHasMounted] = useState(false);
+  const fromRef = useRef(from);
+  const toRef = useRef(to);
+
+  useEffect(() => {
+    fromRef.current = from;
+    toRef.current = to;
+  }, [from, to]);
   const summary = useMemo(() => {
     const orders = rows.length;
     const fba = rows.filter((row) => row.fulfillment === "FBA").length;
@@ -94,12 +123,12 @@ export default function AmazonOrdersPage() {
     () => [
       {
         accessorKey: "orderId",
-        header: "Bestellnummer",
+        header: t("amazonOrders.orderId"),
         cell: ({ row }) => <span className="font-medium">{row.original.orderId}</span>,
       },
       {
         accessorKey: "purchaseDate",
-        header: "Bestelldatum",
+        header: t("amazonOrders.purchaseDate"),
         cell: ({ row }) => (
           <span className="text-muted-foreground">{formatDateTime(row.original.purchaseDate)}</span>
         ),
@@ -107,7 +136,9 @@ export default function AmazonOrdersPage() {
       {
         accessorKey: "amount",
         meta: { align: "center" },
-        header: () => <div className="block w-full text-center">Summe</div>,
+        header: () => (
+          <div className="block w-full text-center">{t("amazonOrders.total")}</div>
+        ),
         cell: ({ row }) => (
           <div className="block w-full text-center tabular-nums">
             {formatAmount(row.original.amount, row.original.currency)}
@@ -116,74 +147,115 @@ export default function AmazonOrdersPage() {
       },
       {
         accessorKey: "fulfillment",
-        header: "FBA / FBM",
+        header: t("amazonOrders.fulfillment"),
         cell: ({ row }) => (
           <Badge variant={fulfillmentVariant(row.original.fulfillment)}>
-            {row.original.fulfillment || "Unbekannt"}
+            {row.original.fulfillment || t("amazonOrders.unknown")}
           </Badge>
         ),
       },
       {
         accessorKey: "status",
-        header: "Status",
+        header: t("amazonOrders.status"),
         cell: ({ row }) => (
-          <Badge variant={statusVariant(row.original.status)}>{row.original.status || "Unbekannt"}</Badge>
+          <Badge variant={statusVariant(row.original.status)}>
+            {row.original.status || t("amazonOrders.unknown")}
+          </Badge>
         ),
       },
     ],
-    []
+    [t, formatDateTime, formatAmount]
   );
 
-  const loadOrders = async (nextFrom?: string, nextTo?: string, forceRefresh = false) => {
-    const cacheKey = `amazon_orders_cache_v1:${nextFrom ?? ""}:${nextTo ?? ""}`;
-    if (!forceRefresh) {
-      const raw = localStorage.getItem(cacheKey);
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw) as CachedOrdersPayload;
-          const isFresh = Date.now() - parsed.savedAt < AMAZON_ORDERS_CACHE_MAX_AGE_MS;
-          if (isFresh && Array.isArray(parsed.items)) {
-            setRows(parsed.items);
-            setIsLoading(false);
-            return;
-          }
-        } catch {
-          // Cache optional, bei Fehler normal laden.
+  const loadOrders = useCallback(
+    async (nextFrom?: string, nextTo?: string, forceRefresh = false, silent = false) => {
+      const f = nextFrom ?? fromRef.current;
+      const rangeTo = nextTo ?? toRef.current;
+      const cacheKey = `amazon_orders_cache_v1:${f}:${rangeTo}`;
+      let hadCache = false;
+
+      if (!forceRefresh && !silent) {
+        const parsed = readLocalJsonCache<CachedOrdersPayload>(cacheKey);
+        if (parsed && Array.isArray(parsed.items)) {
+          setRows(parsed.items);
+          hadCache = true;
+          setIsLoading(false);
         }
       }
-    }
 
-    setIsLoading(true);
-    setError(null);
-    try {
-      const search = new URLSearchParams();
-      if (nextFrom) search.set("from", nextFrom);
-      if (nextTo) search.set("to", nextTo);
-      const res = await fetch(`/api/amazon/orders?${search.toString()}`);
-      const payload = (await res.json()) as OrdersResponse;
-      if (!res.ok) {
-        throw new Error(payload.error ?? "Amazon Bestellungen konnten nicht geladen werden.");
+      if (forceRefresh && !silent) {
+        setIsLoading(true);
+      } else if (!hadCache && !silent) {
+        setIsLoading(true);
       }
-      const sorted = [...(payload.items ?? [])].sort(
-        (a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()
-      );
-      setRows(sorted);
-      const cachePayload: CachedOrdersPayload = {
-        savedAt: Date.now(),
-        items: sorted,
-      };
-      localStorage.setItem(cacheKey, JSON.stringify(cachePayload));
-    } catch (e) {
-      setRows([]);
-      setError(e instanceof Error ? e.message : "Unbekannter Fehler.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
+      const showBackgroundIndicator = silent || (!forceRefresh && hadCache);
+      if (showBackgroundIndicator) {
+        setIsBackgroundSyncing(true);
+      }
+
+      if (!silent) {
+        setError(null);
+      }
+
+      try {
+        const search = new URLSearchParams();
+        if (f) search.set("from", f);
+        if (rangeTo) search.set("to", rangeTo);
+        const res = await fetch(`/api/amazon/orders?${search.toString()}`, { cache: "no-store" });
+        const payload = (await res.json()) as OrdersResponse;
+        if (!res.ok) {
+          const message = payload.error ?? t("amazonOrders.loadFailed");
+          setError({
+            message,
+            missingKeys: payload.missingKeys,
+            hint: payload.hint,
+          });
+          setRows([]);
+          return;
+        }
+        const sorted = [...(payload.items ?? [])].sort(
+          (a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()
+        );
+        setRows(sorted);
+        writeLocalJsonCache(cacheKey, {
+          savedAt: Date.now(),
+          items: sorted,
+        } satisfies CachedOrdersPayload);
+      } catch (e) {
+        if (silent) {
+          console.warn("[Amazon Bestellungen] Hintergrund-Abgleich fehlgeschlagen:", e);
+        } else {
+          setRows([]);
+          setError({
+            message: e instanceof Error ? e.message : t("commonUi.unknownError"),
+          });
+        }
+      } finally {
+        if (!silent) {
+          setIsLoading(false);
+        }
+        if (showBackgroundIndicator) {
+          setIsBackgroundSyncing(false);
+        }
+      }
+    },
+    [t]
+  );
 
   useEffect(() => {
-    void loadOrders(from, to);
+    setHasMounted(true);
+    void loadOrders(from, to, false, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialer Ladevorgang nur beim Mount
   }, []);
+
+  useEffect(() => {
+    if (!hasMounted) return;
+    const id = window.setInterval(() => {
+      void loadOrders(undefined, undefined, false, true);
+    }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
+    return () => window.clearInterval(id);
+  }, [hasMounted, loadOrders]);
 
   const handleModeChange = (value: RangeMode | null) => {
     if (value === null) return;
@@ -193,43 +265,41 @@ export default function AmazonOrdersPage() {
       const yesterdayValue = toDateInputValue(new Date(Date.now() - 24 * 60 * 60 * 1000));
       setFrom(yesterdayValue);
       setTo(todayValue);
-      void loadOrders(yesterdayValue, todayValue);
+      void loadOrders(yesterdayValue, todayValue, true, false);
     }
   };
 
   const applyCustomRange = () => {
     if (!from || !to) return;
-    void loadOrders(from, to);
+    void loadOrders(from, to, true, false);
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-12rem)] flex-col gap-6">
+    <div className={DASHBOARD_PAGE_SHELL}>
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <img
             src="/brand/amazon-logo-current.png"
-            alt="Amazon"
+            alt={t("nav.amazon")}
             className="h-auto w-[190px] shrink-0 object-contain"
             loading="eager"
           />
-          <span className="text-xl font-semibold text-muted-foreground">Bestellungen</span>
+          <span className={cn(DASHBOARD_PAGE_TITLE, "text-muted-foreground")}>{t("nav.amazonOrders")}</span>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Standard: heute + gestern. Optional per Von/Bis filterbar.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("amazonOrders.subtitle")}</p>
       </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-border/50 bg-card/80 p-4">
+      <div className={cn(DASHBOARD_COMPACT_CARD, "flex flex-wrap items-end justify-between gap-3")}>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">Zeitraum</p>
+            <p className="text-xs font-medium text-muted-foreground">{t("amazonOrders.period")}</p>
             <Select value={mode} onValueChange={handleModeChange}>
               <SelectTrigger className="w-[220px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="today-yesterday">Heute + gestern</SelectItem>
-                <SelectItem value="custom">Von - bis</SelectItem>
+                <SelectItem value="today-yesterday">{t("amazonOrders.todayYesterday")}</SelectItem>
+                <SelectItem value="custom">{t("amazonOrders.customRange")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -237,11 +307,11 @@ export default function AmazonOrdersPage() {
           {mode === "custom" ? (
             <>
               <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Von</p>
+                <p className="text-xs font-medium text-muted-foreground">{t("dates.from")}</p>
                 <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Bis</p>
+                <p className="text-xs font-medium text-muted-foreground">{t("dates.to")}</p>
                 <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
               </div>
               <button
@@ -249,44 +319,57 @@ export default function AmazonOrdersPage() {
                 className="h-8 rounded-md border border-input px-3 text-sm font-medium hover:bg-muted"
                 onClick={applyCustomRange}
               >
-                Anwenden
+                {t("amazonOrders.apply")}
               </button>
             </>
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
           <span className="rounded-md border border-border/60 bg-background/80 px-2.5 py-1">
-            Gesamt FBA: <span className="font-semibold">{summary.fba}</span>
+            {t("amazonOrders.totalFba", { count: summary.fba })}
           </span>
           <span className="rounded-md border border-border/60 bg-background/80 px-2.5 py-1">
-            Gesamt FBM: <span className="font-semibold">{summary.fbm}</span>
+            {t("amazonOrders.totalFbm", { count: summary.fbm })}
           </span>
           <span className="rounded-md border border-border/60 bg-background/80 px-2.5 py-1">
-            Summe: <span className="font-semibold">{formatAmount(summary.amount, summary.currency)}</span>
+            {t("amazonOrders.sumLabel", { amount: formatAmount(summary.amount, summary.currency) })}
           </span>
           <span className="rounded-md border border-border/60 bg-background/80 px-2.5 py-1">
-            Bestellungen: <span className="font-semibold">{summary.orders}</span>
+            {t("amazonOrders.ordersCount", { count: summary.orders })}
           </span>
+          {isBackgroundSyncing ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              {t("amazonOrders.syncing")}
+            </span>
+          ) : null}
         </div>
       </div>
 
       {error ? (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-700">
-          {error}
+        <div className="space-y-2 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-700">
+          <p className="font-medium">{error.message}</p>
+          {error.missingKeys && error.missingKeys.length > 0 ? (
+            <p className="font-mono text-xs text-red-800/90">
+              {t("amazonOrders.missingEnvVars", { keys: error.missingKeys.join(", ") })}
+            </p>
+          ) : null}
+          {error.hint ? <p className="text-xs leading-relaxed text-red-900/80">{error.hint}</p> : null}
         </div>
       ) : null}
 
       {isLoading ? (
         <div className="rounded-xl border border-border/50 bg-card/80 p-4 text-sm text-muted-foreground">
-          Lade Amazon Bestellungen...
+          {t("amazonOrders.loading")}
         </div>
       ) : (
         <DataTable
           columns={columns}
           data={rows}
-          filterColumn="Bestellnummer, Status, FBA/FBM"
+          filterColumn={t("filters.amazonOrders")}
           paginate={false}
+          compact
           className="flex-1 min-h-0"
           tableWrapClassName="min-h-0"
         />

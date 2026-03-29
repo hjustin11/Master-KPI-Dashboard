@@ -20,17 +20,17 @@ export function AnalyticsMarketplaceSubnav({ slug }: AnalyticsMarketplaceSubnavP
   ] as const;
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-6">
-      <div className="flex shrink-0 items-start gap-3">
+    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-4">
+      <div className="flex shrink-0 items-start gap-2">
         <div
-          className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-card text-muted-foreground"
+          className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-md border border-border/60 bg-card text-muted-foreground"
           aria-hidden
         >
-          <Store className="h-4 w-4" />
+          <Store className="h-3.5 w-3.5" />
         </div>
         <nav
           aria-label={`Untermenü ${slug}`}
-          className="min-w-0 space-y-1 border-l border-border pl-3"
+          className="min-w-0 space-y-0.5 border-l border-border pl-2.5"
         >
           {links.map((link) => {
             const active =
@@ -42,7 +42,7 @@ export function AnalyticsMarketplaceSubnav({ slug }: AnalyticsMarketplaceSubnavP
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "block rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
+                  "block rounded-md px-1.5 py-1 text-[11px] text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
                   active && "font-medium text-primary"
                 )}
               >

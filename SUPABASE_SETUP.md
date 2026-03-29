@@ -57,7 +57,21 @@ Falls du mit einer Domain arbeitest, diese URLs analog mit deiner Domain eintrag
    - Authentication -> Users: neuer invited user vorhanden
    - `public.invitations`: neuer Eintrag vorhanden
 
-## 5) Haeufige Fehlerbilder
+## 5) Dashboard-Grundregeln (Rollen, Sidebar, Karten, Texte)
+
+Speichert die Konfiguration aus **Einstellungen → Benutzer** sobald ein Owner **„Dashboard bearbeiten“** wieder ausschaltet (Kachel-Reihenfolge, Karten-Sichtbarkeit, Sidebar, Rollenrechte, Text-Overrides).
+
+Im Supabase SQL Editor ausfuehren (oder Migration `supabase/migrations/20260328120000_dashboard_access_config.sql`):
+
+```sql
+-- siehe Datei supabase/migrations/20260328120000_dashboard_access_config.sql
+```
+
+Kurz: Tabelle `public.dashboard_access_config` mit einer Zeile `id = 'default'` und Spalte `config` (jsonb). RLS: alle eingeloggten Nutzer duerfen lesen, nur `profiles.role = 'owner'` darf schreiben.
+
+Ohne diese Tabelle: die App nutzt weiterhin nur den lokalen Browser-Store (`localStorage`).
+
+## 6) Haeufige Fehlerbilder
 
 - `Missing SUPABASE_SERVICE_ROLE_KEY`
   - Service-Role-Key fehlt in `.env.local`

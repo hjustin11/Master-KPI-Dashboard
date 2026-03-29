@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AnalyticsMarketplaceSubnav } from "@/shared/components/layout/AnalyticsMarketplaceSubnav";
 import { ANALYTICS_MARKETPLACES, getMarketplaceBySlug } from "@/shared/lib/analytics-marketplaces";
+import { DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboardUi";
 
 export default async function AnalyticsMarketplaceLayout({
   children,
@@ -14,15 +15,15 @@ export default async function AnalyticsMarketplaceLayout({
   if (!marketplace) notFound();
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">{marketplace.label}</h1>
-        <p className="text-sm text-muted-foreground">
+    <div className="space-y-4 text-sm leading-snug">
+      <div className="space-y-0.5">
+        <h1 className={DASHBOARD_PAGE_TITLE}>{marketplace.label}</h1>
+        <p className="text-xs text-muted-foreground">
           Gleiche Unterteilung wie bei Amazon – kompakt im Seitenkopf statt in der Sidebar.
         </p>
       </div>
       <AnalyticsMarketplaceSubnav slug={slug} />
-      <div className="min-h-[200px]">{children}</div>
+      <div className="min-h-[160px]">{children}</div>
     </div>
   );
 }

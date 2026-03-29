@@ -3,45 +3,26 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
-
-const segmentLabels: Record<string, string> = {
-  amazon: "Amazon",
-  orders: "Bestellungen",
-  products: "Produkte",
-  returns: "Retouren",
-  xentral: "Xentral",
-  articles: "Artikel",
-  advertising: "Werbung",
-  campaigns: "Kampagnen",
-  performance: "Performance",
-  analytics: "Analytics",
-  marketplaces: "Marktplätze",
-  otto: "Otto",
-  ebay: "eBay",
-  kaufland: "Kaufland",
-  fressnapf: "Fressnapf",
-  "mediamarkt-saturn": "MediaMarkt & Saturn",
-  zooplus: "ZooPlus",
-  tiktok: "TikTok",
-  "article-forecast": "Artikelprognose",
-  settings: "Administration",
-  profile: "Profil",
-  users: "Benutzerverwaltung",
-  updates: "Update & Feedback",
-};
+import { useTranslation } from "@/i18n/I18nProvider";
 
 export function Breadcrumbs() {
   const pathname = usePathname();
+  const { t } = useTranslation();
   const cleanPath = pathname.split("/").filter(Boolean);
 
   if (pathname === "/" || cleanPath.length === 0) {
     return null;
   }
 
-  const items = cleanPath.map((segment, index) => ({
-    label: segmentLabels[segment] ?? segment,
-    href: `/${cleanPath.slice(0, index + 1).join("/")}`,
-  }));
+  const items = cleanPath.map((segment, index) => {
+    const key = `breadcrumbs.${segment}`;
+    const translated = t(key);
+    const label = translated === key ? segment : translated;
+    return {
+      label,
+      href: `/${cleanPath.slice(0, index + 1).join("/")}`,
+    };
+  });
 
   return (
     <nav className="hidden items-center gap-1 text-sm text-muted-foreground md:flex">

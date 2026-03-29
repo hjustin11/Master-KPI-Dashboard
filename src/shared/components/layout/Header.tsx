@@ -18,8 +18,13 @@ import { LogoutMenuItem } from "@/shared/components/auth/LogoutMenuItem";
 import { useUser } from "@/shared/hooks/useUser";
 import { ROLE_OPTIONS } from "@/shared/lib/access-control";
 import { useAppStore } from "@/shared/stores/useAppStore";
+import { LanguageSwitcher } from "@/i18n/LanguageSwitcher";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { resolveRoleLabel } from "@/i18n/resolve-role-label";
+
 export function Header() {
   const router = useRouter();
+  const { t, locale } = useTranslation();
   const user = useUser();
   const activeRole = useAppStore((state) => state.activeRole);
   const roleTestingEnabled = useAppStore((state) => state.roleTestingEnabled);
@@ -30,11 +35,11 @@ export function Header() {
   const roleOptions = [
     ...ROLE_OPTIONS.map((item) => ({
       value: item.value,
-      label: roleLabels[item.value] ?? item.label,
+      label: resolveRoleLabel(item.value, roleLabels[item.value], locale),
     })),
     ...customRoleKeys.map((key) => ({
       value: key,
-      label: roleLabels[key] ?? key,
+      label: resolveRoleLabel(key, roleLabels[key], locale),
     })),
   ];
 
@@ -54,9 +59,10 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-1">
+          <LanguageSwitcher />
           <Button variant="ghost" size="icon-sm">
             <Bell className="h-4 w-4" />
-            <span className="sr-only">Benachrichtigungen</span>
+            <span className="sr-only">{t("header.notifications")}</span>
           </Button>
 
           <DropdownMenu>
@@ -68,7 +74,7 @@ export function Header() {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
                 <User className="h-4 w-4" />
-                Profil
+                {t("header.profile")}
               </DropdownMenuItem>
               {!user.isLoading && user.roleKey === "owner" ? (
                 <>
@@ -77,14 +83,14 @@ export function Header() {
                     onClick={() => setRoleTestingEnabled(!roleTestingEnabled)}
                     className={roleTestingEnabled ? "bg-primary/10 text-primary" : ""}
                   >
-                    Rollen-Testmodus: {roleTestingEnabled ? "AN" : "AUS"}
+                    {t("header.roleTestMode")}: {roleTestingEnabled ? t("common.on") : t("common.off")}
                   </DropdownMenuItem>
 
                   {roleTestingEnabled ? (
                     <>
                       {activeRole !== "owner" ? (
                         <DropdownMenuItem onClick={() => setActiveRole("owner")}>
-                          Owner-Ansicht wiederherstellen
+                          {t("header.restoreDeveloperView")}
                         </DropdownMenuItem>
                       ) : null}
                       {roleOptions.map((role) => (
@@ -93,7 +99,7 @@ export function Header() {
                           onClick={() => setActiveRole(role.value)}
                           className={role.value === activeRole ? "bg-primary/10 text-primary" : ""}
                         >
-                          Als {role.label} testen
+                          {t("header.testAs", { role: role.label })}
                         </DropdownMenuItem>
                       ))}
                     </>

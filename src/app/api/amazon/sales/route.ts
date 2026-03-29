@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
+import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 
 type AmazonOrder = {
@@ -546,13 +547,7 @@ export async function GET(request: Request) {
     };
 
     if (Object.values(missing).some(Boolean)) {
-      return NextResponse.json(
-        {
-          error: "Amazon SP-API ist nicht vollständig konfiguriert.",
-          missing,
-        },
-        { status: 500 }
-      );
+      return amazonSpApiIncompleteJson(missing);
     }
 
     const { searchParams } = new URL(request.url);

@@ -35,6 +35,7 @@ import {
   buildAddressErrorDemoOrders,
 } from "./addressErrorDemoOrders";
 import { DataTable } from "@/shared/components/DataTable";
+import { DASHBOARD_PAGE_SHELL, DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboardUi";
 import {
   ADDRESS_HINT_NAME_UNCERTAIN,
   ADDRESS_ISSUE_HN,
@@ -53,8 +54,11 @@ import {
   type XentralPrimaryAddressFieldKey,
   type XentralPrimaryAddressFields,
 } from "@/shared/lib/xentralPrimaryAddressFields";
+import { DASHBOARD_CLIENT_BACKGROUND_SYNC_MS } from "@/shared/lib/dashboardClientCache";
 import { mergeXentralOrderLists } from "@/shared/lib/xentralOrderMerge";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { intlLocaleTag } from "@/i18n/locale-formatting";
 
 type AddressValidationState = "ok" | "invalid";
 /** Anzeige: Rot bei jedem Fehler; Orange nur „bearbeitet“ (ohne Fehler); Grün = ok. */
@@ -99,9 +103,6 @@ function defaultBerlinLastTwoDays(): { from: string; to: string } {
 
 /** v15: Merge beim Abgleich, Hintergrund-Sync, kein TTL-Zwang für Cache-Hydration. */
 const XENTRAL_ORDERS_CACHE_KEY = "xentral_orders_cache_v15";
-/** Hintergrund-Abgleich mit Xentral (ms). */
-const XENTRAL_BACKGROUND_SYNC_MS = 5 * 60 * 1000;
-
 type ImportMode = "recent" | "all";
 
 type AddressDialogPhase = "edit" | "review";
@@ -115,24 +116,14 @@ type CachedPayload = {
   xentralSalesOrderWebPath?: string;
 };
 
-function formatMoney(amount: number | null, currency: string | null) {
-  if (amount == null || !Number.isFinite(amount)) return "—";
-  return new Intl.NumberFormat("de-DE", {
-    style: "currency",
-    currency: (currency || "EUR").trim() || "EUR",
-  }).format(amount);
-}
-
 /** Bekannte Xentral-Antworten mit verständlicher Erklärung ergänzen (Dialog + Toast). */
-function formatXentralAddressSubmitError(raw: string): string {
+function formatXentralAddressSubmitError(
+  raw: string,
+  t: (key: string, params?: Record<string, string | number>) => string
+): string {
   const lower = raw.toLowerCase();
   if (lower.includes("write protected") || lower.includes("write-protected")) {
-    return (
-      `${raw.trim()}\n\n` +
-      "—\n" +
-      "Dieser Auftrag ist in Xentral schreibgeschützt (z. B. bereits versendet, abgeschlossen oder im Workflow gesperrt). " +
-      "Die Lieferadresse lässt sich in diesem Zustand per API nicht ändern. Bitte den Status im Xentral-Beleg prüfen oder einen noch bearbeitbaren Auftrag wählen."
-    );
+    return `${raw.trim()}\n\n—\n${t("xentralOrders.writeProtectedAddressHint")}`;
   }
   return raw;
 }
@@ -170,19 +161,6 @@ function AddressStatusDisc({ state, title }: { state: AddressDisplayState; title
   );
 }
 
-function addressValidationTitle(display: AddressDisplayState, issues: string[]): string {
-  if (display === "ok") {
-    return "Adressprüfung: in Ordnung (Name, Straße, Postleitzahl, Hausnummer).";
-  }
-  if (display === "edited") {
-    return "Bearbeitet — Orange steht nicht für eine lückenhafte Adresse; Logik folgt später.";
-  }
-  if (issues.length > 0) {
-    return `Adressprüfung: Fehler — ${issues.join(" · ")}`;
-  }
-  return "Adressprüfung: Fehler.";
-}
-
 function AddressValidationCell({
   display,
   issues,
@@ -190,7 +168,16 @@ function AddressValidationCell({
   display: AddressDisplayState;
   issues: string[];
 }) {
-  return <AddressStatusDisc state={display} title={addressValidationTitle(display, issues)} />;
+  const { t } = useTranslation();
+  const title =
+    display === "ok"
+      ? t("xentralOrders.addressOkTitle")
+      : display === "edited"
+        ? t("xentralOrders.addressEditedTitle")
+        : issues.length > 0
+          ? t("xentralOrders.addressErrorWithIssues", { issues: issues.join(" · ") })
+          : t("xentralOrders.addressErrorGeneric");
+  return <AddressStatusDisc state={display} title={title} />;
 }
 
 function mergePrimaryFields(row: XentralOrderRow | undefined): XentralPrimaryAddressFields {
@@ -243,12 +230,6 @@ const AF_INPUT_CORRECTED =
 const AF_INPUT_UNCERTAIN =
   "border-amber-600/55 bg-amber-500/[0.08] text-foreground focus-visible:border-amber-600/65 focus-visible:ring-amber-500/25 dark:border-amber-500/45 dark:bg-amber-950/35 dark:text-amber-50";
 
-function formatBeforeLine(raw: string): string {
-  const t = raw.trim();
-  if (t === "" || t === "—") return "leer";
-  return t;
-}
-
 /**
  * Gleiche Rasterhöhe in allen Adress-Spalten: oben feste Zeile (Bisher / Ladehinweis / unsichtbarer Platzhalter), unten Input.
  */
@@ -264,7 +245,13 @@ function AddressEditStack({
   alignCenter?: boolean;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   const hasBefore = beforeFrom != null;
+  const beforeLine = (() => {
+    const s = (beforeFrom ?? "").trim();
+    if (s === "" || s === "—") return t("xentralOrders.emptyBeforeValue");
+    return s;
+  })();
   return (
     <div
       className={cn(
@@ -281,7 +268,7 @@ function AddressEditStack({
         {showGeocodeLoading ? (
           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <Loader2 className="size-3 shrink-0 animate-spin opacity-65" aria-hidden />
-            Abgleich…
+            {t("xentralOrders.geocodeSyncing")}
           </span>
         ) : hasBefore ? (
           <span
@@ -289,9 +276,9 @@ function AddressEditStack({
               "max-w-full truncate text-[11px] leading-tight text-muted-foreground line-through decoration-destructive/45 [text-decoration-thickness:1px] dark:decoration-destructive/50",
               alignCenter && "text-center"
             )}
-            title={`Bisher: ${formatBeforeLine(beforeFrom ?? "")}`}
+            title={t("xentralOrders.beforeWasTitle", { value: beforeLine })}
           >
-            {formatBeforeLine(beforeFrom ?? "")}
+            {beforeLine}
           </span>
         ) : (
           <span className="select-none text-[11px] leading-[1.375rem] text-transparent" aria-hidden>
@@ -336,6 +323,7 @@ function XentralAddressErrorDialogRow({
   xentralOrderWebBase,
   xentralSalesOrderWebPath,
 }: XentralAddressErrorDialogRowProps) {
+  const { t } = useTranslation();
   const fields = mergePrimaryFields(row);
   const plz = resolvePlzEditBinding(fields);
   const ort = resolveCityEditBinding(fields);
@@ -401,15 +389,15 @@ function XentralAddressErrorDialogRow({
             variant="ghost"
             size="icon-sm"
             className="text-muted-foreground hover:text-destructive"
-            title="Aus Übermittlung streichen"
-            aria-label={`${row.documentNumber} entfernen`}
+            title={t("xentralOrders.removeFromSubmitTitle")}
+            aria-label={t("xentralOrders.removeReviewAria", { doc: row.documentNumber })}
             onClick={() => onRemoveFromDraft(row.id)}
           >
             <X className="size-4" strokeWidth={2.25} aria-hidden />
           </Button>
         </TableCell>
-        <TableCell className="sticky left-12 z-10 w-[9.5rem] border-border/50 bg-background px-3 py-2 align-middle text-center text-xs shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
-          <div className="flex min-h-[3.5rem] w-full items-center justify-center text-center">
+        <TableCell className="sticky left-12 z-10 w-[9.5rem] border-border/50 bg-background px-3 py-2 align-middle text-left text-xs shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
+          <div className="flex min-h-[3.5rem] w-full items-center justify-start">
             <XentralBelegNumberLink
               documentNumber={row.documentNumber}
               salesOrderId={row.id}
@@ -419,8 +407,8 @@ function XentralAddressErrorDialogRow({
             />
           </div>
         </TableCell>
-        <TableCell className="sticky left-[12.5rem] z-10 w-[9.5rem] border-border/50 bg-background px-3 py-2 align-middle text-center text-xs shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
-          <div className="flex min-h-[3.5rem] w-full items-center justify-center text-center">
+        <TableCell className="sticky left-[12.5rem] z-10 w-[9.5rem] border-border/50 bg-background px-3 py-2 align-middle text-left text-xs shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
+          <div className="flex min-h-[3.5rem] w-full items-center justify-start">
             <MarketplaceOrderIdLink
               marketplace={row.marketplace}
               internetNumber={row.internetNumber}
@@ -454,7 +442,9 @@ function XentralAddressErrorDialogRow({
   }
 
   const dialogEditCellInner = "flex min-h-[3.5rem] w-full items-center";
-  /** Beleg / Bestellnr. / Marktplatz: vertikal und horizontal mittig (wie Adress-Spalten-Höhe). */
+  /** Beleg / Bestellnr.: links wie Haupttabelle; Marktplatz: zentriert. */
+  const dialogEditCellStickyId =
+    "flex min-h-[3.5rem] w-full items-center justify-start text-left";
   const dialogEditCellStickyMeta =
     "flex min-h-[3.5rem] w-full items-center justify-center text-center";
 
@@ -467,16 +457,16 @@ function XentralAddressErrorDialogRow({
             variant="ghost"
             size="icon-sm"
             className="text-muted-foreground hover:text-destructive"
-            title="Aus dieser Liste entfernen — wird nicht gespeichert; Bestellung bleibt in der Tabelle bis zur nächsten Bearbeitung."
-            aria-label={`Bestellung ${row.documentNumber} aus der Bearbeitungsliste entfernen`}
+            title={t("xentralOrders.removeFromDraftTitle")}
+            aria-label={t("xentralOrders.removeEditAria", { doc: row.documentNumber })}
             onClick={() => onRemoveFromDraft(row.id)}
           >
             <X className="size-4" strokeWidth={2.25} aria-hidden />
           </Button>
         </div>
       </TableCell>
-      <TableCell className="sticky left-12 z-10 w-[9.5rem] min-w-[9.5rem] max-w-[9.5rem] border-border/50 bg-background px-3 py-3 align-middle text-center shadow-[3px_0_14px_-4px_rgba(0,0,0,0.08)]">
-        <div className={dialogEditCellStickyMeta}>
+      <TableCell className="sticky left-12 z-10 w-[9.5rem] min-w-[9.5rem] max-w-[9.5rem] border-border/50 bg-background px-3 py-3 align-middle text-left shadow-[3px_0_14px_-4px_rgba(0,0,0,0.08)]">
+        <div className={dialogEditCellStickyId}>
           <div className="min-w-0 w-full max-w-full break-all text-xs leading-snug">
             <XentralBelegNumberLink
               documentNumber={row.documentNumber}
@@ -488,8 +478,8 @@ function XentralAddressErrorDialogRow({
           </div>
         </div>
       </TableCell>
-      <TableCell className="sticky left-[12.5rem] z-10 w-[9.5rem] min-w-[9.5rem] max-w-[9.5rem] border-border/50 bg-background px-3 py-3 align-middle text-center shadow-[3px_0_14px_-4px_rgba(0,0,0,0.08)]">
-        <div className={dialogEditCellStickyMeta}>
+      <TableCell className="sticky left-[12.5rem] z-10 w-[9.5rem] min-w-[9.5rem] max-w-[9.5rem] border-border/50 bg-background px-3 py-3 align-middle text-left shadow-[3px_0_14px_-4px_rgba(0,0,0,0.08)]">
+        <div className={dialogEditCellStickyId}>
           <div className="min-w-0 w-full max-w-full break-all text-xs leading-snug">
             <MarketplaceOrderIdLink
               marketplace={row.marketplace}
@@ -530,8 +520,8 @@ function XentralAddressErrorDialogRow({
               title={nameFieldTitle}
               aria-label={
                 nameFieldTitle
-                  ? `Name (Xentral: name). ${nameFieldTitle}`
-                  : "Name (Xentral: name)"
+                  ? t("xentralOrders.nameFieldWithHint", { hint: nameFieldTitle })
+                  : t("xentralOrders.nameFieldBase")
               }
             />
             {nameAlternateHints.length > 0 ? (
@@ -540,8 +530,8 @@ function XentralAddressErrorDialogRow({
                   className={cn(
                     "inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-amber-600 outline-none transition-colors hover:bg-amber-500/10 hover:text-amber-800 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 dark:text-amber-400 dark:hover:bg-amber-500/15 dark:hover:text-amber-200"
                   )}
-                  title="Namensvorschläge aus anderen Xentral-Feldern"
-                  aria-label="Namensvorschläge"
+                  title={t("xentralOrders.nameSuggestionsTitle")}
+                  aria-label={t("xentralOrders.nameSuggestionsAria")}
                 >
                   <Sparkles className="size-4" aria-hidden />
                 </PopoverTrigger>
@@ -552,7 +542,7 @@ function XentralAddressErrorDialogRow({
                   className="w-[min(calc(100vw-2rem),18.5rem)] border-amber-500/20 p-2.5 shadow-md"
                 >
                   <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Vorschläge
+                    {t("xentralOrders.suggestionsHeading")}
                   </p>
                   <ul className="m-0 flex list-none flex-col gap-2 p-0">
                     {nameAlternateHints.map((h) => {
@@ -580,7 +570,7 @@ function XentralAddressErrorDialogRow({
                                 className="h-7 w-full text-[11px]"
                                 onClick={() => patch("name", suggested)}
                               >
-                                Nur Vorschlag übernehmen
+                                {t("xentralOrders.applySuggestionOnly")}
                               </Button>
                               {mergedName ? (
                                 <>
@@ -592,7 +582,7 @@ function XentralAddressErrorDialogRow({
                                     title={mergedName}
                                     onClick={() => patch("name", mergedName)}
                                   >
-                                    Kombiniert: Vorschlag – bisheriger Name
+                                    {t("xentralOrders.applySuggestionMerged")}
                                   </Button>
                                   <p
                                     className="rounded border border-dashed border-border/70 bg-background/60 px-1.5 py-1 text-[10px] leading-tight text-muted-foreground"
@@ -638,8 +628,8 @@ function XentralAddressErrorDialogRow({
             title={missingHouseNumber ? ADDRESS_ISSUE_HN : undefined}
             aria-label={
               missingHouseNumber
-                ? `Straße (Xentral: street). ${ADDRESS_ISSUE_HN}`
-                : "Straße (Xentral: street)"
+                ? t("xentralOrders.streetFieldWithHn", { hint: ADDRESS_ISSUE_HN })
+                : t("xentralOrders.streetFieldBase")
             }
           />
         </AddressEditStack>
@@ -659,7 +649,7 @@ function XentralAddressErrorDialogRow({
             onChange={(e) => patch(plz.key, e.target.value)}
             autoComplete="postal-code"
             maxLength={16}
-            aria-label={`Postleitzahl (${plz.key})`}
+            aria-label={t("xentralOrders.zipAria", { key: plz.key })}
           />
         </AddressEditStack>
         </div>
@@ -673,7 +663,7 @@ function XentralAddressErrorDialogRow({
             value={ort.value}
             onChange={(e) => patch(ort.key, e.target.value)}
             autoComplete="address-level2"
-            aria-label={`Ort (${ort.key})`}
+            aria-label={t("xentralOrders.cityAria", { key: ort.key })}
           />
         </AddressEditStack>
         </div>
@@ -683,6 +673,19 @@ function XentralAddressErrorDialogRow({
 }
 
 export default function XentralOrdersPage() {
+  const { t, locale } = useTranslation();
+  const intlTag = intlLocaleTag(locale);
+  const formatMoney = useCallback(
+    (amount: number | null, currency: string | null) => {
+      if (amount == null || !Number.isFinite(amount)) return "—";
+      return new Intl.NumberFormat(intlTag, {
+        style: "currency",
+        currency: (currency || "EUR").trim() || "EUR",
+      }).format(amount);
+    },
+    [intlTag]
+  );
+
   const [data, setData] = useState<XentralOrderRow[]>([]);
   const [displayedRows, setDisplayedRows] = useState<XentralOrderRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -750,8 +753,8 @@ export default function XentralOrdersPage() {
 
   const sumLabel = useMemo(
     () =>
-      new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(sumDisplayed),
-    [sumDisplayed]
+      new Intl.NumberFormat(intlTag, { style: "currency", currency: "EUR" }).format(sumDisplayed),
+    [sumDisplayed, intlTag]
   );
 
   const addressErrorRows = useMemo(
@@ -1028,26 +1031,30 @@ export default function XentralOrdersPage() {
           (Array.isArray(json.results) ? json.results.filter((x) => !x.ok) : []);
         if (fails.length > 0) {
           throw new Error(
-            fails.map((f) => `${f.salesOrderId}: ${f.error?.slice(0, 120) ?? "Fehler"}`).join(" · ")
+            fails
+              .map(
+                (f) =>
+                  `${f.salesOrderId}: ${f.error?.slice(0, 120) ?? t("xentralOrders.errorShort")}`
+              )
+              .join(" · ")
           );
         }
       }
       flushAddressDraftToApp(draftMap);
       toast.success(
-        realUpdates.length > 0
-          ? "Lieferadressen an Xentral übermittelt und lokal übernommen."
-          : "Lokal übernommen (Demo-Bestellungen ohne Xentral-API)."
+        realUpdates.length > 0 ? t("xentralOrders.toastAddressesSaved") : t("xentralOrders.toastDemoSaved")
       );
     } catch (e) {
       const msg = formatXentralAddressSubmitError(
-        e instanceof Error ? e.message : "Unbekannter Fehler"
+        e instanceof Error ? e.message : t("commonUi.unknownError"),
+        t
       );
       setAddressXentralError(msg);
       toast.error(msg.length > 280 ? `${msg.slice(0, 277)}…` : msg);
     } finally {
       setAddressXentralSubmitting(false);
     }
-  }, [flushAddressDraftToApp]);
+  }, [flushAddressDraftToApp, t]);
 
   const load = useCallback(async (forceRefresh = false, mode?: ImportMode, silent = false) => {
     let fetchMode: ImportMode = mode ?? importModeRef.current;
@@ -1134,7 +1141,7 @@ export default function XentralOrdersPage() {
       };
 
       if (!res.ok) {
-        throw new Error(payload.error ?? "Xentral-Bestellungen konnten nicht geladen werden.");
+        throw new Error(payload.error ?? t("xentralOrders.loadFailed"));
       }
 
       const normalized = withNormalizedPrimaryFields(payload.items ?? []);
@@ -1209,7 +1216,7 @@ export default function XentralOrdersPage() {
       if (silent) {
         console.warn("[Xentral] Hintergrund-Abgleich fehlgeschlagen:", e);
       } else {
-        setError(e instanceof Error ? e.message : "Unbekannter Fehler.");
+        setError(e instanceof Error ? e.message : t("commonUi.unknownError"));
       }
     } finally {
       if (!silent) {
@@ -1219,7 +1226,7 @@ export default function XentralOrdersPage() {
         setIsBackgroundSyncing(false);
       }
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     setHasMounted(true);
@@ -1257,7 +1264,7 @@ export default function XentralOrdersPage() {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
       void load(false, undefined, true);
-    }, XENTRAL_BACKGROUND_SYNC_MS);
+    }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
   }, [hasMounted, load]);
 
@@ -1265,8 +1272,8 @@ export default function XentralOrdersPage() {
     () => [
       {
         accessorKey: "documentNumber",
-        header: "Beleg / Nr.",
-        meta: { align: "center" as const, valign: "bottom" as const },
+        header: t("xentralOrders.documentNr"),
+        meta: { align: "left" as const, valign: "bottom" as const },
         cell: ({ row }) => (
           <XentralBelegNumberLink
             documentNumber={row.original.documentNumber}
@@ -1278,8 +1285,8 @@ export default function XentralOrdersPage() {
       },
       {
         accessorKey: "internetNumber",
-        header: "Bestellnummer",
-        meta: { align: "center" as const, valign: "bottom" as const },
+        header: t("xentralOrders.orderNr"),
+        meta: { align: "left" as const, valign: "bottom" as const },
         cell: ({ row }) => (
           <MarketplaceOrderIdLink
             marketplace={row.original.marketplace}
@@ -1289,7 +1296,7 @@ export default function XentralOrdersPage() {
       },
       {
         accessorKey: "customer",
-        header: "Kunde",
+        header: t("xentralOrders.customer"),
         cell: ({ row }) => {
           const value = row.original.customer ?? "";
           const truncated = value.length > 48 ? `${value.slice(0, 45)}…` : value;
@@ -1302,7 +1309,7 @@ export default function XentralOrdersPage() {
       },
       {
         accessorKey: "orderDate",
-        header: "Datum",
+        header: t("xentralOrders.date"),
         cell: ({ row }) => {
           const raw = row.original.orderDate ?? "";
           const ymd = raw.slice(0, 10);
@@ -1312,7 +1319,7 @@ export default function XentralOrdersPage() {
       },
       {
         accessorKey: "marketplace",
-        header: "Marktplatz",
+        header: t("xentralOrders.marketplace"),
         meta: { align: "center" as const, valign: "bottom" as const },
         cell: ({ row }) => {
           const value = row.original.marketplace?.trim() || "—";
@@ -1331,7 +1338,9 @@ export default function XentralOrdersPage() {
           const d = resolveAddressDisplay(row);
           return d === "invalid" ? 0 : d === "edited" ? 1 : 2;
         },
-        header: () => <span className="inline-block text-center">Adressvalidierung</span>,
+        header: () => (
+          <span className="inline-block text-center">{t("xentralOrders.addressValidation")}</span>
+        ),
         cell: ({ row }) => (
           <AddressValidationCell
             display={resolveAddressDisplay(row.original)}
@@ -1341,14 +1350,14 @@ export default function XentralOrdersPage() {
       },
       {
         accessorKey: "total",
-        header: "Summe",
+        header: t("xentralOrders.sum"),
         meta: { align: "right" as const },
         cell: ({ row }) => (
           <div className="text-right tabular-nums">{formatMoney(row.original.total, row.original.currency)}</div>
         ),
       },
     ],
-    [xentralOrderWebBase, xentralSalesOrderWebPath]
+    [xentralOrderWebBase, xentralSalesOrderWebPath, t, formatMoney]
   );
 
   const dateFilterIsDefault =
@@ -1357,20 +1366,28 @@ export default function XentralOrdersPage() {
     dateTo === berlinRangeRef.current.to;
 
   return (
-    <div className="flex min-h-[calc(100vh-12rem)] flex-col gap-6">
+    <div className={DASHBOARD_PAGE_SHELL}>
       <div className="space-y-1">
         <div className="flex flex-wrap items-end justify-between gap-2">
-          <h1 className="text-2xl font-bold tracking-tight">Bestellungen</h1>
+          <h1 className={DASHBOARD_PAGE_TITLE}>{t("xentralOrders.title")}</h1>
           <div className="flex flex-wrap items-center gap-3">
             {!isLoading && displayedRows.length > 0 ? (
               <p className="text-sm text-muted-foreground">
-                Angezeigt: <span className="font-medium text-foreground">{displayedRows.length}</span>
+                {t("xentralOrders.shown")}{" "}
+                <span className="font-medium text-foreground">{displayedRows.length}</span>
                 {totalCount != null && totalCount > displayedRows.length ? (
-                  <span> / {totalCount} in Xentral</span>
+                  <span>
+                    {" "}
+                    / {totalCount} {t("xentralOrders.inXentral")}
+                  </span>
                 ) : null}
-                <span> · {dateFilteredData.length} im Zeitraum</span>
+                <span>
+                  {" "}
+                  · {dateFilteredData.length} {t("xentralOrders.inPeriod")}
+                </span>
                 {" · "}
-                Summe (Ansicht): <span className="font-medium text-foreground">{sumLabel}</span>
+                {t("xentralOrders.sumView")}{" "}
+                <span className="font-medium text-foreground">{sumLabel}</span>
               </p>
             ) : null}
             <Button
@@ -1380,7 +1397,7 @@ export default function XentralOrdersPage() {
               onClick={() => void load(true, importMode)}
               disabled={isLoading || !hasMounted}
             >
-              Aktualisieren
+              {t("xentralOrders.refresh")}
             </Button>
             <Button
               type="button"
@@ -1388,9 +1405,9 @@ export default function XentralOrdersPage() {
               size="sm"
               onClick={() => void load(true, "all")}
               disabled={isLoading || !hasMounted}
-              title="Vollständigen Bestand aus Xentral laden (kann lange dauern)"
+              title={t("xentralOrders.loadAllTitle")}
             >
-              Alle laden
+              {t("xentralOrders.loadAll")}
             </Button>
             {importMode === "all" ? (
               <Button
@@ -1399,15 +1416,15 @@ export default function XentralOrdersPage() {
                 size="sm"
                 onClick={() => void load(true, "recent")}
                 disabled={isLoading || !hasMounted}
-                title="Wieder nur die letzten 2 Kalendertage laden"
+                title={t("xentralOrders.loadRecentTitle")}
               >
-                Nur 2 Tage
+                {t("xentralOrders.loadRecent")}
               </Button>
             ) : null}
             {isBackgroundSyncing ? (
               <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                Abgleich mit Xentral…
+                {t("xentralOrders.syncing")}
               </span>
             ) : null}
           </div>
@@ -1422,7 +1439,7 @@ export default function XentralOrdersPage() {
 
       {isLoading ? (
         <div className="rounded-xl border border-border/50 bg-card/80 p-4 text-sm text-muted-foreground backdrop-blur-sm">
-          Lade Bestellungen aus Xentral…
+          {t("xentralOrders.loading")}
         </div>
       ) : (
         <>
@@ -1433,18 +1450,20 @@ export default function XentralOrdersPage() {
             >
               <DialogHeader className="shrink-0 space-y-1 border-b border-border/40 bg-gradient-to-b from-muted/45 to-muted/10 px-4 py-4 text-left sm:px-6">
                 <DialogTitle className="text-lg font-semibold tracking-tight">
-                  {addressDialogPhase === "edit" ? "Adressen korrigieren" : "Übersicht für Xentral"}
+                  {addressDialogPhase === "edit"
+                    ? t("xentralOrders.dialogEditTitle")
+                    : t("xentralOrders.dialogReviewTitle")}
                 </DialogTitle>
                 <DialogDescription className="text-pretty text-sm text-muted-foreground">
                   {addressDialogPhase === "edit"
-                    ? "Bearbeiten Sie die Lieferadressen. Namensvorschläge: Symbol neben dem Namen. Anschließend prüfen Sie die Übersicht und übermitteln an Xentral."
-                    : "Die folgenden Adressen werden per API an Xentral gesendet. „Bearbeiten“ kehrt zur Eingabe zurück (ohne Xentral-Aufruf)."}
+                    ? t("xentralOrders.dialogEditDesc")
+                    : t("xentralOrders.dialogReviewDesc")}
                 </DialogDescription>
               </DialogHeader>
               <div className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto px-4 py-4 sm:px-6">
                 {addressDraftRowsSorted.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-border/60 bg-muted/20 py-12 text-center text-sm text-muted-foreground">
-                    Keine fehlerhaften Lieferadressen in der aktuellen Tabellenansicht.
+                    {t("xentralOrders.dialogEmpty")}
                   </p>
                 ) : (
                   <div className="space-y-3">
@@ -1457,11 +1476,11 @@ export default function XentralOrdersPage() {
                       </div>
                     ) : null}
                     <div className="overflow-hidden rounded-xl border border-border/40 bg-background/80 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.04]">
-                    <Table className="w-full min-w-[min(100%,68rem)] max-w-full border-separate border-spacing-0 text-sm">
+                    <Table className="w-full min-w-[min(100%,68rem)] max-w-full border-separate border-spacing-0 text-xs">
                       <TableHeader>
                         <TableRow className="border-0 hover:bg-transparent">
                           <TableHead className="sticky left-0 z-20 w-12 min-w-12 max-w-12 border-b border-border/50 bg-muted/40 px-1 py-3 text-center shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
-                            <span className="sr-only">Aus Liste entfernen</span>
+                            <span className="sr-only">{t("xentralOrders.srRemoveFromList")}</span>
                             <X
                               className="mx-auto size-3.5 text-muted-foreground opacity-60"
                               strokeWidth={2.25}
@@ -1470,37 +1489,37 @@ export default function XentralOrdersPage() {
                           </TableHead>
                           <TableHead className="sticky left-12 z-20 w-[9.5rem] min-w-[9.5rem] max-w-[9.5rem] border-b border-border/50 bg-muted/40 px-3 py-3 text-center align-middle shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
                             <span className="inline-block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              Beleg / Nr.
+                              {t("xentralOrders.documentNr")}
                             </span>
                           </TableHead>
                           <TableHead className="sticky left-[12.5rem] z-20 w-[9.5rem] min-w-[9.5rem] max-w-[9.5rem] border-b border-border/50 bg-muted/40 px-3 py-3 text-center align-middle shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
                             <span className="inline-block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              Bestellnr.
+                              {t("xentralOrders.orderNrShort")}
                             </span>
                           </TableHead>
                           <TableHead className="sticky left-[22rem] z-20 w-[9rem] min-w-[9rem] max-w-[9rem] border-b border-border/50 bg-muted/40 px-3 py-3 text-center align-middle shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
                             <span className="inline-block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              Marktplatz
+                              {t("xentralOrders.marketplace")}
                             </span>
                           </TableHead>
                           <TableHead className="min-w-[8rem] max-w-[11rem] border-b border-border/50 bg-muted/40 px-2 py-3 text-left">
                             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              Name
+                              {t("xentralOrders.fieldName")}
                             </span>
                           </TableHead>
                           <TableHead className="min-w-[13rem] border-b border-border/50 bg-muted/40 px-3 py-3 text-left">
                             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              Straße
+                              {t("xentralOrders.fieldStreet")}
                             </span>
                           </TableHead>
                           <TableHead className="w-[6.75rem] min-w-[6.75rem] border-b border-border/50 bg-muted/40 px-2 py-3 text-center">
                             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              PLZ
+                              {t("xentralOrders.fieldZip")}
                             </span>
                           </TableHead>
                           <TableHead className="min-w-[10rem] border-b border-border/50 bg-muted/40 px-3 py-3 text-left">
                             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              Ort
+                              {t("xentralOrders.fieldCity")}
                             </span>
                           </TableHead>
                         </TableRow>
@@ -1531,20 +1550,22 @@ export default function XentralOrdersPage() {
                   <p className="text-[11px] text-muted-foreground">
                     {addressDialogPhase === "edit" ? (
                       addressDraftRowsSorted.length === 0 ? (
-                        <span>Keine Aufträge in der Liste — schließen oder erneut öffnen.</span>
+                        <span>{t("xentralOrders.footerEmptyList")}</span>
                       ) : isAddressDraftDirty ? (
-                        "Änderungen noch nicht an Xentral gesendet."
+                        t("xentralOrders.footerDirty")
                       ) : (
-                        "Zur Übersicht gehen oder Adressen weiter bearbeiten."
+                        t("xentralOrders.footerCleanEdit")
                       )
                     ) : (
-                      <>
-                        <span className="font-medium text-foreground">
-                          {addressDraftRowsSorted.length}{" "}
-                          {addressDraftRowsSorted.length === 1 ? "Auftrag" : "Aufträge"}
-                        </span>{" "}
-                        bereit für die Übermittlung.
-                      </>
+                      <span className="font-medium text-foreground">
+                        {addressDraftRowsSorted.length === 1
+                          ? t("xentralOrders.footerReadyOne", {
+                              count: addressDraftRowsSorted.length,
+                            })
+                          : t("xentralOrders.footerReadyMany", {
+                              count: addressDraftRowsSorted.length,
+                            })}
+                      </span>
                     )}
                   </p>
                   <div className="flex flex-wrap justify-end gap-2">
@@ -1556,16 +1577,16 @@ export default function XentralOrdersPage() {
                           size="sm"
                           onClick={() => handleAddressDialogOpenChange(false)}
                         >
-                          Abbrechen
+                          {t("xentralOrders.cancel")}
                         </Button>
                         <Button
                           type="button"
                           size="sm"
                           disabled={addressDraftRowsSorted.length === 0}
                           onClick={() => requestProceedToReview()}
-                          title="Übersicht vor dem API-Aufruf"
+                          title={t("xentralOrders.saveAndReviewTitle")}
                         >
-                          Speichern &amp; Übersicht
+                          {t("xentralOrders.saveAndReview")}
                         </Button>
                       </>
                     ) : (
@@ -1577,7 +1598,7 @@ export default function XentralOrdersPage() {
                           onClick={() => handleAddressDialogOpenChange(false)}
                           disabled={addressXentralSubmitting}
                         >
-                          Abbrechen
+                          {t("xentralOrders.cancel")}
                         </Button>
                         <Button
                           type="button"
@@ -1586,7 +1607,7 @@ export default function XentralOrdersPage() {
                           onClick={() => setAddressDialogPhase("edit")}
                           disabled={addressXentralSubmitting}
                         >
-                          Bearbeiten
+                          {t("xentralOrders.edit")}
                         </Button>
                         <Button
                           type="button"
@@ -1597,10 +1618,10 @@ export default function XentralOrdersPage() {
                           {addressXentralSubmitting ? (
                             <span className="inline-flex items-center gap-1.5">
                               <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
-                              Senden…
+                              {t("xentralOrders.sending")}
                             </span>
                           ) : (
-                            "An Xentral übermitteln"
+                            t("xentralOrders.submitToXentral")
                           )}
                         </Button>
                       </>
@@ -1617,15 +1638,14 @@ export default function XentralOrdersPage() {
               className="z-[100] max-w-md shadow-lg"
             >
               <DialogHeader>
-                <DialogTitle>Zur Übersicht fortfahren?</DialogTitle>
+                <DialogTitle>{t("xentralOrders.confirmOverviewTitle")}</DialogTitle>
                 <DialogDescription className="text-pretty">
-                  Mindestens eine Bestellung hat noch Hinweise zu Name oder Hausnummer. Sie können trotzdem zur
-                  Übersicht gehen und danach an Xentral senden — oder zurück und weiter prüfen.
+                  {t("xentralOrders.confirmOverviewDesc")}
                 </DialogDescription>
               </DialogHeader>
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button type="button" variant="outline" size="sm" onClick={() => setAddressSaveConfirmOpen(false)}>
-                  Zurück
+                  {t("xentralOrders.back")}
                 </Button>
                 <Button
                   type="button"
@@ -1635,7 +1655,7 @@ export default function XentralOrdersPage() {
                     setAddressDialogPhase("review");
                   }}
                 >
-                  Zur Übersicht
+                  {t("xentralOrders.toOverview")}
                 </Button>
               </div>
             </DialogContent>
@@ -1644,7 +1664,7 @@ export default function XentralOrdersPage() {
           <DataTable
             columns={columns}
             data={dateFilteredData}
-            filterColumn="Beleg, Bestellnummer, Kunde oder Marktplatz"
+            filterColumn={t("filters.xentralOrders")}
             toolbarBetween={
               <Button
                 type="button"
@@ -1654,7 +1674,7 @@ export default function XentralOrdersPage() {
                 onClick={() => openAddressCorrectionDialog()}
                 disabled={!hasMounted}
               >
-                Adressen korrigieren
+                {t("xentralOrders.correctAddresses")}
                 {addressErrorRows.length > 0 ? (
                   <span className="rounded-full bg-destructive/15 px-1.5 py-px text-xs font-medium tabular-nums text-destructive">
                     {addressErrorRows.length}
@@ -1666,7 +1686,7 @@ export default function XentralOrdersPage() {
               <div className="flex flex-wrap items-center justify-end gap-3">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="xentral-orders-date-from" className="shrink-0 text-muted-foreground">
-                    Von
+                    {t("dates.from")}
                   </Label>
                   <Input
                     id="xentral-orders-date-from"
@@ -1678,7 +1698,7 @@ export default function XentralOrdersPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Label htmlFor="xentral-orders-date-to" className="shrink-0 text-muted-foreground">
-                    Bis
+                    {t("dates.to")}
                   </Label>
                   <Input
                     id="xentral-orders-date-to"
@@ -1702,12 +1722,13 @@ export default function XentralOrdersPage() {
                       setDateTo(d.to);
                     }}
                   >
-                    Letzte 2 Tage
+                    {t("xentralOrders.lastTwoDays")}
                   </Button>
                 ) : null}
               </div>
             }
             paginate={false}
+            compact
             className="flex-1 min-h-0"
             tableWrapClassName="min-h-0"
             onDisplayedRowsChange={setDisplayedRows}

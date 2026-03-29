@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { NextResponse } from "next/server";
+import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 
 type ListingSummary = {
@@ -511,7 +512,7 @@ export async function GET(request: Request) {
       AMAZON_SP_API_SELLER_ID: false,
     };
     if (Object.values(missing).some(Boolean)) {
-      return NextResponse.json({ error: "Amazon SP-API ist nicht vollständig konfiguriert.", missing }, { status: 500 });
+      return amazonSpApiIncompleteJson(missing);
     }
 
     const { searchParams } = new URL(request.url);

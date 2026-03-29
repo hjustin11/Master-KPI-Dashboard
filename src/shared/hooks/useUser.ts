@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createClient } from "@/shared/lib/supabase/client";
 
 type DashboardUser = {
@@ -45,16 +46,20 @@ export function useUser() {
 
   useEffect(() => {
     const supabase = createClient();
+    let cancelled = false;
+    let hydrateGen = 0;
 
-    const loadUser = async () => {
-      // Beim Reload nicht kurzzeitig eine Default-Rolle rendern (verhindert UI-Flicker).
+    /**
+     * Kein getUser() hier: parallel zu onAuthStateChange (INITIAL_SESSION) löst das den
+     * GoTrue-Storage-Lock aus („another request stole it“). Session kommt aus dem Callback bzw. getSession.
+     */
+    const hydrateFromSession = async (session: Session | null) => {
+      const gen = ++hydrateGen;
       setUser((prev) => ({ ...prev, isLoading: true }));
 
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-
+      const authUser = session?.user ?? null;
       if (!authUser) {
+        if (cancelled || gen !== hydrateGen) return;
         setUser({ ...DEFAULT_USER, isLoading: false });
         return;
       }
@@ -75,12 +80,12 @@ export function useUser() {
         .eq("id", authUser.id)
         .maybeSingle();
 
+      if (cancelled || gen !== hydrateGen) return;
+
       const fullName =
         (profile?.full_name as string | undefined) || fallbackFullName;
       let roleKey = (profile?.role as string | undefined) || fallbackRoleKey;
 
-      // Lokal immer Owner in der UI (hostname localhost / 127.0.0.1). Betrifft nur den Browser —
-      // API-Routen prüfen weiter die echte Profil-Rolle in Supabase.
       try {
         const hostname = typeof window !== "undefined" ? window.location.hostname : "";
         if (isLocalHostName(hostname)) {
@@ -100,15 +105,20 @@ export function useUser() {
       });
     };
 
-    void loadUser();
+    void supabase.auth.getSession().then((result: Awaited<ReturnType<typeof supabase.auth.getSession>>) => {
+      if (cancelled) return;
+      void hydrateFromSession(result.data.session);
+    });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      void loadUser();
+    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+      if (cancelled) return;
+      void hydrateFromSession(session);
     });
 
     return () => {
+      cancelled = true;
       subscription.unsubscribe();
     };
   }, []);

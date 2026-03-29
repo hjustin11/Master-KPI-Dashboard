@@ -13,7 +13,7 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    void supabase.auth.getSession().then(({ data }) => {
+    void supabase.auth.getSession().then(({ data }: { data: { session: unknown | null } }) => {
       setHasSession(Boolean(data.session));
     });
   }, []);

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
+import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -10,7 +11,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { DataTable } from "@/shared/components/DataTable";
+import {
+  DASHBOARD_COMPACT_CARD,
+  DASHBOARD_PAGE_SHELL,
+  DASHBOARD_PAGE_TITLE,
+} from "@/shared/lib/dashboardUi";
+import {
+  DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
+  readLocalJsonCache,
+  writeLocalJsonCache,
+} from "@/shared/lib/dashboardClientCache";
+import type { AmazonSpApiClientError } from "@/shared/lib/amazonSpApiClientError";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { intlLocaleTag } from "@/i18n/locale-formatting";
 
 type ProductStatus = "active" | "inactive" | "all";
 
@@ -26,11 +41,11 @@ type AmazonProductRow = {
 type ProductsResponse = {
   items?: AmazonProductRow[];
   error?: string;
+  missingKeys?: string[];
+  hint?: string;
   pending?: boolean;
   source?: string;
 };
-
-const AMAZON_PRODUCTS_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 
 type CachedProductsPayload = {
   savedAt: number;
@@ -38,36 +53,45 @@ type CachedProductsPayload = {
 };
 
 export default function AmazonProductsPage() {
+  const { t, locale } = useTranslation();
   const [status, setStatus] = useState<ProductStatus>("active");
   const [rows, setRows] = useState<AmazonProductRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+  const [error, setError] = useState<AmazonSpApiClientError | null>(null);
   const [pendingInfo, setPendingInfo] = useState<string | null>(null);
+  const [hasMounted, setHasMounted] = useState(false);
+  const statusRef = useRef(status);
+  const rowsRef = useRef(rows);
+
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
   const totalArticlesLabel = useMemo(
-    () => new Intl.NumberFormat("de-DE").format(rows.length),
-    [rows.length]
+    () => new Intl.NumberFormat(intlLocaleTag(locale)).format(rows.length),
+    [rows.length, locale]
   );
 
   const columns = useMemo<Array<ColumnDef<AmazonProductRow>>>(
     () => [
       {
         accessorKey: "sku",
-        header: "SKU",
+        header: t("amazonProducts.sku"),
         cell: ({ row }) => <span className="font-medium">{row.original.sku || "—"}</span>,
       },
       {
         accessorKey: "asin",
-        header: "ASIN",
+        header: t("amazonProducts.asin"),
         cell: ({ row }) => <span>{row.original.asin || "—"}</span>,
       },
       {
         accessorKey: "title",
-        header: "Artikel",
+        header: t("amazonProducts.article"),
         cell: ({ row }) => {
-          const value = row.original.title || "";
-          const truncated = value.length > 100 ? `${value.slice(0, 97)}...` : value;
+          const raw = row.original.title || "";
+          const truncated = raw.length > 100 ? `${raw.slice(0, 97)}…` : raw;
           return (
-            <span className="text-muted-foreground" title={value}>
+            <span className="text-muted-foreground" title={raw || undefined}>
               {truncated || "—"}
             </span>
           );
@@ -75,77 +99,119 @@ export default function AmazonProductsPage() {
       },
       {
         accessorKey: "productType",
-        header: "Produkttyp",
+        header: t("amazonProducts.productType"),
         cell: ({ row }) => <span>{row.original.productType || "—"}</span>,
       },
       {
         accessorKey: "statusLabel",
-        header: "Status",
+        header: t("amazonProducts.status"),
         cell: ({ row }) => (
           <Badge variant={row.original.isActive ? "default" : "secondary"}>
-            {row.original.isActive ? "Aktiv" : "Deaktiviert"}
+            {row.original.isActive ? t("amazonProducts.active") : t("amazonProducts.inactive")}
           </Badge>
         ),
       },
     ],
-    []
+    [t]
   );
 
-  useEffect(() => {
-    const load = async () => {
-      const cacheKey = `amazon_products_cache_v1:${status}`;
-      const raw = localStorage.getItem(cacheKey);
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw) as CachedProductsPayload;
-          const isFresh = Date.now() - parsed.savedAt < AMAZON_PRODUCTS_CACHE_MAX_AGE_MS;
-          if (isFresh && Array.isArray(parsed.items)) {
-            setRows(parsed.items);
-            setPendingInfo(null);
-            setIsLoading(false);
-            return;
-          }
-        } catch {
-          // Cache optional; bei Fehler normal weiter.
-        }
-      }
+  const load = useCallback(async (forceRefresh = false, silent = false) => {
+    const st = statusRef.current;
+    const cacheKey = `amazon_products_cache_v1:${st}`;
+    let hadCache = false;
 
-      setIsLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`/api/amazon/products?status=${status}`);
-        const payload = (await res.json()) as ProductsResponse;
-        if (res.status === 202 && payload.pending) {
-          setPendingInfo(payload.error ?? "Produktreport wird erstellt...");
-          setRows([]);
-          setTimeout(() => {
-            void load();
-          }, 5000);
-          return;
-        }
-        if (!res.ok) {
-          throw new Error(payload.error ?? "Amazon Produkte konnten nicht geladen werden.");
-        }
+    if (!forceRefresh && !silent) {
+      const parsed = readLocalJsonCache<CachedProductsPayload>(cacheKey);
+      if (parsed && Array.isArray(parsed.items)) {
+        setRows(parsed.items);
         setPendingInfo(null);
-        const nextItems = payload.items ?? [];
-        setRows(nextItems);
-        const cachePayload: CachedProductsPayload = {
-          savedAt: Date.now(),
-          items: nextItems,
-        };
-        localStorage.setItem(cacheKey, JSON.stringify(cachePayload));
-      } catch (e) {
-        setRows([]);
-        setError(e instanceof Error ? e.message : "Unbekannter Fehler.");
-      } finally {
+        hadCache = true;
         setIsLoading(false);
       }
-    };
-    void load();
-  }, [status]);
+    }
+
+    if (forceRefresh && !silent) {
+      setIsLoading(true);
+    } else if (!hadCache && !silent) {
+      setIsLoading(true);
+    }
+
+    const showBackgroundIndicator = silent || (!forceRefresh && hadCache);
+    if (showBackgroundIndicator) {
+      setIsBackgroundSyncing(true);
+    }
+
+    if (!silent) {
+      setError(null);
+    }
+
+    try {
+      const res = await fetch(`/api/amazon/products?status=${st}`, { cache: "no-store" });
+      const payload = (await res.json()) as ProductsResponse;
+      if (res.status === 202 && payload.pending) {
+        setPendingInfo(payload.error ?? "Produktreport wird erstellt...");
+        if (!hadCache && rowsRef.current.length === 0) {
+          setRows([]);
+        }
+        window.setTimeout(() => {
+          void load(forceRefresh, silent);
+        }, 5000);
+        return;
+      }
+      if (!res.ok) {
+        setError({
+          message: payload.error ?? "Amazon Produkte konnten nicht geladen werden.",
+          missingKeys: payload.missingKeys,
+          hint: payload.hint,
+        });
+        setRows([]);
+        return;
+      }
+      setPendingInfo(null);
+      const nextItems = payload.items ?? [];
+      setRows(nextItems);
+      writeLocalJsonCache(cacheKey, {
+        savedAt: Date.now(),
+        items: nextItems,
+      } satisfies CachedProductsPayload);
+    } catch (e) {
+      if (silent) {
+        console.warn("[Amazon Produkte] Hintergrund-Abgleich fehlgeschlagen:", e);
+      } else {
+        setRows([]);
+        setError({
+          message: e instanceof Error ? e.message : "Unbekannter Fehler.",
+        });
+      }
+    } finally {
+      if (!silent) {
+        setIsLoading(false);
+      }
+      if (showBackgroundIndicator) {
+        setIsBackgroundSyncing(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    statusRef.current = status;
+    void load(false, false);
+  }, [status, load]);
+
+  useEffect(() => {
+    if (!hasMounted) return;
+    const id = window.setInterval(() => {
+      void load(false, true);
+    }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
+    return () => window.clearInterval(id);
+  }, [hasMounted, load]);
 
   return (
-    <div className="flex min-h-[calc(100vh-12rem)] flex-col gap-6">
+    <div className={DASHBOARD_PAGE_SHELL}>
       <div className="space-y-1">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -155,39 +221,52 @@ export default function AmazonProductsPage() {
               className="h-auto w-[190px] shrink-0 object-contain"
               loading="eager"
             />
-            <span className="text-xl font-semibold text-muted-foreground">Produkte</span>
+            <span className={cn(DASHBOARD_PAGE_TITLE, "text-muted-foreground")}>
+              {t("amazonProducts.productsWord")}
+            </span>
           </div>
-          {!isLoading ? (
-            <p className="text-sm text-muted-foreground">
-              Gesamt Artikelmenge:{" "}
-              <span className="font-medium text-foreground">{totalArticlesLabel}</span>
-            </p>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-3">
+            {!isLoading ? (
+              <p className="text-sm text-muted-foreground">
+                {t("amazonProducts.totalCount", { count: totalArticlesLabel })}
+              </p>
+            ) : null}
+            {isBackgroundSyncing ? (
+              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                {t("amazonProducts.syncing")}
+              </span>
+            ) : null}
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Alle Amazon-Artikel mit Statusfilter. Standard ist aktiv.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("amazonProducts.subtitle")}</p>
       </div>
 
-      <div className="flex items-end gap-3 rounded-xl border border-border/50 bg-card/80 p-4">
+      <div className={cn(DASHBOARD_COMPACT_CARD, "flex flex-row flex-wrap items-end gap-3")}>
         <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">Status</p>
+          <p className="text-xs font-medium text-muted-foreground">{t("amazonProducts.status")}</p>
           <Select value={status} onValueChange={(value) => setStatus(value as ProductStatus)}>
             <SelectTrigger className="w-[220px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="active">Aktiv</SelectItem>
-              <SelectItem value="inactive">Deaktiviert</SelectItem>
-              <SelectItem value="all">Alle</SelectItem>
+              <SelectItem value="active">{t("amazonProducts.active")}</SelectItem>
+              <SelectItem value="inactive">{t("amazonProducts.inactive")}</SelectItem>
+              <SelectItem value="all">{t("amazonProducts.all")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
       {error ? (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-700">
-          {error}
+        <div className="space-y-2 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-700">
+          <p className="font-medium">{error.message}</p>
+          {error.missingKeys && error.missingKeys.length > 0 ? (
+            <p className="font-mono text-xs text-red-800/90">
+              {t("amazonProducts.missingEnvVars", { keys: error.missingKeys.join(", ") })}
+            </p>
+          ) : null}
+          {error.hint ? <p className="text-xs leading-relaxed text-red-900/80">{error.hint}</p> : null}
         </div>
       ) : null}
 
@@ -199,14 +278,15 @@ export default function AmazonProductsPage() {
 
       {isLoading ? (
         <div className="rounded-xl border border-border/50 bg-card/80 p-4 text-sm text-muted-foreground">
-          Lade Amazon Produkte...
+          {t("amazonProducts.loading")}
         </div>
       ) : (
         <DataTable
           columns={columns}
           data={rows}
-          filterColumn="SKU, ASIN oder Artikelnamen"
+          filterColumn={t("filters.skuAsinOrTitle")}
           paginate={false}
+          compact
           className="flex-1 min-h-0"
           tableWrapClassName="min-h-0"
         />
