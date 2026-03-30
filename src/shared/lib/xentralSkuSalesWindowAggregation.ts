@@ -283,7 +283,7 @@ const AGG_MAX_PAGES_HARD = 800;
 const V1_DELIVERY_NOTE_PATHS: [string, string] = ["api/v1/deliveryNotes", "api/v1/deliverynotes"];
 
 /**
- * Max. Anzahl Listenseiten (Lieferscheine) pro Artikelprognose-Request.
+ * Max. Anzahl Listenseiten (Lieferscheine) pro Bedarfsprognose-Request.
  */
 export function resolveSalesAggMaxPages(): number {
   const raw = Number(process.env.XENTRAL_SALES_AGG_MAX_PAGES);

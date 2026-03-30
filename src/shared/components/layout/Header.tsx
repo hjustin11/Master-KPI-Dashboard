@@ -3,7 +3,6 @@
 import { Bell, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Breadcrumbs } from "@/shared/components/layout/Breadcrumbs";
 import { MobileSidebarTrigger } from "@/shared/components/layout/AppSidebar";
 import {
@@ -46,10 +45,6 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 h-14 border-b border-border/50 bg-sidebar">
       <div className="flex h-14 items-center gap-3 px-4 md:px-6">
-        <div className="hidden md:block">
-          <SidebarTrigger />
-        </div>
-
         <div className="md:hidden">
           <MobileSidebarTrigger />
         </div>

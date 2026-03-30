@@ -10,6 +10,7 @@ export const ANALYTICS_MARKETPLACES = [
   },
   { slug: "zooplus", label: "ZooPlus", logo: "/brand/marketplaces/zooplus.svg" },
   { slug: "tiktok", label: "TikTok", logo: "/brand/marketplaces/tiktok.svg" },
+  { slug: "shopify", label: "Shopify", logo: "/brand/marketplaces/shopify.svg" },
 ] as const;
 
 export type AnalyticsMarketplaceSlug = (typeof ANALYTICS_MARKETPLACES)[number]["slug"];

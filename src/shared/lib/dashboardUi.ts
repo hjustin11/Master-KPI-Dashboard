@@ -1,5 +1,5 @@
 /**
- * Einheitliche Dashboard-Typografie und Tabellen — orientiert an Artikelprognose (`DataTable` mit `compact`).
+ * Einheitliche Dashboard-Typografie und Tabellen — orientiert an Bedarfsprognose (`DataTable` mit `compact`).
  * Kopfzeilen: 11px; Tabellenzellen: `text-xs` (12px).
  */
 
@@ -30,7 +30,7 @@ export const DASHBOARD_COMPACT_TABLE_SCROLL =
 /** Direkt auf `<Table>` (Zelltext-Basis). */
 export const DASHBOARD_COMPACT_TABLE_TEXT = "text-xs";
 
-/** Meta-Zeilen / Hinweise unter Toolbars (wie Sync-Status in Artikelprognose). */
+/** Meta-Zeilen / Hinweise unter Toolbars (wie Sync-Status in Bedarfsprognose). */
 export const DASHBOARD_META_TEXT = "text-xs text-muted-foreground";
 
 /**

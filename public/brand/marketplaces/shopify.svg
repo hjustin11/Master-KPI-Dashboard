@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 64" role="img" aria-label="Shopify">
+  <!-- Simplified brand bag mark -->
+  <path
+    fill="#95BF47"
+    d="M6 22h8c0-7 5.5-12 12.5-12S39 15 39 22h8v36H6V22zm16-10c-2.2 0-4 1.8-4 4v6h8v-6c0-2.2-1.8-4-4-4z"
+  />
+  <!-- Lowercase wordmark (Shopify brand style) -->
+  <text
+    x="54"
+    y="44"
+    fill="#212B36"
+    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    font-size="36"
+    font-weight="600"
+    letter-spacing="-0.03em"
+  >
+    shopify
+  </text>
+</svg>

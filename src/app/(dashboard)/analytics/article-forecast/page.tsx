@@ -410,7 +410,7 @@ export default function AnalyticsArticleForecastPage() {
       } catch (e) {
         if (generation !== fetchGenerationRef.current) return;
         if (silent) {
-          console.warn("[Artikelprognose] Hintergrund-Abgleich fehlgeschlagen:", e);
+          console.warn("[Bedarfsprognose] Hintergrund-Abgleich fehlgeschlagen:", e);
         } else {
           setError(e instanceof Error ? e.message : t("commonUi.unknownError"));
         }

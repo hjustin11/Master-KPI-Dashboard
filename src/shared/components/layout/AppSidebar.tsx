@@ -3,10 +3,11 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useSyncExternalStore, type ComponentType } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type ComponentType } from "react";
 import {
   BarChart3,
   Bell,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
@@ -17,6 +18,7 @@ import {
   PanelLeft,
   Settings,
   ShoppingBag,
+  ShoppingBasket,
   ShoppingCart,
   PawPrint,
   Store,
@@ -39,7 +41,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -48,6 +50,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { LogoutMenuItem } from "@/shared/components/auth/LogoutMenuItem";
@@ -136,6 +139,14 @@ const navItems: NavItem[] = [
     children: [{ labelKey: "nav.tiktokOrders", href: "/tiktok/orders" }],
   },
   {
+    key: "shopify",
+    labelKey: "nav.shopify",
+    href: "/shopify",
+    icon: ShoppingBasket,
+    requiredPermissions: ["manage_integrations"],
+    children: [{ labelKey: "nav.shopifyOrders", href: "/shopify/orders" }],
+  },
+  {
     key: "xentral",
     labelKey: "nav.xentral",
     href: "/xentral",
@@ -198,6 +209,7 @@ const NAV_PRIMARY_CHILD_KEYS = new Set<SidebarItemKey>([
   "mediamarktSaturn",
   "zooplus",
   "tiktok",
+  "shopify",
   "xentral",
   "advertising",
   "analytics",
@@ -225,6 +237,296 @@ function resolveNavLink(
     return { primaryHref: primary, activePrefix: prefix };
   }
   return { primaryHref: item.href, activePrefix: item.href };
+}
+
+const MARKETPLACE_NAV_KEYS = new Set<SidebarItemKey>([
+  "amazon",
+  "otto",
+  "kaufland",
+  "fressnapf",
+  "mediamarktSaturn",
+  "zooplus",
+  "tiktok",
+  "shopify",
+]);
+
+function partitionNavItems(items: NavItem[]): { marketplaces: NavItem[]; rest: NavItem[] } {
+  const marketplaces: NavItem[] = [];
+  const rest: NavItem[] = [];
+  for (const item of items) {
+    if (MARKETPLACE_NAV_KEYS.has(item.key)) marketplaces.push(item);
+    else rest.push(item);
+  }
+  return { marketplaces, rest };
+}
+
+function isMarketplaceItemActive(
+  pathname: string,
+  item: NavItem,
+  hasPermission: (permission: PermissionKey) => boolean
+): boolean {
+  const { activePrefix } = resolveNavLink(item, hasPermission);
+  if (isActivePath(pathname, activePrefix)) return true;
+  return visibleNavChildren(item, hasPermission).some((child) => isActivePath(pathname, child.href));
+}
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+function SingleNavItem({
+  item,
+  pathname,
+  hasPermission,
+  collapsed,
+  compact,
+  t,
+}: {
+  item: NavItem;
+  pathname: string;
+  hasPermission: (permission: PermissionKey) => boolean;
+  collapsed: boolean;
+  compact?: boolean;
+  t: Translate;
+}) {
+  const { primaryHref, activePrefix } = resolveNavLink(item, hasPermission);
+  const active = isActivePath(pathname, activePrefix);
+  const Icon = item.icon;
+  const visibleChildren = visibleNavChildren(item, hasPermission);
+  const hasSubnav = visibleChildren.length > 0;
+  /** Eingeklappte Sidebar (Icons): nur Hauptlink. Sonst: Unterpunkte per Zeile ein-/ausklappbar. */
+  const subnavCollapsible = !collapsed && hasSubnav;
+
+  const childOrSelfActive = useMemo(
+    () =>
+      active ||
+      visibleChildren.some((c) => isActivePath(pathname, c.href)),
+    [active, pathname, visibleChildren]
+  );
+
+  const [subOpen, setSubOpen] = useState(false);
+  useEffect(() => {
+    if (childOrSelfActive) setSubOpen(true);
+  }, [childOrSelfActive]);
+
+  const linkClass = cn(
+    "group flex items-center gap-3 rounded-md px-3 text-sm transition-all duration-200 hover:bg-accent/60",
+    compact ? "py-1.5" : "py-2",
+    active && "border-l-2 border-primary bg-primary/10 text-primary",
+    collapsed && "justify-center px-2"
+  );
+
+  const baseLink = (
+    <Link href={primaryHref} className={linkClass}>
+      <Icon className="h-4 w-4 shrink-0" />
+      {!collapsed ? <span className="truncate">{t(item.labelKey)}</span> : null}
+    </Link>
+  );
+
+  const collapsibleRow = (
+    <button
+      type="button"
+      className={cn(
+        "flex w-full min-w-0 items-center gap-2 rounded-md px-3 text-left text-sm transition-all duration-200 hover:bg-accent/60",
+        compact ? "py-1.5" : "py-2",
+        active && "border-l-2 border-primary bg-primary/10 text-primary"
+      )}
+      aria-expanded={subOpen}
+      aria-label={`${t(item.labelKey)} — ${t("sidebar.toggleSubnav")}`}
+      onClick={() => setSubOpen((o) => !o)}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{t(item.labelKey)}</span>
+      <ChevronDown
+        className={cn(
+          "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+          subOpen && "rotate-180"
+        )}
+        aria-hidden
+      />
+    </button>
+  );
+
+  const childClass = cn(
+    "block rounded-md px-2 text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
+    compact ? "py-1 text-[11px] leading-snug" : "py-1.5 text-xs"
+  );
+
+  const showSubnav = !collapsed && hasSubnav && subOpen;
+
+  return (
+    <div className={cn("space-y-1", compact && "space-y-0.5")}>
+      {collapsed ? (
+        <Tooltip>
+          <TooltipTrigger render={<div />}>{baseLink}</TooltipTrigger>
+          <TooltipContent side="right">{t(item.labelKey)}</TooltipContent>
+        </Tooltip>
+      ) : subnavCollapsible ? (
+        collapsibleRow
+      ) : (
+        baseLink
+      )}
+
+      {showSubnav ? (
+        <div
+          className={cn(
+            "space-y-0.5 border-l border-border pl-3",
+            compact ? "ml-6" : "ml-7"
+          )}
+        >
+          {visibleChildren.map((child) => {
+            const childActive = isActivePath(pathname, child.href);
+            return (
+              <Link
+                key={child.href}
+                href={child.href}
+                className={cn(childClass, childActive && "text-primary")}
+              >
+                {t(child.labelKey)}
+              </Link>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MarketplaceExpandedGroup({
+  items,
+  pathname,
+  hasPermission,
+  t,
+}: {
+  items: NavItem[];
+  pathname: string;
+  hasPermission: (permission: PermissionKey) => boolean;
+  t: Translate;
+}) {
+  const anyActive = useMemo(
+    () => items.some((item) => isMarketplaceItemActive(pathname, item, hasPermission)),
+    [items, pathname, hasPermission]
+  );
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (anyActive) setOpen(true);
+  }, [anyActive]);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-all duration-200 hover:bg-accent/60",
+          anyActive && "border-l-2 border-primary bg-primary/10 text-primary"
+        )}
+      >
+        <Store className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-left font-medium">{t("sidebar.marketplacesGroup")}</span>
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 transition-transform duration-200", open && "rotate-180")}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div className="ml-1 space-y-0.5 border-l border-dashed border-border/70 pl-2.5">
+          {items.map((item) => (
+            <SingleNavItem
+              key={item.key}
+              item={item}
+              pathname={pathname}
+              hasPermission={hasPermission}
+              collapsed={false}
+              compact
+              t={t}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CollapsedMarketplacePopover({
+  items,
+  pathname,
+  hasPermission,
+  t,
+}: {
+  items: NavItem[];
+  pathname: string;
+  hasPermission: (permission: PermissionKey) => boolean;
+  t: Translate;
+}) {
+  const anyActive = useMemo(
+    () => items.some((item) => isMarketplaceItemActive(pathname, item, hasPermission)),
+    [items, pathname, hasPermission]
+  );
+
+  if (items.length === 0) return null;
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              "group flex w-full items-center justify-center rounded-md px-2 py-2 text-sm transition-all duration-200 hover:bg-accent/60",
+              anyActive && "border-l-2 border-primary bg-primary/10 text-primary"
+            )}
+            aria-label={t("sidebar.marketplacesGroup")}
+            title={t("sidebar.marketplacesGroup")}
+          />
+        }
+      >
+        <Store className="h-4 w-4 shrink-0" />
+      </PopoverTrigger>
+      <PopoverContent side="right" align="start" sideOffset={8} className="w-[min(100vw-2rem,18rem)] p-0">
+        <div className="max-h-[min(70vh,520px)] overflow-y-auto p-2">
+          <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("sidebar.marketplacesGroup")}
+          </p>
+          <div className="space-y-2">
+            {items.map((item) => {
+              const Icon = item.icon;
+              const visibleChildren = visibleNavChildren(item, hasPermission);
+              return (
+                <div
+                  key={item.key}
+                  className="rounded-md border border-border/50 bg-muted/15 p-1.5 dark:bg-muted/25"
+                >
+                  <div className="flex items-center gap-2 px-1.5 py-1 text-xs font-medium">
+                    <Icon className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                    <span className="truncate">{t(item.labelKey)}</span>
+                  </div>
+                  <div className="mt-0.5 space-y-0.5">
+                    {visibleChildren.map((child) => {
+                      const childActive = isActivePath(pathname, child.href);
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          className={cn(
+                            "block rounded-md px-2 py-1 text-[11px] leading-snug text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground",
+                            childActive && "font-medium text-primary"
+                          )}
+                        >
+                          {t(child.labelKey)}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function AppSidebar() {
@@ -259,10 +561,30 @@ export function AppSidebar() {
     () => false
   );
 
+  /** Sidebar-Klapp-Button nur nach Mount: identisches SSR- und erstes Client-HTML (vermeidet Hydration-Fehler). */
+  const [sidebarToggleMounted, setSidebarToggleMounted] = useState(false);
+  useEffect(() => {
+    setSidebarToggleMounted(true);
+  }, []);
+
   // Verhindert Hydration-Mismatch: initial immer expanded rendern,
   // erst nach dem Client-Mount den echten Sidebar-State verwenden.
   const collapsed = isHydrated ? state === "collapsed" : false;
   const canRoleSwitch = !user.isLoading && user.roleKey === "owner" && roleTestingEnabled;
+
+  const filteredNavItems = useMemo(
+    () =>
+      navItems.filter(
+        (item) =>
+          canAccessSidebarItem(item.key) &&
+          (item.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true)
+      ),
+    [canAccessSidebarItem, hasPermission]
+  );
+  const { marketplaces, rest } = useMemo(
+    () => partitionNavItems(filteredNavItems),
+    [filteredNavItems]
+  );
 
   const cycleRole = (direction: "prev" | "next") => {
     if (!canRoleSwitch) return;
@@ -309,81 +631,62 @@ export function AppSidebar() {
               </div>
             </div>
           )}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className={cn(
-              "transition-all duration-200",
-              collapsed ? "absolute top-3 -right-1 z-20" : "ml-3"
-            )}
-            onClick={toggleSidebar}
-          >
-            <ChevronLeft className={cn("h-4 w-4 transition-transform", collapsed && "rotate-180")} />
-          </Button>
+          {sidebarToggleMounted ? (
+            <button
+              type="button"
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "icon-sm" }),
+                "transition-all duration-200",
+                collapsed ? "absolute top-3 -right-1 z-20" : "ml-3"
+              )}
+              onClick={() => toggleSidebar()}
+              aria-label={t("sidebar.toggleSidebar")}
+            >
+              <PanelLeft className="h-4 w-4" aria-hidden />
+            </button>
+          ) : (
+            <span
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "icon-sm" }),
+                "pointer-events-none shrink-0 transition-all duration-200",
+                collapsed ? "absolute top-3 -right-1 z-20" : "ml-3"
+              )}
+              aria-hidden
+              tabIndex={-1}
+            />
+          )}
         </div>
       </SidebarHeader>
 
       <SidebarContent className="p-2">
         <nav className="space-y-1">
-          {navItems
-            .filter(
-              (item) =>
-                canAccessSidebarItem(item.key) &&
-                (item.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true)
+          {marketplaces.length > 0 ? (
+            collapsed ? (
+              <CollapsedMarketplacePopover
+                items={marketplaces}
+                pathname={pathname}
+                hasPermission={hasPermission}
+                t={t}
+              />
+            ) : (
+              <MarketplaceExpandedGroup
+                items={marketplaces}
+                pathname={pathname}
+                hasPermission={hasPermission}
+                t={t}
+              />
             )
-            .map((item) => {
-            const { primaryHref, activePrefix } = resolveNavLink(item, hasPermission);
-            const active = isActivePath(pathname, activePrefix);
-            const Icon = item.icon;
-            const visibleChildren = visibleNavChildren(item, hasPermission);
-
-            const baseLink = (
-              <Link
-                href={primaryHref}
-                className={cn(
-                  "group flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-all duration-200 hover:bg-accent/60",
-                  active && "border-l-2 border-primary bg-primary/10 text-primary",
-                  collapsed && "justify-center px-2"
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {!collapsed ? <span className="truncate">{t(item.labelKey)}</span> : null}
-              </Link>
-            );
-
-            return (
-              <div key={item.key} className="space-y-1">
-                {collapsed ? (
-                  <Tooltip>
-                    <TooltipTrigger render={<div />}>{baseLink}</TooltipTrigger>
-                    <TooltipContent side="right">{t(item.labelKey)}</TooltipContent>
-                  </Tooltip>
-                ) : (
-                  baseLink
-                )}
-
-                {!collapsed && visibleChildren.length ? (
-                  <div className="ml-7 space-y-1 border-l border-border pl-3">
-                    {visibleChildren.map((child) => {
-                      const childActive = isActivePath(pathname, child.href);
-                      return (
-                        <Link
-                          key={child.href}
-                          href={child.href}
-                          className={cn(
-                            "block rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
-                            childActive && "text-primary"
-                          )}
-                        >
-                          {t(child.labelKey)}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            );
-            })}
+          ) : null}
+          {rest.map((item) => (
+            <SingleNavItem
+              key={item.key}
+              item={item}
+              pathname={pathname}
+              hasPermission={hasPermission}
+              collapsed={collapsed}
+              t={t}
+            />
+          ))}
         </nav>
       </SidebarContent>
 
@@ -496,6 +799,20 @@ export function MobileSidebarTrigger() {
   const { t, locale } = useTranslation();
   const user = useUser();
   const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole } = usePermissions();
+
+  const filteredNavItems = useMemo(
+    () =>
+      navItems.filter(
+        (item) =>
+          canAccessSidebarItem(item.key) &&
+          (item.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true)
+      ),
+    [canAccessSidebarItem, hasPermission]
+  );
+  const { marketplaces, rest } = useMemo(
+    () => partitionNavItems(filteredNavItems),
+    [filteredNavItems]
+  );
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
   const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
   const setRoleTestingEnabled = useAppStore(
@@ -552,48 +869,24 @@ export function MobileSidebarTrigger() {
           <SheetDescription className="text-xs">{t("sidebar.navigation")}</SheetDescription>
         </SheetHeader>
         <nav className="space-y-1 px-4 pb-4">
-          {navItems
-            .filter(
-              (item) =>
-                canAccessSidebarItem(item.key) &&
-                (item.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true)
-            )
-            .map((item) => {
-            const Icon = item.icon;
-            const { primaryHref, activePrefix } = resolveNavLink(item, hasPermission);
-            const active = isActivePath(pathname, activePrefix);
-            const visibleChildren = visibleNavChildren(item, hasPermission);
-            return (
-              <div key={item.key} className="space-y-1">
-                  <Link
-                  href={primaryHref}
-                  className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-all duration-200 hover:bg-accent/60",
-                    active && "border-l-2 border-primary bg-primary/10 text-primary"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{t(item.labelKey)}</span>
-                </Link>
-                {visibleChildren.length ? (
-                  <div className="ml-7 space-y-1 border-l border-border/50 pl-3">
-                    {visibleChildren.map((child) => (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        className={cn(
-                            "block rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
-                            isActivePath(pathname, child.href) && "text-primary"
-                          )}
-                        >
-                          {t(child.labelKey)}
-                        </Link>
-                      ))}
-                    </div>
-                  ) : null}
-              </div>
-            );
-            })}
+          {marketplaces.length > 0 ? (
+            <MarketplaceExpandedGroup
+              items={marketplaces}
+              pathname={pathname}
+              hasPermission={hasPermission}
+              t={t}
+            />
+          ) : null}
+          {rest.map((item) => (
+            <SingleNavItem
+              key={item.key}
+              item={item}
+              pathname={pathname}
+              hasPermission={hasPermission}
+              collapsed={false}
+              t={t}
+            />
+          ))}
         </nav>
         <div className="mt-auto border-t border-border/50 p-4">
           <DropdownMenu>

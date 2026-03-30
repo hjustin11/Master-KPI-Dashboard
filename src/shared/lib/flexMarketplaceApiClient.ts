@@ -46,7 +46,8 @@ export function resolveFlexBaseUrl(raw: string): string {
 export type FlexAuthKind = "single_key" | "client_secret";
 
 /** `mirakl` = Authorization nur API-Key; `basic` = Basic client:secret (TikTok u. Ä.). */
-export type FlexAuthMode = "bearer" | "x-api-key" | "mirakl" | "basic";
+/** `shopify` = `X-Shopify-Access-Token` (Admin API). */
+export type FlexAuthMode = "bearer" | "x-api-key" | "mirakl" | "basic" | "shopify";
 
 export type FlexMarketplaceSpec = {
   id: string;
@@ -88,6 +89,17 @@ export const FLEX_MARKETPLACE_TIKTOK_SPEC: FlexMarketplaceSpec = {
   baseUrlHintKey: "TIKTOK_API_BASE_URL",
 };
 
+/** Shopify Admin API: Basis = Shop-URL (`https://ihr-shop.myshopify.com`), Token = Admin API access token. */
+export const FLEX_MARKETPLACE_SHOPIFY_SPEC: FlexMarketplaceSpec = {
+  id: "shopify",
+  marketplaceLabel: "Shopify",
+  envPrefix: "SHOPIFY",
+  authKind: "single_key",
+  defaultOrdersPath: "/admin/api/2024-10/orders.json",
+  defaultAuthMode: "shopify",
+  baseUrlHintKey: "SHOPIFY_API_BASE_URL",
+};
+
 export type FlexIntegrationConfig = {
   spec: FlexMarketplaceSpec;
   marketplaceLabel: string;
@@ -125,6 +137,7 @@ export async function getFlexIntegrationConfig(spec: FlexMarketplaceSpec): Promi
   if (authRaw === "x-api-key") authMode = "x-api-key";
   else if (authRaw === "mirakl" || authRaw === "authorization") authMode = "mirakl";
   else if (authRaw === "basic") authMode = "basic";
+  else if (authRaw === "shopify") authMode = "shopify";
   else authMode = "bearer";
 
   const scaleRaw = await readEnv(p, "AMOUNT_SCALE");
@@ -152,7 +165,7 @@ export async function getFlexIntegrationConfig(spec: FlexMarketplaceSpec): Promi
       ? false
       : dateFilterRaw === "true" || dateFilterRaw === "1" || dateFilterRaw === "yes"
         ? true
-        : ordersPath.includes("/api/orders");
+        : ordersPath.includes("/api/orders") || spec.id === "shopify";
 
   return {
     spec,
@@ -195,6 +208,8 @@ function flexAuthHeaders(config: FlexIntegrationConfig): Record<string, string> 
     h["X-API-Key"] = config.apiKey;
   } else if (config.authMode === "mirakl") {
     h.Authorization = config.apiKey;
+  } else if (config.authMode === "shopify") {
+    h["X-Shopify-Access-Token"] = config.apiKey;
   } else {
     h.Authorization = `Bearer ${config.apiKey}`;
   }
@@ -229,6 +244,22 @@ function formatFetchError(err: unknown, baseUrlHintKey: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function looksLikeHtmlResponse(text: string): boolean {
+  const head = text.trimStart().slice(0, 800);
+  return /^<!DOCTYPE\s+html/i.test(head) || /<html[\s>]/i.test(head);
+}
+
+/** Kurzhinweis wenn der Server HTML statt JSON liefert (falsche URL/Pfad oder Web-UI). */
+function nonJsonBodyHint(text: string, envPrefix: string): string {
+  if (!looksLikeHtmlResponse(text)) return "";
+  return [
+    " Antwort ist HTML, kein JSON — die konfigurierte URL liefert keine Orders-API.",
+    ` Prüfen: ${envPrefix}_API_BASE_URL (nur HTTPS-API-Host, keine Seller-Web-UI) und ${envPrefix}_ORDERS_PATH.`,
+    " TikTok Shop Open API (Partner Center) nutzt andere Endpoints, signierte Requests und meist POST — nicht GET /orders mit Basic-Auth;",
+    " ohne eigenes Backend/Proxy passt diese Integration nicht „out of the box“.",
+  ].join("");
 }
 
 function retryAfterToMs(header: string | null): number | null {
@@ -383,7 +414,9 @@ export function normalizeFlexOrder(raw: unknown, amountScale: number): FlexNorma
     }, 0);
   }
 
-  const status = String(o.status ?? o.state ?? o.order_state ?? o.order_status ?? "");
+  const status = String(
+    o.status ?? o.financial_status ?? o.state ?? o.order_state ?? o.order_status ?? ""
+  );
 
   return {
     id,
@@ -395,10 +428,112 @@ export function normalizeFlexOrder(raw: unknown, amountScale: number): FlexNorma
   };
 }
 
+function parseShopifyNextRelativePath(linkHeader: string | null, baseUrlRaw: string): string | null {
+  if (!linkHeader?.trim()) return null;
+  let baseOrigin: string;
+  try {
+    baseOrigin = new URL(baseUrlRaw.replace(/\/+$/, "")).origin;
+  } catch {
+    return null;
+  }
+  for (const segment of linkHeader.split(",")) {
+    const m = segment.trim().match(/<([^>]+)>\s*;\s*rel="next"/i);
+    if (!m?.[1]) continue;
+    try {
+      const u = new URL(m[1].trim());
+      if (u.origin !== baseOrigin) continue;
+      return u.pathname + u.search;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function buildShopifyOrdersPath(
+  config: FlexIntegrationConfig,
+  pageLimit: number,
+  dateFilter?: { fromMs: number; toMsExclusive: number }
+): string {
+  const params = new URLSearchParams();
+  params.set("limit", String(Math.min(250, Math.max(1, pageLimit))));
+  params.set("status", "any");
+  if (
+    config.useOrderDateFilter &&
+    dateFilter &&
+    Number.isFinite(dateFilter.fromMs) &&
+    Number.isFinite(dateFilter.toMsExclusive) &&
+    dateFilter.toMsExclusive > dateFilter.fromMs
+  ) {
+    params.set("created_at_min", new Date(dateFilter.fromMs).toISOString());
+    params.set("created_at_max", new Date(dateFilter.toMsExclusive - 1).toISOString());
+  }
+  const path = config.ordersPath;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}${params.toString()}`;
+}
+
+async function fetchShopifyOrdersPaginatedImpl(
+  config: FlexIntegrationConfig,
+  options: FetchFlexOrdersOptions = {}
+): Promise<FlexNormalizedOrder[]> {
+  const maxPages = options.maxPages ?? 40;
+  const pageLimit = 100;
+  const dateFilter =
+    options.createdFromMs != null && options.createdToMsExclusive != null
+      ? { fromMs: options.createdFromMs, toMsExclusive: options.createdToMsExclusive }
+      : undefined;
+
+  const out: FlexNormalizedOrder[] = [];
+  const label = config.marketplaceLabel;
+  let nextPath: string | null = buildShopifyOrdersPath(config, pageLimit, dateFilter);
+
+  for (let page = 0; page < maxPages && nextPath; page += 1) {
+    if (page > 0 && config.paginationDelayMs > 0) {
+      await sleep(config.paginationDelayMs);
+    }
+    const path = nextPath.startsWith("/") ? nextPath : `/${nextPath}`;
+    const { res, text } = await flexGetWith429Retry(config, path);
+    let json: unknown = null;
+    try {
+      json = text ? (JSON.parse(text) as unknown) : null;
+    } catch {
+      json = null;
+    }
+    if (!res.ok || json == null) {
+      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 400);
+      const htmlHint = json == null ? nonJsonBodyHint(text, config.envPrefix) : "";
+      if (page === 0) {
+        const rateHint =
+          res.status === 429
+            ? ` Zu viele Anfragen (Rate Limit). Optional ${config.envPrefix}_PAGINATION_DELAY_MS erhöhen.`
+            : "";
+        throw new Error(
+          `${label}: orders request failed (HTTP ${res.status}).${rateHint}${htmlHint || (snippet ? ` ${snippet}` : "")}`
+        );
+      }
+      break;
+    }
+    const chunk = extractOrdersArray(json);
+    for (const raw of chunk) {
+      const n = normalizeFlexOrder(raw, config.amountScale);
+      if (n) out.push(n);
+    }
+    if (chunk.length === 0) break;
+    nextPath = parseShopifyNextRelativePath(res.headers.get("Link"), config.baseUrl);
+    if (!nextPath) break;
+  }
+
+  return out;
+}
+
 export async function fetchFlexOrdersPaginated(
   config: FlexIntegrationConfig,
   options: FetchFlexOrdersOptions = {}
 ): Promise<FlexNormalizedOrder[]> {
+  if (config.spec.id === "shopify") {
+    return fetchShopifyOrdersPaginatedImpl(config, options);
+  }
   const maxPages = options.maxPages ?? 40;
   const limit = 100;
   const dateFilter =
@@ -422,14 +557,15 @@ export async function fetchFlexOrdersPaginated(
       json = null;
     }
     if (!res.ok || json == null) {
-      const hint = text.replace(/\s+/g, " ").trim().slice(0, 400);
+      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 400);
+      const htmlHint = json == null ? nonJsonBodyHint(text, config.envPrefix) : "";
       if (page === 0) {
         const rateHint =
           res.status === 429
             ? ` Zu viele Anfragen (Rate Limit). Optional ${config.envPrefix}_PAGINATION_DELAY_MS erhöhen.`
             : "";
         throw new Error(
-          `${label}: orders request failed (HTTP ${res.status}).${rateHint}${hint ? ` ${hint}` : ""}`
+          `${label}: orders request failed (HTTP ${res.status}).${rateHint}${htmlHint || (snippet ? ` ${snippet}` : "")}`
         );
       }
       break;

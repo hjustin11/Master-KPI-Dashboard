@@ -16,6 +16,7 @@ export type SidebarItemKey =
   | "mediamarktSaturn"
   | "zooplus"
   | "tiktok"
+  | "shopify"
   | "xentral"
   | "advertising"
   | "analytics"
@@ -55,6 +56,7 @@ export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey }> = [
   { key: "mediamarktSaturn" },
   { key: "zooplus" },
   { key: "tiktok" },
+  { key: "shopify" },
   { key: "xentral" },
   { key: "advertising" },
   { key: "analytics" },
@@ -94,6 +96,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     mediamarktSaturn: true,
     zooplus: true,
     tiktok: true,
+    shopify: true,
     xentral: true,
     advertising: true,
     analytics: true,
@@ -109,6 +112,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     mediamarktSaturn: true,
     zooplus: true,
     tiktok: true,
+    shopify: true,
     xentral: true,
     advertising: true,
     analytics: true,
@@ -124,6 +128,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     mediamarktSaturn: true,
     zooplus: true,
     tiktok: true,
+    shopify: true,
     xentral: true,
     advertising: true,
     analytics: true,
@@ -139,6 +144,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     mediamarktSaturn: false,
     zooplus: false,
     tiktok: false,
+    shopify: false,
     xentral: false,
     advertising: false,
     analytics: true,
@@ -154,6 +160,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     mediamarktSaturn: false,
     zooplus: false,
     tiktok: false,
+    shopify: false,
     xentral: false,
     advertising: false,
     analytics: false,

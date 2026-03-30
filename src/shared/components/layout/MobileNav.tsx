@@ -104,7 +104,7 @@ const moreItems: Array<{
   requiredPermissions?: PermissionKey[];
 }> = [
   { key: "analytics", label: "Marktplätze", href: "/analytics/marketplaces", requiredPermissions: ["export_data"] },
-  { key: "analytics", label: "Artikelprognose", href: "/analytics/article-forecast", requiredPermissions: ["export_data"] },
+  { key: "analytics", label: "Bedarfsprognose", href: "/analytics/article-forecast", requiredPermissions: ["export_data"] },
   { key: "analytics", label: "Beschaffung", href: "/analytics/procurement", requiredPermissions: ["export_data"] },
   { key: "analytics", label: "Performance", href: "/analytics/performance", requiredPermissions: ["export_data"] },
   {

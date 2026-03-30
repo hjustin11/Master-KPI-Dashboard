@@ -38,7 +38,7 @@ export function addDaysToYmd(ymd: string, days: number): string {
 
 /**
  * Standard-Zeitraum: 90 Kalendertage inkl. Berlin-„heute“ (from = to − 89 Tage),
- * konsistent mit der Regel „Verkaufsfenster (Tage)“ in der Artikelprognose.
+ * konsistent mit der Regel „Verkaufsfenster (Tage)“ in der Bedarfsprognose.
  */
 export function defaultArticleForecastFromToYmd(): { fromYmd: string; toYmd: string } {
   const toYmd = formatInstantAsBerlinYmd(new Date());
@@ -70,7 +70,7 @@ export function clampForecastDateRange(fromYmd: string, toYmd: string): { fromYm
 }
 
 /**
- * Einheitliche Spaltennamen in der Artikelprognose: AMZ-FBA + AMZ-FBM → „Amazon“.
+ * Einheitliche Spaltennamen in der Bedarfsprognose: AMZ-FBA + AMZ-FBM → „Amazon“.
  */
 export function normalizeArticleForecastProjectLabel(label: string): string {
   const t = label.trim();

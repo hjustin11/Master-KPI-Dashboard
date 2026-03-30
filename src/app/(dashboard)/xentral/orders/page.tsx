@@ -677,11 +677,11 @@ export default function XentralOrdersPage() {
   const intlTag = intlLocaleTag(locale);
   const formatMoney = useCallback(
     (amount: number | null, currency: string | null) => {
-      if (amount == null || !Number.isFinite(amount)) return "—";
+  if (amount == null || !Number.isFinite(amount)) return "—";
       return new Intl.NumberFormat(intlTag, {
-        style: "currency",
-        currency: (currency || "EUR").trim() || "EUR",
-      }).format(amount);
+    style: "currency",
+    currency: (currency || "EUR").trim() || "EUR",
+  }).format(amount);
     },
     [intlTag]
   );
@@ -1094,7 +1094,7 @@ export default function XentralOrdersPage() {
     }
 
     if (forceRefresh && !silent) {
-      setIsLoading(true);
+    setIsLoading(true);
     } else if (!hadCache && !silent) {
       setIsLoading(true);
     }
@@ -1106,7 +1106,7 @@ export default function XentralOrdersPage() {
     }
 
     if (!silent) {
-      setError(null);
+    setError(null);
     }
 
     try {
@@ -1159,8 +1159,8 @@ export default function XentralOrdersPage() {
       if (forceRefresh) {
         stored = nextItems;
         dataRef.current = nextItems;
-        setData(nextItems);
-        setDisplayedRows(nextItems);
+      setData(nextItems);
+      setDisplayedRows(nextItems);
       } else {
         const merged = mergeXentralOrderLists(dataRef.current, nextItems, {
           dropMissingFromPrevious: fetchMode === "recent",
@@ -1220,8 +1220,8 @@ export default function XentralOrdersPage() {
       }
     } finally {
       if (!silent) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
+    }
       if (showBackgroundIndicator) {
         setIsBackgroundSyncing(false);
       }
@@ -1661,9 +1661,9 @@ export default function XentralOrdersPage() {
             </DialogContent>
           </Dialog>
 
-          <DataTable
-            columns={columns}
-            data={dateFilteredData}
+        <DataTable
+          columns={columns}
+          data={dateFilteredData}
             filterColumn={t("filters.xentralOrders")}
             toolbarBetween={
               <Button
@@ -1682,57 +1682,57 @@ export default function XentralOrdersPage() {
                 ) : null}
               </Button>
             }
-            toolbarEnd={
-              <div className="flex flex-wrap items-center justify-end gap-3">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="xentral-orders-date-from" className="shrink-0 text-muted-foreground">
+          toolbarEnd={
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="xentral-orders-date-from" className="shrink-0 text-muted-foreground">
                     {t("dates.from")}
-                  </Label>
-                  <Input
-                    id="xentral-orders-date-from"
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="w-[min(100%,11rem)] tabular-nums"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="xentral-orders-date-to" className="shrink-0 text-muted-foreground">
-                    {t("dates.to")}
-                  </Label>
-                  <Input
-                    id="xentral-orders-date-to"
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="w-[min(100%,11rem)] tabular-nums"
-                  />
-                </div>
-                {!dateFilterIsDefault ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="shrink-0 text-muted-foreground"
-                    disabled={!hasMounted}
-                    onClick={() => {
-                      const d = defaultBerlinLastTwoDays();
-                      berlinRangeRef.current = { from: d.from, to: d.to };
-                      setDateFrom(d.from);
-                      setDateTo(d.to);
-                    }}
-                  >
-                    {t("xentralOrders.lastTwoDays")}
-                  </Button>
-                ) : null}
+                </Label>
+                <Input
+                  id="xentral-orders-date-from"
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-[min(100%,11rem)] tabular-nums"
+                />
               </div>
-            }
-            paginate={false}
+              <div className="flex items-center gap-2">
+                <Label htmlFor="xentral-orders-date-to" className="shrink-0 text-muted-foreground">
+                    {t("dates.to")}
+                </Label>
+                <Input
+                  id="xentral-orders-date-to"
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-[min(100%,11rem)] tabular-nums"
+                />
+              </div>
+              {!dateFilterIsDefault ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0 text-muted-foreground"
+                  disabled={!hasMounted}
+                  onClick={() => {
+                    const d = defaultBerlinLastTwoDays();
+                    berlinRangeRef.current = { from: d.from, to: d.to };
+                    setDateFrom(d.from);
+                    setDateTo(d.to);
+                  }}
+                >
+                    {t("xentralOrders.lastTwoDays")}
+                </Button>
+              ) : null}
+            </div>
+          }
+          paginate={false}
             compact
-            className="flex-1 min-h-0"
-            tableWrapClassName="min-h-0"
-            onDisplayedRowsChange={setDisplayedRows}
-          />
+          className="flex-1 min-h-0"
+          tableWrapClassName="min-h-0"
+          onDisplayedRowsChange={setDisplayedRows}
+        />
         </>
       )}
     </div>

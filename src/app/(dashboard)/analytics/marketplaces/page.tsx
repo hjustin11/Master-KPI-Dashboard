@@ -1,7 +1,7 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { differenceInCalendarDays, format } from "date-fns";
 import type { Locale as DateFnsLocale } from "date-fns/locale";
@@ -32,12 +32,22 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { MarketplacePriceParitySection } from "./MarketplacePriceParitySection";
 import { MarketplaceRevenueChart, enumerateYmd } from "./MarketplaceRevenueChart";
 import {
-  loadBands,
-  saveBands,
+  MARKETPLACE_REVENUE_LINE_COLORS,
+  MarketplaceTotalRevenueLinesChart,
+  type MarketplaceRevenueLineSeries,
+} from "./MarketplaceTotalRevenueLinesChart";
+import {
+  bandsForMarketplaceChart,
+  bandsForTotalChart,
   type MarketplaceActionBand,
+  type PromotionDeal,
 } from "./marketplaceActionBands";
+import { PromotionDealsDialog } from "./PromotionDealsDialog";
+import { usePromotionDeals } from "./usePromotionDeals";
+import { MarketplaceBrandImg } from "@/shared/components/MarketplaceBrandImg";
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
+  readAnalyticsSalesCompareInitial,
   readLocalJsonCache,
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
@@ -137,6 +147,13 @@ const MARKETPLACE_TILE_LOGO: Record<MarketplaceTileLogoPreset, { slot: string; i
 
 const COMPACT_LOGO_SLUGS = new Set(["kaufland", "otto"]);
 
+const MARKETPLACE_TILE_GRID_CLASS = "grid gap-2 sm:grid-cols-2 xl:grid-cols-3";
+
+const MARKETPLACE_TILE_BTN_CLASS =
+  "group flex h-full min-h-0 w-full flex-col rounded-lg border border-border/60 bg-card/90 p-2 text-left shadow-sm transition-all hover:border-primary/35 hover:shadow-md";
+
+const MARKETPLACE_TILE_KPI_GRID_CLASS = "mt-auto grid grid-cols-2 gap-1 pt-2";
+
 function placeholderTileLogoPreset(slug: string): Exclude<MarketplaceTileLogoPreset, "amazon"> {
   if (slug === "zooplus") return "zooplus";
   if (COMPACT_LOGO_SLUGS.has(slug)) return "compact";
@@ -187,6 +204,22 @@ type FressnapfSalesCompareResponse = AmazonSalesCompareResponse;
 type MmsSalesCompareResponse = AmazonSalesCompareResponse;
 type ZooplusSalesCompareResponse = AmazonSalesCompareResponse;
 type TiktokSalesCompareResponse = AmazonSalesCompareResponse;
+type ShopifySalesCompareResponse = AmazonSalesCompareResponse;
+
+const salesCompareInitMemo = new Map<string, { data: unknown; loading: boolean }>();
+
+/** Einmal pro storagePrefix + Default-Zeitraum: vermeidet doppeltes Lesen von localStorage bei useState. */
+function getSalesCompareInitForDefaultPeriod<T extends AmazonSalesCompareResponse>(
+  storagePrefix: string
+): { data: T | null; loading: boolean } {
+  const { from, to } = defaultPeriod();
+  const fullKey = `${storagePrefix}:${from}:${to}`;
+  const hit = salesCompareInitMemo.get(fullKey);
+  if (hit) return hit as { data: T | null; loading: boolean };
+  const v = readAnalyticsSalesCompareInitial<T>(fullKey);
+  salesCompareInitMemo.set(fullKey, v);
+  return v;
+}
 
 function formatCurrency(amount: number, currency: string, intlTag: string) {
   return new Intl.NumberFormat(intlTag, {
@@ -240,12 +273,14 @@ function MiniKpi({
   value,
   trendDirection = "unknown",
   compact = false,
+  className,
 }: {
   label: string;
   value: string;
   trendDirection?: TrendDirection;
   /** Kompaktere Darstellung in Marktplatz-Kacheln. */
   compact?: boolean;
+  className?: string;
 }) {
   const showTrend =
     trendDirection !== "unknown" && trendDirection !== "flat" && value !== PLACEHOLDER;
@@ -254,7 +289,8 @@ function MiniKpi({
     <div
       className={cn(
         "rounded-md border border-border/50 bg-background/60",
-        compact ? "px-1.5 py-1" : "rounded-lg px-2 py-1.5"
+        compact ? "px-1.5 py-1" : "rounded-lg px-2 py-1.5",
+        className
       )}
     >
       <p
@@ -320,6 +356,18 @@ function buildMarketplaceTotals(
   const revenueDeltaPct =
     prevRevenue > 0 ? Number((((revenue - prevRevenue) / prevRevenue) * 100).toFixed(1)) : null;
   return { revenue, orders, units, currency, prevRevenue, revenueDeltaPct };
+}
+
+/** Währung für Gesamt-Diagramm: wie KPI-Summe oder erste Kanal-Währung. */
+function pickRevenueChartCurrency(
+  totals: TotalsInput | null,
+  ...responses: (AmazonSalesCompareResponse | null | undefined)[]
+): string {
+  if (totals?.currency) return totals.currency;
+  for (const r of responses) {
+    if (r?.summary?.currency) return r.summary.currency;
+  }
+  return "EUR";
 }
 
 function PeriodRangePicker({
@@ -388,22 +436,32 @@ function PeriodRangePicker({
 
 function TotalMarketplacesKpiStrip({
   loading,
-  error,
   totals,
+  revenueLineSeries,
+  revenueChartCurrency,
+  totalChartDailyOrders,
+  totalChartPreviousRevenue,
+  totalChartBands,
   periodFrom,
   periodTo,
   onPeriodChange,
+  onOpenPromotionDeals,
   backgroundSyncing,
   dfLocale,
   intlTag,
   t,
 }: {
   loading: boolean;
-  error: string | null;
   totals: TotalsInput | null;
+  revenueLineSeries: MarketplaceRevenueLineSeries[];
+  revenueChartCurrency: string;
+  totalChartDailyOrders: number[];
+  totalChartPreviousRevenue: number[] | null;
+  totalChartBands: MarketplaceActionBand[];
   periodFrom: string;
   periodTo: string;
   onPeriodChange: (from: string, to: string) => void;
+  onOpenPromotionDeals: () => void;
   backgroundSyncing?: boolean;
   dfLocale: DateFnsLocale;
   intlTag: string;
@@ -429,18 +487,13 @@ function TotalMarketplacesKpiStrip({
   }, [periodFrom, periodTo, dfLocale, t]);
 
   return (
-    <section className="rounded-lg border border-border/60 bg-card/90 p-3 shadow-sm md:p-4">
-      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1 pr-2">
-          <h2 className="text-sm font-semibold tracking-tight text-foreground">
-            {t("analyticsMp.totalTitle")}
-          </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {t("analyticsMp.totalSubtitle")}{" "}
-            <span className="font-medium text-foreground/80">{t("analyticsMp.totalSubtitleMore")}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <section className="overflow-hidden rounded-2xl border border-border/50 bg-card p-3 shadow-sm ring-1 ring-border/30 md:p-5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="sr-only">{t("analyticsMp.totalTitle")}</h2>
+        <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={onOpenPromotionDeals}>
+          {t("analyticsMp.promotionsButton")}
+        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <PeriodRangePicker
             periodFrom={periodFrom}
             periodTo={periodTo}
@@ -457,38 +510,81 @@ function TotalMarketplacesKpiStrip({
         </div>
       </div>
 
-      {error ? (
-        <p className="mb-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11px] text-amber-900">
-          {t("analyticsMp.totalIncomplete", { message: error })}
-        </p>
-      ) : null}
-
       {loading ? (
-        <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-[64px] animate-pulse rounded-lg bg-muted/60" />
-          ))}
-        </div>
-      ) : totals ? (
-        <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
-          <MiniKpi
-            label={gesamtLabels.revenue}
-            value={formatCurrency(totals.revenue, totals.currency, intlTag)}
-          />
-          <MiniKpi label={t("analyticsMp.ordersTotal")} value={formatInt(totals.orders, intlTag)} />
-          <MiniKpi label={t("analyticsMp.unitsTotal")} value={formatInt(totals.units, intlTag)} />
-          <MiniKpi
-            label={gesamtLabels.trend}
-            value={trend.text}
-            trendDirection={trend.direction}
-          />
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-[72px] animate-pulse rounded-xl bg-muted/50" />
+            ))}
+          </div>
+          <div className="h-[min(300px,44vh)] w-full animate-pulse rounded-2xl bg-muted/40" />
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
-          <MiniKpi label={gesamtLabels.revenue} value={PLACEHOLDER} />
-          <MiniKpi label={t("analyticsMp.ordersTotal")} value={PLACEHOLDER} />
-          <MiniKpi label={t("analyticsMp.unitsTotal")} value={PLACEHOLDER} />
-          <MiniKpi label={gesamtLabels.trend} value={PLACEHOLDER} />
+        <div className="space-y-4">
+          {totals ? (
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <MiniKpi
+                className="border-border/40 bg-gradient-to-br from-primary/5 to-transparent shadow-sm md:col-span-1 md:py-2"
+                label={gesamtLabels.revenue}
+                value={formatCurrency(totals.revenue, totals.currency, intlTag)}
+              />
+              <MiniKpi
+                className="border-border/40 bg-background/90 shadow-sm md:py-2"
+                label={t("analyticsMp.ordersTotal")}
+                value={formatInt(totals.orders, intlTag)}
+              />
+              <MiniKpi
+                className="border-border/40 bg-background/90 shadow-sm md:py-2"
+                label={t("analyticsMp.unitsTotal")}
+                value={formatInt(totals.units, intlTag)}
+              />
+              <MiniKpi
+                className="border-border/40 bg-background/90 shadow-sm md:py-2"
+                label={gesamtLabels.trend}
+                value={trend.text}
+                trendDirection={trend.direction}
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <MiniKpi
+                className="border-border/40 bg-background/90 md:py-2"
+                label={gesamtLabels.revenue}
+                value={PLACEHOLDER}
+              />
+              <MiniKpi
+                className="border-border/40 bg-background/90 md:py-2"
+                label={t("analyticsMp.ordersTotal")}
+                value={PLACEHOLDER}
+              />
+              <MiniKpi
+                className="border-border/40 bg-background/90 md:py-2"
+                label={t("analyticsMp.unitsTotal")}
+                value={PLACEHOLDER}
+              />
+              <MiniKpi
+                className="border-border/40 bg-background/90 md:py-2"
+                label={gesamtLabels.trend}
+                value={PLACEHOLDER}
+              />
+            </div>
+          )}
+          <MarketplaceTotalRevenueLinesChart
+            periodFrom={periodFrom}
+            periodTo={periodTo}
+            series={revenueLineSeries}
+            dailyOrders={totalChartDailyOrders}
+            previousRevenue={totalChartPreviousRevenue}
+            displayCurrency={revenueChartCurrency}
+            intlTag={intlTag}
+            dfLocale={dfLocale}
+            formatCurrency={(amount, currency) => formatCurrency(amount, currency, intlTag)}
+            formatInt={(n) => formatInt(n, intlTag)}
+            emptyLabel={t("analyticsMp.totalRevenueChartEmpty")}
+            ordersLabel={t("analyticsChart.ordersPerDay")}
+            prevPeriodLabel={t("analyticsChart.prevPeriodLine")}
+            bands={totalChartBands}
+          />
         </div>
       )}
     </section>
@@ -551,6 +647,14 @@ function MarketplaceDetailDialog({
   tiktokTrend,
   tiktokPoints,
   tiktokPreviousPoints,
+  shopifyLoading,
+  shopifyError,
+  shopifySummary,
+  shopifyPreviousSummary,
+  shopifyTrend,
+  shopifyPoints,
+  shopifyPreviousPoints,
+  promotionDeals,
   periodKpis,
   intlTag,
   dfLocale,
@@ -611,6 +715,14 @@ function MarketplaceDetailDialog({
   tiktokTrend: { text: string; direction: TrendDirection };
   tiktokPoints: AmazonSalesPoint[];
   tiktokPreviousPoints: AmazonSalesPoint[] | undefined;
+  shopifyLoading: boolean;
+  shopifyError: string | null;
+  shopifySummary: ShopifySalesCompareResponse["summary"] | undefined;
+  shopifyPreviousSummary: ShopifySalesCompareResponse["previousSummary"] | undefined;
+  shopifyTrend: { text: string; direction: TrendDirection };
+  shopifyPoints: AmazonSalesPoint[];
+  shopifyPreviousPoints: AmazonSalesPoint[] | undefined;
+  promotionDeals: PromotionDeal[];
   periodKpis: ReturnType<typeof kpiLabelsForPeriod>;
   intlTag: string;
   dfLocale: DateFnsLocale;
@@ -626,17 +738,10 @@ function MarketplaceDetailDialog({
       ? "Amazon"
       : (getMarketplaceBySlug(marketplaceId)?.label ?? marketplaceId);
 
-  const [actionBands, setActionBands] = useState<MarketplaceActionBand[]>([]);
-
-  useEffect(() => {
-    if (!open) return;
-    setActionBands(loadBands(marketplaceId));
-  }, [open, marketplaceId, index]);
-
-  const persistActionBands = useCallback((next: MarketplaceActionBand[]) => {
-    setActionBands(next);
-    saveBands(marketplaceId, next);
-  }, [marketplaceId]);
+  const chartBands = useMemo(
+    () => bandsForMarketplaceChart(promotionDeals, marketplaceId),
+    [promotionDeals, marketplaceId]
+  );
 
   const marketplaceMetrics =
     marketplaceId === "amazon"
@@ -716,7 +821,18 @@ function MarketplaceDetailDialog({
                       previousPoints: tiktokPreviousPoints,
                       orderLink: "/tiktok/orders",
                     }
-                  : null;
+                  : marketplaceId === "shopify"
+                    ? {
+                        loading: shopifyLoading,
+                        error: shopifyError,
+                        summary: shopifySummary,
+                        previousSummary: shopifyPreviousSummary,
+                        trend: shopifyTrend,
+                        points: shopifyPoints,
+                        previousPoints: shopifyPreviousPoints,
+                        orderLink: "/shopify/orders",
+                      }
+                    : null;
 
   const dayKpis = useMemo(() => {
     if (!marketplaceMetrics?.summary) return null;
@@ -759,11 +875,9 @@ function MarketplaceDetailDialog({
   const logoBlock =
     marketplaceId === "amazon" ? (
       <div className={cn(MARKETPLACE_TILE_LOGO.amazon.slot, "mx-auto justify-center")}>
-        <Image
+        <MarketplaceBrandImg
           src="/brand/amazon-logo-current.png"
           alt="Amazon"
-          width={320}
-          height={64}
           className={cn(MARKETPLACE_TILE_LOGO.amazon.img, "max-h-16")}
         />
       </div>
@@ -774,7 +888,7 @@ function MarketplaceDetailDialog({
         const { slot, img } = MARKETPLACE_TILE_LOGO[placeholderTileLogoPreset(marketplaceId)];
         return (
           <div className={cn(slot, "mx-auto max-w-full justify-center [&_img]:max-h-20")}>
-            <img src={m.logo} alt={m.label} className={img} />
+            <MarketplaceBrandImg src={m.logo} alt={m.label} className={img} />
           </div>
         );
       })()
@@ -970,7 +1084,9 @@ function MarketplaceDetailDialog({
                           ? t("analyticsMp.linkZooplusOrders")
                           : marketplaceId === "tiktok"
                             ? t("analyticsMp.linkTiktokOrders")
-                            : t("analyticsMp.linkAmazonOrders")}
+                            : marketplaceId === "shopify"
+                              ? t("analyticsMp.linkShopifyOrders")
+                              : t("analyticsMp.linkAmazonOrders")}
               </Link>
             </div>
           ) : null}
@@ -984,8 +1100,7 @@ function MarketplaceDetailDialog({
               points={marketplaceMetrics?.points ?? []}
               previousPoints={marketplaceMetrics?.previousPoints}
               showPreviousLine={!!marketplaceMetrics?.previousSummary}
-              bands={actionBands}
-              onBandsChange={persistActionBands}
+              bands={chartBands}
               chartActive={chartActive}
             />
           </div>
@@ -1020,74 +1135,99 @@ function PlaceholderTile({
     <button
       type="button"
       onClick={onOpenDetail}
-      className="group flex w-full flex-col rounded-lg border border-border/60 bg-card/90 p-2 text-left shadow-sm transition-all hover:border-primary/35 hover:shadow-md"
+      className={MARKETPLACE_TILE_BTN_CLASS}
     >
       <div className="flex items-start justify-between gap-1.5">
         <div className="min-w-0 flex-1">
           <div className={slot}>
-            <img
-              src={logo}
-              alt={label}
-              className={img}
-              loading="lazy"
-              decoding="async"
-            />
+            <MarketplaceBrandImg src={logo} alt={label} className={img} />
           </div>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">{t("analyticsMp.tileClickDetail")}</p>
         </div>
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
           <ArrowRight className="h-3 w-3" aria-hidden />
         </span>
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-1">
+      <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
         <MiniKpi compact label={t("analyticsMp.revenue7d")} value={PLACEHOLDER} />
         <MiniKpi compact label={t("analyticsMp.orders")} value={PLACEHOLDER} />
         <MiniKpi compact label={t("analyticsMp.units")} value={PLACEHOLDER} />
         <MiniKpi compact label={t("analyticsMp.tileTrend")} value={PLACEHOLDER} />
       </div>
-
-      <p className="mt-1.5 text-[9px] leading-snug text-muted-foreground">
-        {t("analyticsMp.tileFooterPlaceholder")}
-      </p>
     </button>
   );
 }
 
-export default function AnalyticsMarketplacesPage() {
+function AnalyticsMarketplacesPage() {
   const { t, locale } = useTranslation();
   const dfLocale = getDateFnsLocale(locale);
   const intlTag = intlLocaleTag(locale);
 
   const [period, setPeriod] = useState(defaultPeriod);
-  const [amazonLoading, setAmazonLoading] = useState(true);
+  const [amazonData, setAmazonData] = useState<AmazonSalesCompareResponse | null>(() =>
+    getSalesCompareInitForDefaultPeriod<AmazonSalesCompareResponse>("analytics_amazon_sales_compare_v1").data
+  );
+  const [amazonLoading, setAmazonLoading] = useState(
+    () => getSalesCompareInitForDefaultPeriod<AmazonSalesCompareResponse>("analytics_amazon_sales_compare_v1").loading
+  );
   const [amazonBackgroundSyncing, setAmazonBackgroundSyncing] = useState(false);
   const [amazonError, setAmazonError] = useState<string | null>(null);
-  const [amazonData, setAmazonData] = useState<AmazonSalesCompareResponse | null>(null);
-  const [ottoLoading, setOttoLoading] = useState(true);
+  const [ottoData, setOttoData] = useState<OttoSalesCompareResponse | null>(() =>
+    getSalesCompareInitForDefaultPeriod<OttoSalesCompareResponse>("analytics_otto_sales_compare_v1").data
+  );
+  const [ottoLoading, setOttoLoading] = useState(
+    () => getSalesCompareInitForDefaultPeriod<OttoSalesCompareResponse>("analytics_otto_sales_compare_v1").loading
+  );
   const [ottoBackgroundSyncing, setOttoBackgroundSyncing] = useState(false);
   const [ottoError, setOttoError] = useState<string | null>(null);
-  const [ottoData, setOttoData] = useState<OttoSalesCompareResponse | null>(null);
-  const [kauflandLoading, setKauflandLoading] = useState(true);
+  const [kauflandData, setKauflandData] = useState<KauflandSalesCompareResponse | null>(() =>
+    getSalesCompareInitForDefaultPeriod<KauflandSalesCompareResponse>("analytics_kaufland_sales_compare_v1").data
+  );
+  const [kauflandLoading, setKauflandLoading] = useState(
+    () => getSalesCompareInitForDefaultPeriod<KauflandSalesCompareResponse>("analytics_kaufland_sales_compare_v1").loading
+  );
   const [kauflandBackgroundSyncing, setKauflandBackgroundSyncing] = useState(false);
   const [kauflandError, setKauflandError] = useState<string | null>(null);
-  const [kauflandData, setKauflandData] = useState<KauflandSalesCompareResponse | null>(null);
-  const [fressnapfLoading, setFressnapfLoading] = useState(true);
+  const [fressnapfData, setFressnapfData] = useState<FressnapfSalesCompareResponse | null>(() =>
+    getSalesCompareInitForDefaultPeriod<FressnapfSalesCompareResponse>("analytics_fressnapf_sales_compare_v1").data
+  );
+  const [fressnapfLoading, setFressnapfLoading] = useState(
+    () => getSalesCompareInitForDefaultPeriod<FressnapfSalesCompareResponse>("analytics_fressnapf_sales_compare_v1").loading
+  );
   const [fressnapfBackgroundSyncing, setFressnapfBackgroundSyncing] = useState(false);
   const [fressnapfError, setFressnapfError] = useState<string | null>(null);
-  const [fressnapfData, setFressnapfData] = useState<FressnapfSalesCompareResponse | null>(null);
-  const [mmsLoading, setMmsLoading] = useState(true);
+  const [mmsData, setMmsData] = useState<MmsSalesCompareResponse | null>(() =>
+    getSalesCompareInitForDefaultPeriod<MmsSalesCompareResponse>("analytics_mms_sales_compare_v1").data
+  );
+  const [mmsLoading, setMmsLoading] = useState(
+    () => getSalesCompareInitForDefaultPeriod<MmsSalesCompareResponse>("analytics_mms_sales_compare_v1").loading
+  );
   const [mmsBackgroundSyncing, setMmsBackgroundSyncing] = useState(false);
   const [mmsError, setMmsError] = useState<string | null>(null);
-  const [mmsData, setMmsData] = useState<MmsSalesCompareResponse | null>(null);
-  const [zooplusLoading, setZooplusLoading] = useState(true);
+  const [zooplusData, setZooplusData] = useState<ZooplusSalesCompareResponse | null>(() =>
+    getSalesCompareInitForDefaultPeriod<ZooplusSalesCompareResponse>("analytics_zooplus_sales_compare_v1").data
+  );
+  const [zooplusLoading, setZooplusLoading] = useState(
+    () => getSalesCompareInitForDefaultPeriod<ZooplusSalesCompareResponse>("analytics_zooplus_sales_compare_v1").loading
+  );
   const [zooplusBackgroundSyncing, setZooplusBackgroundSyncing] = useState(false);
   const [zooplusError, setZooplusError] = useState<string | null>(null);
-  const [zooplusData, setZooplusData] = useState<ZooplusSalesCompareResponse | null>(null);
-  const [tiktokLoading, setTiktokLoading] = useState(true);
+  const [tiktokData, setTiktokData] = useState<TiktokSalesCompareResponse | null>(() =>
+    getSalesCompareInitForDefaultPeriod<TiktokSalesCompareResponse>("analytics_tiktok_sales_compare_v1").data
+  );
+  const [tiktokLoading, setTiktokLoading] = useState(
+    () => getSalesCompareInitForDefaultPeriod<TiktokSalesCompareResponse>("analytics_tiktok_sales_compare_v1").loading
+  );
   const [tiktokBackgroundSyncing, setTiktokBackgroundSyncing] = useState(false);
   const [tiktokError, setTiktokError] = useState<string | null>(null);
-  const [tiktokData, setTiktokData] = useState<TiktokSalesCompareResponse | null>(null);
+  const [shopifyData, setShopifyData] = useState<ShopifySalesCompareResponse | null>(() =>
+    getSalesCompareInitForDefaultPeriod<ShopifySalesCompareResponse>("analytics_shopify_sales_compare_v1").data
+  );
+  const [shopifyLoading, setShopifyLoading] = useState(
+    () => getSalesCompareInitForDefaultPeriod<ShopifySalesCompareResponse>("analytics_shopify_sales_compare_v1").loading
+  );
+  const [shopifyBackgroundSyncing, setShopifyBackgroundSyncing] = useState(false);
+  const [shopifyError, setShopifyError] = useState<string | null>(null);
   const [analyticsHasMounted, setAnalyticsHasMounted] = useState(false);
   const periodRef = useRef(period);
 
@@ -1143,7 +1283,6 @@ export default function AnalyticsMarketplacesPage() {
         console.warn("[Analytics Amazon] Hintergrund-Abgleich fehlgeschlagen:", e);
       } else {
         setAmazonError(e instanceof Error ? e.message : t("commonUi.unknownError"));
-        setAmazonData(null);
       }
     } finally {
       if (!silent) {
@@ -1203,7 +1342,6 @@ export default function AnalyticsMarketplacesPage() {
         console.warn("[Analytics Otto] Hintergrund-Abgleich fehlgeschlagen:", e);
       } else {
         setOttoError(e instanceof Error ? e.message : t("commonUi.unknownError"));
-        setOttoData(null);
       }
     } finally {
       if (!silent) {
@@ -1263,7 +1401,6 @@ export default function AnalyticsMarketplacesPage() {
         console.warn("[Analytics Kaufland] Hintergrund-Abgleich fehlgeschlagen:", e);
       } else {
         setKauflandError(e instanceof Error ? e.message : t("commonUi.unknownError"));
-        setKauflandData(null);
       }
     } finally {
       if (!silent) {
@@ -1323,7 +1460,6 @@ export default function AnalyticsMarketplacesPage() {
         console.warn("[Analytics Fressnapf] Hintergrund-Abgleich fehlgeschlagen:", e);
       } else {
         setFressnapfError(e instanceof Error ? e.message : t("commonUi.unknownError"));
-        setFressnapfData(null);
       }
     } finally {
       if (!silent) {
@@ -1383,7 +1519,6 @@ export default function AnalyticsMarketplacesPage() {
         console.warn("[Analytics MMS] Hintergrund-Abgleich fehlgeschlagen:", e);
       } else {
         setMmsError(e instanceof Error ? e.message : t("commonUi.unknownError"));
-        setMmsData(null);
       }
     } finally {
       if (!silent) {
@@ -1443,7 +1578,6 @@ export default function AnalyticsMarketplacesPage() {
         console.warn("[Analytics ZooPlus] Hintergrund-Abgleich fehlgeschlagen:", e);
       } else {
         setZooplusError(e instanceof Error ? e.message : t("commonUi.unknownError"));
-        setZooplusData(null);
       }
     } finally {
       if (!silent) {
@@ -1503,7 +1637,6 @@ export default function AnalyticsMarketplacesPage() {
         console.warn("[Analytics TikTok] Hintergrund-Abgleich fehlgeschlagen:", e);
       } else {
         setTiktokError(e instanceof Error ? e.message : t("commonUi.unknownError"));
-        setTiktokData(null);
       }
     } finally {
       if (!silent) {
@@ -1511,6 +1644,65 @@ export default function AnalyticsMarketplacesPage() {
       }
       if (showBackgroundIndicator) {
         setTiktokBackgroundSyncing(false);
+      }
+    }
+  }, [t]);
+
+  const loadShopifySales = useCallback(async (forceRefresh = false, silent = false) => {
+    const { from, to } = periodRef.current;
+    const cacheKey = `analytics_shopify_sales_compare_v1:${from}:${to}`;
+    let hadCache = false;
+
+    if (!forceRefresh && !silent) {
+      const parsed = readLocalJsonCache<{ savedAt: number } & ShopifySalesCompareResponse>(cacheKey);
+      if (parsed?.summary && !parsed.error) {
+        const { savedAt: _s, ...data } = parsed;
+        setShopifyData(data);
+        hadCache = true;
+        setShopifyLoading(false);
+      }
+    }
+
+    if (forceRefresh && !silent) {
+      setShopifyLoading(true);
+    } else if (!hadCache && !silent) {
+      setShopifyLoading(true);
+    }
+
+    const showBackgroundIndicator = silent || (!forceRefresh && hadCache);
+    if (showBackgroundIndicator) {
+      setShopifyBackgroundSyncing(true);
+    }
+
+    if (!silent) {
+      setShopifyError(null);
+    }
+
+    try {
+      const params = new URLSearchParams({
+        compare: "true",
+        from,
+        to,
+      });
+      const res = await fetch(`/api/shopify/sales?${params}`, { cache: "no-store" });
+      const payload = (await res.json()) as ShopifySalesCompareResponse;
+      if (!res.ok) {
+        throw new Error(payload.error ?? t("analyticsMp.shopifyMetricsError"));
+      }
+      setShopifyData(payload);
+      writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
+    } catch (e) {
+      if (silent) {
+        console.warn("[Analytics Shopify] Hintergrund-Abgleich fehlgeschlagen:", e);
+      } else {
+        setShopifyError(e instanceof Error ? e.message : t("commonUi.unknownError"));
+      }
+    } finally {
+      if (!silent) {
+        setShopifyLoading(false);
+      }
+      if (showBackgroundIndicator) {
+        setShopifyBackgroundSyncing(false);
       }
     }
   }, [t]);
@@ -1523,6 +1715,7 @@ export default function AnalyticsMarketplacesPage() {
     void loadMmsSales(false, false);
     void loadZooplusSales(false, false);
     void loadTiktokSales(false, false);
+    void loadShopifySales(false, false);
   }, [
     period.from,
     period.to,
@@ -1533,6 +1726,7 @@ export default function AnalyticsMarketplacesPage() {
     loadMmsSales,
     loadZooplusSales,
     loadTiktokSales,
+    loadShopifySales,
   ]);
 
   useEffect(() => {
@@ -1549,6 +1743,7 @@ export default function AnalyticsMarketplacesPage() {
       void loadMmsSales(false, true);
       void loadZooplusSales(false, true);
       void loadTiktokSales(false, true);
+      void loadShopifySales(false, true);
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
   }, [
@@ -1560,6 +1755,7 @@ export default function AnalyticsMarketplacesPage() {
     loadMmsSales,
     loadZooplusSales,
     loadTiktokSales,
+    loadShopifySales,
   ]);
 
   const summary = amazonData?.summary;
@@ -1646,6 +1842,18 @@ export default function AnalyticsMarketplacesPage() {
       )
     : { text: PLACEHOLDER, direction: "unknown" as TrendDirection };
 
+  const shopifySummary = shopifyData?.summary;
+  const shopifyPrev = shopifyData?.previousSummary;
+  const shopifyTrend = shopifySummary
+    ? formatTrendPct(
+        shopifyData?.revenueDeltaPct,
+        shopifyPrev?.salesAmount ?? 0,
+        shopifySummary.salesAmount,
+        intlTag,
+        (key) => t(key)
+      )
+    : { text: PLACEHOLDER, direction: "unknown" as TrendDirection };
+
   const totals = useMemo(
     () =>
       buildMarketplaceTotals([
@@ -1684,9 +1892,142 @@ export default function AnalyticsMarketplacesPage() {
           previousSummary: tiktokData?.previousSummary,
           revenueDeltaPct: tiktokData?.revenueDeltaPct,
         },
+        {
+          summary: shopifyData?.summary,
+          previousSummary: shopifyData?.previousSummary,
+          revenueDeltaPct: shopifyData?.revenueDeltaPct,
+        },
       ]),
-    [amazonData, ottoData, kauflandData, fressnapfData, mmsData, zooplusData, tiktokData]
+    [amazonData, ottoData, kauflandData, fressnapfData, mmsData, zooplusData, tiktokData, shopifyData]
   );
+
+  const revenueChartCurrency = useMemo(
+    () =>
+      pickRevenueChartCurrency(
+        totals,
+        amazonData,
+        ottoData,
+        kauflandData,
+        fressnapfData,
+        mmsData,
+        zooplusData,
+        tiktokData,
+        shopifyData
+      ),
+    [
+      totals,
+      amazonData,
+      ottoData,
+      kauflandData,
+      fressnapfData,
+      mmsData,
+      zooplusData,
+      tiktokData,
+      shopifyData,
+    ]
+  );
+
+  const revenueLineSeries = useMemo((): MarketplaceRevenueLineSeries[] => {
+    const ref = revenueChartCurrency;
+    const pts = (data: AmazonSalesCompareResponse | null | undefined) =>
+      data?.summary?.currency === ref ? data.points ?? [] : [];
+    const out: MarketplaceRevenueLineSeries[] = [
+      {
+        id: "amazon",
+        dataKey: "amazon",
+        label: "Amazon",
+        color: MARKETPLACE_REVENUE_LINE_COLORS.amazon,
+        points: pts(amazonData),
+      },
+    ];
+    const slugList = [
+      "otto",
+      "kaufland",
+      "fressnapf",
+      "mediamarkt-saturn",
+      "zooplus",
+      "tiktok",
+      "shopify",
+    ] as const;
+    for (const slug of slugList) {
+      const mp = getMarketplaceBySlug(slug);
+      const data =
+        slug === "otto"
+          ? ottoData
+          : slug === "kaufland"
+            ? kauflandData
+            : slug === "fressnapf"
+              ? fressnapfData
+              : slug === "mediamarkt-saturn"
+                ? mmsData
+                : slug === "zooplus"
+                  ? zooplusData
+                  : slug === "tiktok"
+                    ? tiktokData
+                    : shopifyData;
+      out.push({
+        id: slug,
+        dataKey: slug,
+        label: mp?.label ?? slug,
+        color: MARKETPLACE_REVENUE_LINE_COLORS[slug] ?? "#64748b",
+        points: pts(data),
+      });
+    }
+    return out;
+  }, [
+    revenueChartCurrency,
+    amazonData,
+    ottoData,
+    kauflandData,
+    fressnapfData,
+    mmsData,
+    zooplusData,
+    tiktokData,
+    shopifyData,
+  ]);
+
+  const totalChartDailyOrdersAndPrev = useMemo(() => {
+    const dates = enumerateYmd(period.from, period.to);
+    const ref = revenueChartCurrency;
+    const channels: (AmazonSalesCompareResponse | null | undefined)[] = [
+      amazonData,
+      ottoData,
+      kauflandData,
+      fressnapfData,
+      mmsData,
+      zooplusData,
+      tiktokData,
+      shopifyData,
+    ];
+    const dailyOrders = dates.map((date) =>
+      channels.reduce((sum, d) => {
+        if (!d?.summary || d.summary.currency !== ref) return sum;
+        const pt = d.points?.find((p) => p.date === date);
+        return sum + (pt?.orders ?? 0);
+      }, 0)
+    );
+    const prevRevenue = dates.map((_, i) =>
+      channels.reduce((sum, d) => {
+        if (!d?.summary || d.summary.currency !== ref) return sum;
+        const pv = d.previousPoints?.[i];
+        return sum + (pv?.amount ?? 0);
+      }, 0)
+    );
+    const hasPrev = prevRevenue.some((v) => v > 0);
+    return { dailyOrders, previousRevenue: hasPrev ? prevRevenue : null };
+  }, [
+    period.from,
+    period.to,
+    revenueChartCurrency,
+    amazonData,
+    ottoData,
+    kauflandData,
+    fressnapfData,
+    mmsData,
+    zooplusData,
+    tiktokData,
+    shopifyData,
+  ]);
 
   const amazonLogo = MARKETPLACE_TILE_LOGO.amazon;
   const periodKpis = useMemo(
@@ -1696,6 +2037,11 @@ export default function AnalyticsMarketplacesPage() {
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailIndex, setDetailIndex] = useState(0);
+  const [promotionsOpen, setPromotionsOpen] = useState(false);
+  const { deals: promotionDeals, persist: persistPromotionDeals, remoteError: promotionRemoteError } =
+    usePromotionDeals();
+
+  const totalChartBands = useMemo(() => bandsForTotalChart(promotionDeals), [promotionDeals]);
 
   const stepDetail = useCallback((delta: -1 | 1) => {
     setDetailIndex(
@@ -1719,21 +2065,19 @@ export default function AnalyticsMarketplacesPage() {
           fressnapfLoading ||
           mmsLoading ||
           zooplusLoading ||
-          tiktokLoading
-        }
-        error={
-          amazonError ??
-          ottoError ??
-          kauflandError ??
-          fressnapfError ??
-          mmsError ??
-          zooplusError ??
-          tiktokError
+          tiktokLoading ||
+          shopifyLoading
         }
         totals={totals}
+        revenueLineSeries={revenueLineSeries}
+        revenueChartCurrency={revenueChartCurrency}
+        totalChartDailyOrders={totalChartDailyOrdersAndPrev.dailyOrders}
+        totalChartPreviousRevenue={totalChartDailyOrdersAndPrev.previousRevenue}
+        totalChartBands={totalChartBands}
         periodFrom={period.from}
         periodTo={period.to}
         onPeriodChange={(from, to) => setPeriod({ from, to })}
+        onOpenPromotionDeals={() => setPromotionsOpen(true)}
         backgroundSyncing={
           amazonBackgroundSyncing ||
           ottoBackgroundSyncing ||
@@ -1741,7 +2085,8 @@ export default function AnalyticsMarketplacesPage() {
           fressnapfBackgroundSyncing ||
           mmsBackgroundSyncing ||
           zooplusBackgroundSyncing ||
-          tiktokBackgroundSyncing
+          tiktokBackgroundSyncing ||
+          shopifyBackgroundSyncing
         }
         dfLocale={dfLocale}
         intlTag={intlTag}
@@ -1804,34 +2149,43 @@ export default function AnalyticsMarketplacesPage() {
         tiktokTrend={tiktokTrend}
         tiktokPoints={tiktokData?.points ?? []}
         tiktokPreviousPoints={tiktokData?.previousPoints}
+        shopifyLoading={shopifyLoading}
+        shopifyError={shopifyError}
+        shopifySummary={shopifySummary}
+        shopifyPreviousSummary={shopifyPrev}
+        shopifyTrend={shopifyTrend}
+        shopifyPoints={shopifyData?.points ?? []}
+        shopifyPreviousPoints={shopifyData?.previousPoints}
+        promotionDeals={promotionDeals}
         periodKpis={periodKpis}
         intlTag={intlTag}
         dfLocale={dfLocale}
         t={t}
       />
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      <PromotionDealsDialog
+        open={promotionsOpen}
+        onOpenChange={setPromotionsOpen}
+        deals={promotionDeals}
+        onPersist={persistPromotionDeals}
+        remoteError={promotionRemoteError}
+      />
+
+      <div className={MARKETPLACE_TILE_GRID_CLASS}>
         <button
           type="button"
           onClick={() => openDetailAt("amazon")}
-          className="group flex flex-col rounded-lg border border-border/60 bg-card/90 p-2 text-left shadow-sm transition-all hover:border-primary/35 hover:shadow-md"
+          className={MARKETPLACE_TILE_BTN_CLASS}
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
               <div className={amazonLogo.slot}>
-                <Image
+                <MarketplaceBrandImg
                   src="/brand/amazon-logo-current.png"
                   alt="Amazon"
-                  width={220}
-                  height={44}
                   className={amazonLogo.img}
                 />
               </div>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                {t("analyticsMp.amazonTilePeriod", {
-                  span: formatRangeShort(period.from, period.to, dfLocale),
-                })}
-              </p>
             </div>
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
               <ArrowRight className="h-3 w-3" aria-hidden />
@@ -1845,13 +2199,13 @@ export default function AnalyticsMarketplacesPage() {
           ) : null}
 
           {amazonLoading ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
               ))}
             </div>
           ) : summary ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi
                 compact
                 label={periodKpis.revenue}
@@ -1867,7 +2221,7 @@ export default function AnalyticsMarketplacesPage() {
               />
             </div>
           ) : (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.orders} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.units} value={PLACEHOLDER} />
@@ -1875,32 +2229,22 @@ export default function AnalyticsMarketplacesPage() {
             </div>
           )}
 
-          <p className="mt-1.5 text-[9px] leading-snug text-muted-foreground">
-            {t("analyticsMp.amazonTileFooter")}
-          </p>
         </button>
 
         <button
           type="button"
           onClick={() => openDetailAt("otto")}
-          className="group flex flex-col rounded-lg border border-border/60 bg-card/90 p-2 text-left shadow-sm transition-all hover:border-primary/35 hover:shadow-md"
+          className={MARKETPLACE_TILE_BTN_CLASS}
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
               <div className={MARKETPLACE_TILE_LOGO.compact.slot}>
-                <img
+                <MarketplaceBrandImg
                   src="/brand/marketplaces/otto.svg"
                   alt="Otto"
                   className={MARKETPLACE_TILE_LOGO.compact.img}
-                  loading="lazy"
-                  decoding="async"
                 />
               </div>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                {t("analyticsMp.amazonTilePeriod", {
-                  span: formatRangeShort(period.from, period.to, dfLocale),
-                })}
-              </p>
             </div>
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
               <ArrowRight className="h-3 w-3" aria-hidden />
@@ -1914,13 +2258,13 @@ export default function AnalyticsMarketplacesPage() {
           ) : null}
 
           {ottoLoading ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
               ))}
             </div>
           ) : ottoSummary ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi
                 compact
                 label={periodKpis.revenue}
@@ -1936,7 +2280,7 @@ export default function AnalyticsMarketplacesPage() {
               />
             </div>
           ) : (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.orders} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.units} value={PLACEHOLDER} />
@@ -1944,32 +2288,22 @@ export default function AnalyticsMarketplacesPage() {
             </div>
           )}
 
-          <p className="mt-1.5 text-[9px] leading-snug text-muted-foreground">
-            {t("analyticsMp.tileFooterPlaceholder")}
-          </p>
         </button>
 
         <button
           type="button"
           onClick={() => openDetailAt("kaufland")}
-          className="group flex flex-col rounded-lg border border-border/60 bg-card/90 p-2 text-left shadow-sm transition-all hover:border-primary/35 hover:shadow-md"
+          className={MARKETPLACE_TILE_BTN_CLASS}
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
               <div className={MARKETPLACE_TILE_LOGO.compact.slot}>
-                <img
+                <MarketplaceBrandImg
                   src="/brand/marketplaces/kaufland.svg"
                   alt="Kaufland"
                   className={MARKETPLACE_TILE_LOGO.compact.img}
-                  loading="lazy"
-                  decoding="async"
                 />
               </div>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                {t("analyticsMp.amazonTilePeriod", {
-                  span: formatRangeShort(period.from, period.to, dfLocale),
-                })}
-              </p>
             </div>
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
               <ArrowRight className="h-3 w-3" aria-hidden />
@@ -1983,13 +2317,13 @@ export default function AnalyticsMarketplacesPage() {
           ) : null}
 
           {kauflandLoading ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
               ))}
             </div>
           ) : kauflandSummary ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi
                 compact
                 label={periodKpis.revenue}
@@ -2009,7 +2343,7 @@ export default function AnalyticsMarketplacesPage() {
               />
             </div>
           ) : (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.orders} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.units} value={PLACEHOLDER} />
@@ -2017,32 +2351,22 @@ export default function AnalyticsMarketplacesPage() {
             </div>
           )}
 
-          <p className="mt-1.5 text-[9px] leading-snug text-muted-foreground">
-            {t("analyticsMp.tileFooterPlaceholder")}
-          </p>
         </button>
 
         <button
           type="button"
           onClick={() => openDetailAt("fressnapf")}
-          className="group flex flex-col rounded-lg border border-border/60 bg-card/90 p-2 text-left shadow-sm transition-all hover:border-primary/35 hover:shadow-md"
+          className={MARKETPLACE_TILE_BTN_CLASS}
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
               <div className={MARKETPLACE_TILE_LOGO.fressnapf.slot}>
-                <img
+                <MarketplaceBrandImg
                   src="/brand/marketplaces/fressnapf.svg"
                   alt="Fressnapf"
                   className={MARKETPLACE_TILE_LOGO.fressnapf.img}
-                  loading="lazy"
-                  decoding="async"
                 />
               </div>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                {t("analyticsMp.amazonTilePeriod", {
-                  span: formatRangeShort(period.from, period.to, dfLocale),
-                })}
-              </p>
             </div>
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
               <ArrowRight className="h-3 w-3" aria-hidden />
@@ -2056,13 +2380,13 @@ export default function AnalyticsMarketplacesPage() {
           ) : null}
 
           {fressnapfLoading ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
               ))}
             </div>
           ) : fressnapfSummary ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi
                 compact
                 label={periodKpis.revenue}
@@ -2082,7 +2406,7 @@ export default function AnalyticsMarketplacesPage() {
               />
             </div>
           ) : (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.orders} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.units} value={PLACEHOLDER} />
@@ -2090,32 +2414,22 @@ export default function AnalyticsMarketplacesPage() {
             </div>
           )}
 
-          <p className="mt-1.5 text-[9px] leading-snug text-muted-foreground">
-            {t("analyticsMp.tileFooterPlaceholder")}
-          </p>
         </button>
 
         <button
           type="button"
           onClick={() => openDetailAt("mediamarkt-saturn")}
-          className="group flex flex-col rounded-lg border border-border/60 bg-card/90 p-2 text-left shadow-sm transition-all hover:border-primary/35 hover:shadow-md"
+          className={MARKETPLACE_TILE_BTN_CLASS}
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
               <div className={MARKETPLACE_TILE_LOGO.mediamarktSaturn.slot}>
-                <img
+                <MarketplaceBrandImg
                   src="/brand/marketplaces/mediamarkt-saturn.svg"
                   alt="MediaMarkt & Saturn"
                   className={MARKETPLACE_TILE_LOGO.mediamarktSaturn.img}
-                  loading="lazy"
-                  decoding="async"
                 />
               </div>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                {t("analyticsMp.amazonTilePeriod", {
-                  span: formatRangeShort(period.from, period.to, dfLocale),
-                })}
-              </p>
             </div>
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
               <ArrowRight className="h-3 w-3" aria-hidden />
@@ -2129,13 +2443,13 @@ export default function AnalyticsMarketplacesPage() {
           ) : null}
 
           {mmsLoading ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
               ))}
             </div>
           ) : mmsSummary ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi
                 compact
                 label={periodKpis.revenue}
@@ -2151,7 +2465,7 @@ export default function AnalyticsMarketplacesPage() {
               />
             </div>
           ) : (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.orders} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.units} value={PLACEHOLDER} />
@@ -2159,32 +2473,22 @@ export default function AnalyticsMarketplacesPage() {
             </div>
           )}
 
-          <p className="mt-1.5 text-[9px] leading-snug text-muted-foreground">
-            {t("analyticsMp.tileFooterPlaceholder")}
-          </p>
         </button>
 
         <button
           type="button"
           onClick={() => openDetailAt("zooplus")}
-          className="group flex flex-col rounded-lg border border-border/60 bg-card/90 p-2 text-left shadow-sm transition-all hover:border-primary/35 hover:shadow-md"
+          className={MARKETPLACE_TILE_BTN_CLASS}
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
               <div className={MARKETPLACE_TILE_LOGO.zooplus.slot}>
-                <img
+                <MarketplaceBrandImg
                   src="/brand/marketplaces/zooplus.svg"
                   alt="ZooPlus"
                   className={MARKETPLACE_TILE_LOGO.zooplus.img}
-                  loading="lazy"
-                  decoding="async"
                 />
               </div>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                {t("analyticsMp.amazonTilePeriod", {
-                  span: formatRangeShort(period.from, period.to, dfLocale),
-                })}
-              </p>
             </div>
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
               <ArrowRight className="h-3 w-3" aria-hidden />
@@ -2198,13 +2502,13 @@ export default function AnalyticsMarketplacesPage() {
           ) : null}
 
           {zooplusLoading ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
               ))}
             </div>
           ) : zooplusSummary ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi
                 compact
                 label={periodKpis.revenue}
@@ -2224,7 +2528,7 @@ export default function AnalyticsMarketplacesPage() {
               />
             </div>
           ) : (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.orders} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.units} value={PLACEHOLDER} />
@@ -2232,32 +2536,22 @@ export default function AnalyticsMarketplacesPage() {
             </div>
           )}
 
-          <p className="mt-1.5 text-[9px] leading-snug text-muted-foreground">
-            {t("analyticsMp.tileFooterPlaceholder")}
-          </p>
         </button>
 
         <button
           type="button"
           onClick={() => openDetailAt("tiktok")}
-          className="group flex flex-col rounded-lg border border-border/60 bg-card/90 p-2 text-left shadow-sm transition-all hover:border-primary/35 hover:shadow-md"
+          className={MARKETPLACE_TILE_BTN_CLASS}
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
               <div className={MARKETPLACE_TILE_LOGO.wide.slot}>
-                <img
+                <MarketplaceBrandImg
                   src="/brand/marketplaces/tiktok.svg"
                   alt="TikTok"
                   className={MARKETPLACE_TILE_LOGO.wide.img}
-                  loading="lazy"
-                  decoding="async"
                 />
               </div>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                {t("analyticsMp.amazonTilePeriod", {
-                  span: formatRangeShort(period.from, period.to, dfLocale),
-                })}
-              </p>
             </div>
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
               <ArrowRight className="h-3 w-3" aria-hidden />
@@ -2271,13 +2565,13 @@ export default function AnalyticsMarketplacesPage() {
           ) : null}
 
           {tiktokLoading ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
               ))}
             </div>
           ) : tiktokSummary ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi
                 compact
                 label={periodKpis.revenue}
@@ -2297,7 +2591,7 @@ export default function AnalyticsMarketplacesPage() {
               />
             </div>
           ) : (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.orders} value={PLACEHOLDER} />
               <MiniKpi compact label={periodKpis.units} value={PLACEHOLDER} />
@@ -2305,9 +2599,69 @@ export default function AnalyticsMarketplacesPage() {
             </div>
           )}
 
-          <p className="mt-1.5 text-[9px] leading-snug text-muted-foreground">
-            {t("analyticsMp.tileFooterPlaceholder")}
-          </p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => openDetailAt("shopify")}
+          className={MARKETPLACE_TILE_BTN_CLASS}
+        >
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0 flex-1">
+              <div className={MARKETPLACE_TILE_LOGO.default.slot}>
+                <MarketplaceBrandImg
+                  src="/brand/marketplaces/shopify.svg"
+                  alt="Shopify"
+                  className={MARKETPLACE_TILE_LOGO.default.img}
+                />
+              </div>
+            </div>
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
+              <ArrowRight className="h-3 w-3" aria-hidden />
+            </span>
+          </div>
+
+          {shopifyError ? (
+            <p className="mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-900">
+              {shopifyError}
+            </p>
+          ) : null}
+
+          {shopifyLoading ? (
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
+              ))}
+            </div>
+          ) : shopifySummary ? (
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
+              <MiniKpi
+                compact
+                label={periodKpis.revenue}
+                value={formatCurrency(shopifySummary.salesAmount, shopifySummary.currency, intlTag)}
+              />
+              <MiniKpi
+                compact
+                label={periodKpis.orders}
+                value={formatInt(shopifySummary.orderCount, intlTag)}
+              />
+              <MiniKpi compact label={periodKpis.units} value={formatInt(shopifySummary.units, intlTag)} />
+              <MiniKpi
+                compact
+                label={periodKpis.trend}
+                value={shopifyTrend.text}
+                trendDirection={shopifyTrend.direction}
+              />
+            </div>
+          ) : (
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
+              <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
+              <MiniKpi compact label={periodKpis.orders} value={PLACEHOLDER} />
+              <MiniKpi compact label={periodKpis.units} value={PLACEHOLDER} />
+              <MiniKpi compact label={periodKpis.trend} value={PLACEHOLDER} />
+            </div>
+          )}
+
         </button>
 
         {ANALYTICS_MARKETPLACES.filter(
@@ -2317,7 +2671,8 @@ export default function AnalyticsMarketplacesPage() {
             m.slug !== "fressnapf" &&
             m.slug !== "mediamarkt-saturn" &&
             m.slug !== "zooplus" &&
-            m.slug !== "tiktok"
+            m.slug !== "tiktok" &&
+            m.slug !== "shopify"
         ).map(({ slug, label, logo }) => (
           <PlaceholderTile
             key={slug}
@@ -2334,3 +2689,12 @@ export default function AnalyticsMarketplacesPage() {
     </div>
   );
 }
+
+export default dynamic(() => Promise.resolve(AnalyticsMarketplacesPage), {
+  ssr: false,
+  loading: () => (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+    </div>
+  ),
+});

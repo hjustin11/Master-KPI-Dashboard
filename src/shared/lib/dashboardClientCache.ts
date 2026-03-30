@@ -23,3 +23,25 @@ export function writeLocalJsonCache(key: string, value: unknown): void {
     /* Quota, private mode */
   }
 }
+
+/** Sales-Compare-Payload wie von den Analytics-API-Sales-Routen (summary erforderlich). */
+type SalesCompareLike = {
+  summary?: { orderCount: number; salesAmount: number; units: number; currency: string };
+  error?: string;
+};
+
+/**
+ * Liest den zuletzt gespeicherten Vergleich für einen Zeitraum (localStorage).
+ * Nur im Browser sinnvoll — bei SSR immer leer, damit keine Hydration-Konflikte.
+ */
+export function readAnalyticsSalesCompareInitial<T extends SalesCompareLike>(
+  cacheKey: string
+): { data: T | null; loading: boolean } {
+  if (typeof window === "undefined") return { data: null, loading: true };
+  const parsed = readLocalJsonCache<{ savedAt: number } & T>(cacheKey);
+  if (parsed?.summary && !parsed.error) {
+    const { savedAt: _savedAt, ...data } = parsed;
+    return { data: data as unknown as T, loading: false };
+  }
+  return { data: null, loading: true };
+}

@@ -207,7 +207,7 @@ function countCacheDaysInRange(cache: DeliverySalesCacheFileV1, fromYmd: string,
 }
 
 /**
- * Artikelprognose: ältere Tage aus Datei, Schnitt [from,to] ∩ [ANCHOR, cacheEnd];
+ * Bedarfsprognose: ältere Tage aus Datei, Schnitt [from,to] ∩ [ANCHOR, cacheEnd];
  * Live [liveStart, min(to,today)] von Xentral.
  */
 export async function aggregateSkuSalesWithFileCache(args: {

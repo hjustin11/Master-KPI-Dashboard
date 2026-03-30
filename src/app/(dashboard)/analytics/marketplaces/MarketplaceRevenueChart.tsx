@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { useMemo } from "react";
 import { eachDayOfInterval, format, parseISO } from "date-fns";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { getDateFnsLocale, intlLocaleTag } from "@/i18n/locale-formatting";
@@ -17,14 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  clipBandToRange,
-  nextBandColor,
-  type MarketplaceActionBand,
-} from "./marketplaceActionBands";
+import { clipBandToRange, type MarketplaceActionBand } from "./marketplaceActionBands";
 
 export type SalesPointRow = {
   date: string;
@@ -139,7 +131,6 @@ export function MarketplaceRevenueChart({
   previousPoints,
   showPreviousLine,
   bands,
-  onBandsChange,
   chartActive,
 }: {
   periodFrom: string;
@@ -150,7 +141,6 @@ export function MarketplaceRevenueChart({
   previousPoints?: SalesPointRow[];
   showPreviousLine: boolean;
   bands: MarketplaceActionBand[];
-  onBandsChange: (bands: MarketplaceActionBand[]) => void;
   /** z. B. nur Amazon: Kurve zeichnen; sonst nur Hinweis */
   chartActive: boolean;
 }) {
@@ -192,39 +182,6 @@ export function MarketplaceRevenueChart({
         .filter(Boolean) as { band: MarketplaceActionBand; x1: string; x2: string }[],
     [bands, periodFrom, periodTo]
   );
-
-  const [draft, setDraft] = useState({
-    label: "",
-    from: periodFrom,
-    to: periodTo,
-    color: "#f97316",
-  });
-
-  useEffect(() => {
-    setDraft((d) => ({ ...d, from: periodFrom, to: periodTo }));
-  }, [periodFrom, periodTo]);
-
-  const addBand = () => {
-    const label = draft.label.trim() || t("analyticsChart.defaultBandLabel");
-    let { from, to } = draft;
-    if (from > to) [from, to] = [to, from];
-    const next: MarketplaceActionBand = {
-      id:
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      label,
-      from,
-      to,
-      color: draft.color || nextBandColor(bands),
-    };
-    onBandsChange([...bands, next]);
-    setDraft((d) => ({ ...d, label: "", color: nextBandColor([...bands, next]) }));
-  };
-
-  const removeBand = (id: string) => {
-    onBandsChange(bands.filter((b) => b.id !== id));
-  };
 
   return (
     <div className="space-y-4">
@@ -367,104 +324,6 @@ export function MarketplaceRevenueChart({
           </div>
         </div>
       ) : null}
-
-      <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          {t("analyticsChart.actionBandTitle")}
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-12 lg:items-end">
-          <div className="space-y-1.5 lg:col-span-4">
-            <Label htmlFor="band-label" className="text-xs">
-              {t("analyticsChart.labelField")}
-            </Label>
-            <Input
-              id="band-label"
-              value={draft.label}
-              onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
-              placeholder={t("analyticsChart.labelPlaceholder")}
-              className="h-9 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5 lg:col-span-2">
-            <Label htmlFor="band-from" className="text-xs">
-              {t("dates.from")}
-            </Label>
-            <Input
-              id="band-from"
-              type="date"
-              value={draft.from}
-              onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
-              className="h-9 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5 lg:col-span-2">
-            <Label htmlFor="band-to" className="text-xs">
-              {t("dates.to")}
-            </Label>
-            <Input
-              id="band-to"
-              type="date"
-              value={draft.to}
-              onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
-              className="h-9 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5 lg:col-span-2">
-            <Label htmlFor="band-color" className="text-xs">
-              {t("analyticsChart.color")}
-            </Label>
-            <Input
-              id="band-color"
-              type="color"
-              value={draft.color}
-              onChange={(e) => setDraft((d) => ({ ...d, color: e.target.value }))}
-              className="h-9 w-full cursor-pointer py-1"
-            />
-          </div>
-          <div className="lg:col-span-2">
-            <Button type="button" className="w-full" size="sm" onClick={addBand}>
-              {t("analyticsChart.addBand")}
-            </Button>
-          </div>
-        </div>
-
-        {bands.length ? (
-          <ul className="mt-3 space-y-1.5 border-t border-border/50 pt-3">
-            {bands.map((b) => (
-              <li
-                key={b.id}
-                className="flex items-center justify-between gap-2 rounded-md bg-background/60 px-2 py-1.5 text-xs"
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    className="h-3 w-3 shrink-0 rounded-sm border border-border/60"
-                    style={{ backgroundColor: b.color }}
-                    aria-hidden
-                  />
-                  <span className="truncate font-medium">{b.label}</span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {b.from} – {b.to}
-                  </span>
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="shrink-0 text-muted-foreground hover:text-destructive"
-                  aria-label={t("analyticsChart.removeBandAria", { label: b.label })}
-                  onClick={() => removeBand(b.id)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-3 border-t border-border/50 pt-3 text-[11px] text-muted-foreground">
-            {t("analyticsChart.noBandsYet")}
-          </p>
-        )}
-      </div>
     </div>
   );
 }
