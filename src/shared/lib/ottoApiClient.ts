@@ -266,9 +266,91 @@ function str(v: unknown): string {
   return "";
 }
 
+function firstLine(text: string, maxLen = 240): string {
+  const t = text.trim();
+  if (!t) return "";
+  const line = (t.split(/\r?\n/)[0] ?? t).trim();
+  return line.length > maxLen ? `${line.slice(0, maxLen)}…` : line;
+}
+
+function stripHtmlToPlain(raw: string): string {
+  return raw
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Offizielles Partner-Schema: `productDescription` ist ein Objekt (brand, productLine, category, …), kein String.
+ * @see https://github.com/otto-de/marketplace-php-sdk/blob/main/openapi-doc/products-interface.yml — ProductDescription
+ */
+function titleFromOttoProductDescriptionBlock(pd: Record<string, unknown>): string {
+  const brand = str(pd.brand);
+  const productLine = str(pd.productLine ?? pd.product_line);
+  const category = str(pd.category);
+  const descHtml = str(pd.description);
+  if (brand && productLine) return `${brand} ${productLine}`.trim();
+  if (productLine) return productLine;
+  if (brand && category) return `${brand} ${category}`.trim();
+  if (category) return category;
+  if (descHtml) return firstLine(stripHtmlToPlain(descHtml));
+  if (brand) return brand;
+  return "";
+}
+
+/**
+ * Otto Market API: je nach Version / Endpoint andere Schlüssel für den Anzeigenamen.
+ */
+function ottoTitleFromRecord(r: Record<string, unknown>): string {
+  const pdRaw = r.productDescription ?? r.product_description;
+  if (typeof pdRaw === "string" && pdRaw.trim()) {
+    return firstLine(stripHtmlToPlain(pdRaw));
+  }
+  if (pdRaw && typeof pdRaw === "object" && !Array.isArray(pdRaw)) {
+    const fromBlock = titleFromOttoProductDescriptionBlock(pdRaw as Record<string, unknown>);
+    if (fromBlock) return fromBlock;
+  }
+
+  const direct = str(
+    r.productTitle ??
+      r.title ??
+      r.name ??
+      r.productName ??
+      r.articleName ??
+      r.article_name ??
+      r.marketingName ??
+      r.displayName ??
+      r.productLabel ??
+      r.shortTitle ??
+      r.label
+  );
+  if (direct) return direct;
+
+  const shortDesc = str(r.shortDescription ?? r.short_description);
+  if (shortDesc) return firstLine(shortDesc);
+
+  const topHtmlDesc = str(r.description);
+  if (topHtmlDesc) return firstLine(stripHtmlToPlain(topHtmlDesc));
+
+  const nested = r.product;
+  if (nested && typeof nested === "object") {
+    const nt = ottoTitleFromRecord(nested as Record<string, unknown>);
+    if (nt) return nt;
+  }
+
+  const brand = str(r.brand ?? r.brandName ?? r.manufacturer);
+  const line = str(r.productLine ?? r.product_line ?? r.line);
+  if (brand && line) return `${brand} ${line}`.trim();
+  if (brand) return brand;
+  if (line) return line;
+
+  return "";
+}
+
 function mapOttoProductResourceToRows(resource: Record<string, unknown>): OttoProductListRow[] {
   const variations = resource.variations;
-  const productTitle = str(resource.productTitle ?? resource.title ?? resource.name ?? resource.productName);
+  const productTitle = ottoTitleFromRecord(resource);
   const productRef = str(resource.productReference ?? resource.id ?? resource.productId);
 
   if (Array.isArray(variations) && variations.length > 0) {
@@ -278,7 +360,17 @@ function mapOttoProductResourceToRows(resource: Record<string, unknown>): OttoPr
       const vr = v as Record<string, unknown>;
       const sku = str(vr.sku ?? vr.articleNumber ?? vr.skuSupplier ?? vr.supplierSku);
       const vid = str(vr.id ?? vr.sku ?? sku);
-      const title = str(vr.title ?? vr.productTitle ?? productTitle);
+      const title =
+        ottoTitleFromRecord(vr) ||
+        str(
+          vr.title ??
+            vr.productTitle ??
+            vr.productName ??
+            vr.name ??
+            vr.articleName ??
+            vr.article_name
+        ) ||
+        productTitle;
       const statusRaw = str(
         vr.activeStatus ?? vr.status ?? vr.marketplaceStatus ?? vr.lifecycleStatus ?? ""
       );

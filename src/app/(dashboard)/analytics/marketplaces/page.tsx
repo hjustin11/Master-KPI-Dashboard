@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -53,6 +54,13 @@ import {
 } from "@/shared/lib/dashboardClientCache";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { getDateFnsLocale, intlLocaleTag } from "@/i18n/locale-formatting";
+import {
+  WIKIMEDIA_FRESSNAPF_LOGO_2023_SVG,
+  WIKIMEDIA_MEDIAMARKT_SATURN_LOGO_SVG,
+  WIKIMEDIA_SHOPIFY_LOGO_2018_SVG,
+  WIKIMEDIA_ZOOPLUS_LOGO_PNG,
+} from "@/shared/lib/dashboardUi";
+import type { MarketplaceArticleSalesRow } from "@/shared/lib/marketplaceArticleLines";
 
 type TrendDirection = "up" | "down" | "flat" | "unknown";
 
@@ -145,7 +153,8 @@ const MARKETPLACE_TILE_LOGO: Record<MarketplaceTileLogoPreset, { slot: string; i
   },
 };
 
-const COMPACT_LOGO_SLUGS = new Set(["kaufland", "otto"]);
+/** Einheitliche Kachel-Größe wie Otto (kompakt). */
+const OTTO_TILE_LOGO = MARKETPLACE_TILE_LOGO.compact;
 
 const MARKETPLACE_TILE_GRID_CLASS = "grid gap-2 sm:grid-cols-2 xl:grid-cols-3";
 
@@ -154,13 +163,8 @@ const MARKETPLACE_TILE_BTN_CLASS =
 
 const MARKETPLACE_TILE_KPI_GRID_CLASS = "mt-auto grid grid-cols-2 gap-1 pt-2";
 
-function placeholderTileLogoPreset(slug: string): Exclude<MarketplaceTileLogoPreset, "amazon"> {
-  if (slug === "zooplus") return "zooplus";
-  if (COMPACT_LOGO_SLUGS.has(slug)) return "compact";
-  if (slug === "fressnapf") return "fressnapf";
-  if (slug === "mediamarkt-saturn") return "mediamarktSaturn";
-  if (slug === "tiktok") return "wide";
-  return "default";
+function placeholderTileLogoPreset(_slug: string): Exclude<MarketplaceTileLogoPreset, "amazon"> {
+  return "compact";
 }
 
 type MarketplaceDetailId =
@@ -747,6 +751,80 @@ function MarketplaceDetailDialog({
   const fi = (n: number) => formatInt(n, intlTag);
 
   const marketplaceId = MARKETPLACE_DETAIL_ORDER[index] ?? "amazon";
+
+  const [detailPeriodFrom, setDetailPeriodFrom] = useState(periodFrom);
+  const [detailPeriodTo, setDetailPeriodTo] = useState(periodTo);
+  const [articleRows, setArticleRows] = useState<MarketplaceArticleSalesRow[]>([]);
+  const [articlesLoading, setArticlesLoading] = useState(false);
+  const [articlesError, setArticlesError] = useState<string | null>(null);
+  const [articlesUnsupported, setArticlesUnsupported] = useState(false);
+  const [articlePrevRange, setArticlePrevRange] = useState({ from: "", to: "" });
+  const detailPeriodGateRef = useRef<{ open: boolean; index: number }>({ open: false, index: -1 });
+
+  useEffect(() => {
+    if (!open) {
+      detailPeriodGateRef.current.open = false;
+      return;
+    }
+    const reopenOrMarketplaceChange =
+      !detailPeriodGateRef.current.open || detailPeriodGateRef.current.index !== index;
+    if (reopenOrMarketplaceChange) {
+      setDetailPeriodFrom(periodFrom);
+      setDetailPeriodTo(periodTo);
+    }
+    detailPeriodGateRef.current = { open: true, index };
+  }, [open, index, periodFrom, periodTo]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setArticlesLoading(true);
+    setArticlesError(null);
+    setArticlesUnsupported(false);
+    setArticlePrevRange({ from: "", to: "" });
+    const params = new URLSearchParams({
+      marketplace: marketplaceId,
+      from: detailPeriodFrom,
+      to: detailPeriodTo,
+    });
+    void fetch(`/api/analytics/marketplace-article-sales?${params}`, { cache: "no-store" })
+      .then(async (res) => {
+        const data = (await res.json()) as {
+          items?: MarketplaceArticleSalesRow[];
+          error?: string;
+          unsupported?: boolean;
+          previousFrom?: string;
+          previousTo?: string;
+        };
+        if (cancelled) return;
+        if (!res.ok) {
+          setArticlesError(data.error ?? t("commonUi.unknownError"));
+          setArticleRows([]);
+          return;
+        }
+        if (data.unsupported) {
+          setArticlesUnsupported(true);
+          setArticleRows([]);
+          return;
+        }
+        setArticleRows(Array.isArray(data.items) ? data.items : []);
+        if (data.previousFrom && data.previousTo) {
+          setArticlePrevRange({ from: data.previousFrom, to: data.previousTo });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setArticlesError(t("commonUi.unknownError"));
+          setArticleRows([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setArticlesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, marketplaceId, detailPeriodFrom, detailPeriodTo, t]);
   const orderLen = MARKETPLACE_DETAIL_ORDER.length;
 
   const chartBands = useMemo(
@@ -1120,6 +1198,113 @@ function MarketplaceDetailDialog({
               </Link>
             </div>
           ) : null}
+
+          <div className="space-y-2 border-t border-border/50 pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 gap-y-1.5">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("analyticsMp.dialogArticlesHeading")}
+              </p>
+              <PeriodRangePicker
+                periodFrom={detailPeriodFrom}
+                periodTo={detailPeriodTo}
+                onChange={(from, to) => {
+                  setDetailPeriodFrom(from);
+                  setDetailPeriodTo(to);
+                }}
+                dfLocale={dfLocale}
+                t={t}
+              />
+            </div>
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              {t("analyticsMp.dialogArticlesPeriodHint", {
+                span: formatRangeShort(detailPeriodFrom, detailPeriodTo, dfLocale),
+              })}
+              {articlePrevRange.from && articlePrevRange.to
+                ? ` · ${t("analyticsMp.dialogArticlesPrevHint", {
+                    span: formatRangeShort(articlePrevRange.from, articlePrevRange.to, dfLocale),
+                  })}`
+                : null}
+            </p>
+            {articlesUnsupported ? (
+              <p className="rounded-md border border-border/60 bg-muted/20 px-2 py-2 text-xs text-muted-foreground">
+                {t("analyticsMp.dialogArticlesUnsupported")}
+              </p>
+            ) : articlesError ? (
+              <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-2 text-xs text-amber-900">
+                {articlesError}
+              </p>
+            ) : articlesLoading ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                {t("analyticsMp.dialogArticlesLoading")}
+              </div>
+            ) : articleRows.length === 0 ? (
+              <p className="text-xs text-muted-foreground">{t("analyticsMp.dialogArticlesEmpty")}</p>
+            ) : (
+              <div className="max-h-[min(40vh,380px)] overflow-auto rounded-md border border-border/50">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="min-w-[140px] text-[10px] uppercase">
+                        {t("analyticsMp.dialogArticlesColArticle")}
+                      </TableHead>
+                      <TableHead className="text-right text-[10px] uppercase tabular-nums">
+                        {t("analyticsMp.dialogArticlesColUnits")}
+                      </TableHead>
+                      <TableHead className="text-right text-[10px] uppercase">
+                        {t("analyticsMp.dialogArticlesColDelta")}
+                      </TableHead>
+                      <TableHead className="text-right text-[10px] uppercase tabular-nums">
+                        {t("analyticsMp.dialogArticlesColAvgPrice")}
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {articleRows.map((row) => {
+                      const delta = formatTrendPct(
+                        row.unitsDeltaPct,
+                        row.unitsPrevious,
+                        row.unitsCurrent,
+                        intlTag,
+                        (key) => t(key)
+                      );
+                      return (
+                        <TableRow key={row.key}>
+                          <TableCell className="max-w-[min(40vw,280px)] align-top">
+                            <span className="line-clamp-2 text-xs font-medium leading-snug">{row.title}</span>
+                            {row.key && row.key !== row.title ? (
+                              <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                                {row.key}
+                              </span>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="text-right text-xs tabular-nums">{fi(row.unitsCurrent)}</TableCell>
+                          <TableCell className="text-right">
+                            <span className="inline-flex items-center justify-end gap-0.5 text-xs tabular-nums">
+                              <TrendIcon compact direction={delta.direction} />
+                              <span
+                                className={cn(
+                                  delta.direction === "up" && "text-emerald-700",
+                                  delta.direction === "down" && "text-rose-700"
+                                )}
+                              >
+                                {delta.text}
+                              </span>
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right text-xs tabular-nums">
+                            {row.avgPriceCurrent != null
+                              ? fc(row.avgPriceCurrent, chartCurrency)
+                              : PLACEHOLDER}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
 
           <div className="border-t border-border/50 pt-3">
             <MarketplaceRevenueChart
@@ -2418,11 +2603,11 @@ function AnalyticsMarketplacesPage() {
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
-              <div className={MARKETPLACE_TILE_LOGO.default.slot}>
+              <div className={OTTO_TILE_LOGO.slot}>
                 <MarketplaceBrandImg
                   src="/brand/marketplaces/ebay.svg"
                   alt="eBay"
-                  className={MARKETPLACE_TILE_LOGO.default.img}
+                  className={OTTO_TILE_LOGO.img}
                 />
               </div>
             </div>
@@ -2430,12 +2615,6 @@ function AnalyticsMarketplacesPage() {
               <ArrowRight className="h-3 w-3" aria-hidden />
             </span>
           </div>
-
-          {ebayError ? (
-            <p className="mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-900">
-              {ebayError}
-            </p>
-          ) : null}
 
           {ebayLoading && !ebaySummary ? (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
@@ -2477,11 +2656,11 @@ function AnalyticsMarketplacesPage() {
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
-              <div className={MARKETPLACE_TILE_LOGO.compact.slot}>
+              <div className={OTTO_TILE_LOGO.slot}>
                 <MarketplaceBrandImg
                   src="/brand/marketplaces/otto.svg"
                   alt="Otto"
-                  className={MARKETPLACE_TILE_LOGO.compact.img}
+                  className={OTTO_TILE_LOGO.img}
                 />
               </div>
             </div>
@@ -2536,11 +2715,11 @@ function AnalyticsMarketplacesPage() {
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
-              <div className={MARKETPLACE_TILE_LOGO.compact.slot}>
+              <div className={OTTO_TILE_LOGO.slot}>
                 <MarketplaceBrandImg
                   src="/brand/marketplaces/kaufland.svg"
                   alt="Kaufland"
-                  className={MARKETPLACE_TILE_LOGO.compact.img}
+                  className={OTTO_TILE_LOGO.img}
                 />
               </div>
             </div>
@@ -2599,11 +2778,11 @@ function AnalyticsMarketplacesPage() {
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
-              <div className={MARKETPLACE_TILE_LOGO.fressnapf.slot}>
+              <div className={OTTO_TILE_LOGO.slot}>
                 <MarketplaceBrandImg
-                  src="/brand/marketplaces/fressnapf.svg"
+                  src={WIKIMEDIA_FRESSNAPF_LOGO_2023_SVG}
                   alt="Fressnapf"
-                  className={MARKETPLACE_TILE_LOGO.fressnapf.img}
+                  className={OTTO_TILE_LOGO.img}
                 />
               </div>
             </div>
@@ -2662,11 +2841,11 @@ function AnalyticsMarketplacesPage() {
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
-              <div className={MARKETPLACE_TILE_LOGO.mediamarktSaturn.slot}>
+              <div className={OTTO_TILE_LOGO.slot}>
                 <MarketplaceBrandImg
-                  src="/brand/marketplaces/mediamarkt-saturn.svg"
+                  src={WIKIMEDIA_MEDIAMARKT_SATURN_LOGO_SVG}
                   alt="MediaMarkt & Saturn"
-                  className={MARKETPLACE_TILE_LOGO.mediamarktSaturn.img}
+                  className={OTTO_TILE_LOGO.img}
                 />
               </div>
             </div>
@@ -2721,11 +2900,11 @@ function AnalyticsMarketplacesPage() {
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
-              <div className={MARKETPLACE_TILE_LOGO.zooplus.slot}>
+              <div className={OTTO_TILE_LOGO.slot}>
                 <MarketplaceBrandImg
-                  src="/brand/marketplaces/zooplus.svg"
+                  src={WIKIMEDIA_ZOOPLUS_LOGO_PNG}
                   alt="ZooPlus"
-                  className={MARKETPLACE_TILE_LOGO.zooplus.img}
+                  className={OTTO_TILE_LOGO.img}
                 />
               </div>
             </div>
@@ -2784,11 +2963,11 @@ function AnalyticsMarketplacesPage() {
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
-              <div className={MARKETPLACE_TILE_LOGO.wide.slot}>
+              <div className={OTTO_TILE_LOGO.slot}>
                 <MarketplaceBrandImg
                   src="/brand/marketplaces/tiktok.svg"
                   alt="TikTok"
-                  className={MARKETPLACE_TILE_LOGO.wide.img}
+                  className={OTTO_TILE_LOGO.img}
                 />
               </div>
             </div>
@@ -2796,12 +2975,6 @@ function AnalyticsMarketplacesPage() {
               <ArrowRight className="h-3 w-3" aria-hidden />
             </span>
           </div>
-
-          {tiktokError ? (
-            <p className="mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-900">
-              {tiktokError}
-            </p>
-          ) : null}
 
           {tiktokLoading && !tiktokSummary ? (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
@@ -2847,11 +3020,11 @@ function AnalyticsMarketplacesPage() {
         >
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
-              <div className={MARKETPLACE_TILE_LOGO.default.slot}>
+              <div className={OTTO_TILE_LOGO.slot}>
                 <MarketplaceBrandImg
-                  src="/brand/marketplaces/shopify.svg"
+                  src={WIKIMEDIA_SHOPIFY_LOGO_2018_SVG}
                   alt="Shopify"
-                  className={MARKETPLACE_TILE_LOGO.default.img}
+                  className={OTTO_TILE_LOGO.img}
                 />
               </div>
             </div>
@@ -2859,12 +3032,6 @@ function AnalyticsMarketplacesPage() {
               <ArrowRight className="h-3 w-3" aria-hidden />
             </span>
           </div>
-
-          {shopifyError ? (
-            <p className="mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-900">
-              {shopifyError}
-            </p>
-          ) : null}
 
           {shopifyLoading && !shopifySummary ? (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>

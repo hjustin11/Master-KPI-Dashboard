@@ -7,10 +7,10 @@ export default function AmazonProductsPage() {
     <MarketplaceProductsView
       apiUrl={(status) => `/api/amazon/products?status=${status}`}
       cacheKey={(status) => `amazon_products_cache_v2:${status}`}
-      logoSrc="/brand/amazon-logo-current.png"
+      logoSrc="https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg"
       brandAlt="Amazon"
-      subtitleKey="amazonProducts.subtitle"
       amazonStatusFilter
+      backgroundSyncIntervalMs={15 * 60 * 1000}
     />
   );
 }

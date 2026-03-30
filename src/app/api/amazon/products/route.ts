@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 
+/** Vercel/Serverless: Listings können viele Seiten haben — genug Budget für Pagination + Reports. */
+export const maxDuration = 120;
+
 type ListingSummary = {
   asin?: string;
   itemName?: string;
@@ -73,49 +76,63 @@ function canonicalQuery(query: Record<string, string>) {
     .join("&");
 }
 
-async function getSupabaseSecret(key: string): Promise<string> {
+async function loadSupabaseSecrets(keys: string[]): Promise<Record<string, string>> {
+  const unique = [...new Set(keys.filter(Boolean))];
+  if (unique.length === 0) return {};
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("integration_secrets")
-    .select("value")
-    .eq("key", key)
-    .maybeSingle();
-  if (error) return "";
-  return typeof data?.value === "string" ? data.value.trim() : "";
+  const { data, error } = await admin.from("integration_secrets").select("key, value").in("key", unique);
+  if (error || !data?.length) return {};
+  const out: Record<string, string> = {};
+  for (const row of data) {
+    const k = row.key as string;
+    const v = row.value;
+    if (typeof v === "string" && v.trim()) out[k] = v.trim();
+  }
+  return out;
+}
+
+function collectMissingAmazonSecretKeys(): string[] {
+  const m: string[] = [];
+  if (!env("AMAZON_SP_API_REFRESH_TOKEN")) m.push("AMAZON_SP_API_REFRESH_TOKEN");
+  if (!env("AMAZON_SP_API_CLIENT_ID")) m.push("AMAZON_SP_API_CLIENT_ID");
+  if (!env("AMAZON_SP_API_CLIENT_SECRET")) m.push("AMAZON_SP_API_CLIENT_SECRET");
+  if (!env("AMAZON_AWS_ACCESS_KEY_ID")) m.push("AMAZON_AWS_ACCESS_KEY_ID");
+  if (!env("AMAZON_AWS_SECRET_ACCESS_KEY")) m.push("AMAZON_AWS_SECRET_ACCESS_KEY");
+  if (!env("AMAZON_AWS_SESSION_TOKEN")) m.push("AMAZON_AWS_SESSION_TOKEN");
+  if (!env("AMAZON_SP_API_REGION")) m.push("AMAZON_SP_API_REGION");
+  if (!env("AMAZON_SP_API_ENDPOINT")) m.push("AMAZON_SP_API_ENDPOINT");
+  if (!env("AMAZON_SP_API_MARKETPLACE_IDS") && !env("AMAZON_SP_API_MARKETPLACE_ID")) {
+    m.push("AMAZON_SP_API_MARKETPLACE_IDS", "AMAZON_SP_API_MARKETPLACE_ID");
+  }
+  if (!env("AMAZON_SP_API_SELLER_ID")) m.push("AMAZON_SP_API_SELLER_ID");
+  return [...new Set(m)];
 }
 
 async function getConfig() {
-  const refreshToken =
-    env("AMAZON_SP_API_REFRESH_TOKEN") || (await getSupabaseSecret("AMAZON_SP_API_REFRESH_TOKEN"));
-  const lwaClientId =
-    env("AMAZON_SP_API_CLIENT_ID") || (await getSupabaseSecret("AMAZON_SP_API_CLIENT_ID"));
-  const lwaClientSecret =
-    env("AMAZON_SP_API_CLIENT_SECRET") || (await getSupabaseSecret("AMAZON_SP_API_CLIENT_SECRET"));
-  const awsAccessKeyId =
-    env("AMAZON_AWS_ACCESS_KEY_ID") || (await getSupabaseSecret("AMAZON_AWS_ACCESS_KEY_ID"));
-  const awsSecretAccessKey =
-    env("AMAZON_AWS_SECRET_ACCESS_KEY") ||
-    (await getSupabaseSecret("AMAZON_AWS_SECRET_ACCESS_KEY"));
-  const awsSessionToken =
-    env("AMAZON_AWS_SESSION_TOKEN") || (await getSupabaseSecret("AMAZON_AWS_SESSION_TOKEN"));
-  const region =
-    env("AMAZON_SP_API_REGION") || (await getSupabaseSecret("AMAZON_SP_API_REGION")) || "eu-west-1";
+  const missingKeys = collectMissingAmazonSecretKeys();
+  const secrets = missingKeys.length > 0 ? await loadSupabaseSecrets(missingKeys) : {};
+  const s = (key: string) => secrets[key] ?? "";
+
+  const refreshToken = env("AMAZON_SP_API_REFRESH_TOKEN") || s("AMAZON_SP_API_REFRESH_TOKEN");
+  const lwaClientId = env("AMAZON_SP_API_CLIENT_ID") || s("AMAZON_SP_API_CLIENT_ID");
+  const lwaClientSecret = env("AMAZON_SP_API_CLIENT_SECRET") || s("AMAZON_SP_API_CLIENT_SECRET");
+  const awsAccessKeyId = env("AMAZON_AWS_ACCESS_KEY_ID") || s("AMAZON_AWS_ACCESS_KEY_ID");
+  const awsSecretAccessKey = env("AMAZON_AWS_SECRET_ACCESS_KEY") || s("AMAZON_AWS_SECRET_ACCESS_KEY");
+  const awsSessionToken = env("AMAZON_AWS_SESSION_TOKEN") || s("AMAZON_AWS_SESSION_TOKEN");
+  const region = env("AMAZON_SP_API_REGION") || s("AMAZON_SP_API_REGION") || "eu-west-1";
   const endpoint = normalizeHost(
-    env("AMAZON_SP_API_ENDPOINT") ||
-      (await getSupabaseSecret("AMAZON_SP_API_ENDPOINT")) ||
-      "sellingpartnerapi-eu.amazon.com"
+    env("AMAZON_SP_API_ENDPOINT") || s("AMAZON_SP_API_ENDPOINT") || "sellingpartnerapi-eu.amazon.com"
   );
   const marketplaceIdsRaw =
     env("AMAZON_SP_API_MARKETPLACE_IDS") ||
     env("AMAZON_SP_API_MARKETPLACE_ID") ||
-    (await getSupabaseSecret("AMAZON_SP_API_MARKETPLACE_IDS")) ||
-    (await getSupabaseSecret("AMAZON_SP_API_MARKETPLACE_ID"));
+    s("AMAZON_SP_API_MARKETPLACE_IDS") ||
+    s("AMAZON_SP_API_MARKETPLACE_ID");
   const marketplaceIds = marketplaceIdsRaw
     .split(",")
     .map((v) => v.trim())
     .filter(Boolean);
-  const sellerId =
-    env("AMAZON_SP_API_SELLER_ID") || (await getSupabaseSecret("AMAZON_SP_API_SELLER_ID"));
+  const sellerId = env("AMAZON_SP_API_SELLER_ID") || s("AMAZON_SP_API_SELLER_ID");
 
   return {
     refreshToken,
@@ -131,11 +148,22 @@ async function getConfig() {
   };
 }
 
+/** Prozess-lokal: weniger LWA-Roundtrips bei parallelen Dashboard-Requests. */
+let lwaAccessTokenCache: { token: string; expiresAtMs: number } | null = null;
+
 async function getLwaAccessToken(args: {
   refreshToken: string;
   lwaClientId: string;
   lwaClientSecret: string;
 }) {
+  const now = Date.now();
+  if (
+    lwaAccessTokenCache &&
+    lwaAccessTokenCache.expiresAtMs - 90_000 > now
+  ) {
+    return lwaAccessTokenCache.token;
+  }
+
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: args.refreshToken,
@@ -155,8 +183,17 @@ async function getLwaAccessToken(args: {
   } catch {
     json = null;
   }
-  const token = (json as { access_token?: string } | null)?.access_token;
+  const parsed = json as { access_token?: string; expires_in?: number } | null;
+  const token = parsed?.access_token;
   if (!res.ok || !token) throw new Error(`LWA Token konnte nicht geladen werden (${res.status}).`);
+  const expiresInSec =
+    typeof parsed?.expires_in === "number" && Number.isFinite(parsed.expires_in) && parsed.expires_in > 60
+      ? parsed.expires_in
+      : 3600;
+  lwaAccessTokenCache = {
+    token,
+    expiresAtMs: now + expiresInSec * 1000,
+  };
   return token;
 }
 
@@ -527,34 +564,35 @@ export async function GET(request: Request) {
       lwaClientSecret: config.lwaClientSecret,
     });
 
-    // Seller-ID robust aus Amazon ziehen (MarketplaceParticipation),
-    // damit lokale/env Tippfehler keine Produktabfrage blockieren.
-    let effectiveSellerId = config.sellerId;
-    const sellerProbe = await spApiGet({
-      endpoint: config.endpoint,
-      region: config.region,
-      path: "/sellers/v1/marketplaceParticipations",
-      query: {},
-      awsAccessKeyId: config.awsAccessKeyId,
-      awsSecretAccessKey: config.awsSecretAccessKey,
-      awsSessionToken: config.awsSessionToken,
-      lwaAccessToken,
-    });
-    if (sellerProbe.res.ok && sellerProbe.json) {
-      const sellerPayload = sellerProbe.json as {
-        payload?: {
-          marketplaceParticipations?: Array<{
-            marketplace?: { id?: string };
-            participation?: { sellerId?: string };
-          }>;
+    // Seller-ID: bei gesetzter Env/Secret keinen Extra-Request (schneller, weniger Rate-Limits).
+    let effectiveSellerId = (config.sellerId ?? "").trim();
+    if (!effectiveSellerId) {
+      const sellerProbe = await spApiGet({
+        endpoint: config.endpoint,
+        region: config.region,
+        path: "/sellers/v1/marketplaceParticipations",
+        query: {},
+        awsAccessKeyId: config.awsAccessKeyId,
+        awsSecretAccessKey: config.awsSecretAccessKey,
+        awsSessionToken: config.awsSessionToken,
+        lwaAccessToken,
+      });
+      if (sellerProbe.res.ok && sellerProbe.json) {
+        const sellerPayload = sellerProbe.json as {
+          payload?: {
+            marketplaceParticipations?: Array<{
+              marketplace?: { id?: string };
+              participation?: { sellerId?: string };
+            }>;
+          };
         };
-      };
-      const participations = sellerPayload.payload?.marketplaceParticipations ?? [];
-      const match = participations.find(
-        (entry) => entry.marketplace?.id === config.marketplaceIds[0]
-      );
-      const resolved = match?.participation?.sellerId ?? "";
-      if (resolved) effectiveSellerId = resolved;
+        const participations = sellerPayload.payload?.marketplaceParticipations ?? [];
+        const match = participations.find(
+          (entry) => entry.marketplace?.id === config.marketplaceIds[0]
+        );
+        const resolved = match?.participation?.sellerId ?? "";
+        if (resolved) effectiveSellerId = resolved;
+      }
     }
 
     if (!effectiveSellerId) {

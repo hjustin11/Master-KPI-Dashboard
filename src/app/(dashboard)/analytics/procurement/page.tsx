@@ -244,12 +244,12 @@ export default function AnalyticsProcurementPage() {
 
       {!loading && lines.length > 0 ? (
         <div className="flex min-h-0 flex-1 flex-col gap-2 rounded-lg border border-border/50 bg-card/80 p-2">
-          <div className="relative min-w-[12rem] max-w-md shrink-0">
+          <div className="relative w-full min-w-0 max-w-[min(100%,40rem)] shrink-0">
             <Search className="pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 pl-7 text-xs"
+              className="h-8 w-full min-w-0 pl-7 text-xs"
               placeholder={t("dataTable.searchIn", { fields: t("filters.procurementTable") })}
             />
           </div>

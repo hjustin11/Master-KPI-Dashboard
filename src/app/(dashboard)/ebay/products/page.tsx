@@ -10,7 +10,6 @@ export default function EbayProductsPage() {
       apiUrl="/api/ebay/products"
       logoSrc="/brand/marketplaces/ebay.svg"
       brandAlt="eBay"
-      subtitleKey="marketplaceProducts.subtitleEbay"
     />
   );
 }

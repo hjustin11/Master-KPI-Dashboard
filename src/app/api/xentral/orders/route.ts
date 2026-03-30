@@ -601,7 +601,7 @@ export async function GET(request: Request) {
         error:
           first.res.status === 401
             ? "Xentral API: Unauthorized (401). Bitte Personal Access Token (PAT) prüfen."
-            : "Xentral Bestellungen konnten nicht geladen werden (salesOrders).",
+            : "Xentral-Aufträge konnten nicht geladen werden (salesOrders).",
         status: first.res.status,
         debug:
           process.env.NODE_ENV !== "production"

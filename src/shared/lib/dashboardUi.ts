@@ -16,6 +16,50 @@ export const DASHBOARD_PAGE_SHELL =
   "flex min-h-[calc(100vh-12rem)] w-full min-w-0 flex-col gap-6";
 
 /**
+ * Einheitliche Marktplatz-Logo-Fläche (Bestellungen, Produkte, …), orientiert an Otto → Bestellungen.
+ * Feste Höhe/Breite; das Asset skaliert mit `object-contain` (Farben und Seitenverhältnis bleiben erhalten).
+ */
+export const DASHBOARD_MARKETPLACE_LOGO_FRAME = "relative block h-10 w-[120px] shrink-0";
+
+/** Für Next.js `<Image fill />` innerhalb von `DASHBOARD_MARKETPLACE_LOGO_FRAME`. */
+export const DASHBOARD_MARKETPLACE_LOGO_IMAGE_FILL = "object-contain object-left";
+
+/** Für `<img>` innerhalb von `DASHBOARD_MARKETPLACE_LOGO_FRAME`. */
+export const DASHBOARD_MARKETPLACE_LOGO_IMG_IN_FRAME = "h-full w-full object-contain object-left";
+
+/** MediaMarkt & Saturn Wortmarke 2023 (SVG, transparent), Wikimedia Commons. */
+export const WIKIMEDIA_MEDIAMARKT_SATURN_LOGO_SVG =
+  "https://upload.wikimedia.org/wikipedia/commons/0/02/Media_Markt_%26_Saturn_Logo_01.2023.svg";
+
+/** zooplus Wortmarke (PNG), Wikimedia Commons — oft mit Transparenz. */
+export const WIKIMEDIA_ZOOPLUS_LOGO_PNG =
+  "https://upload.wikimedia.org/wikipedia/commons/7/7c/Zooplus_logo.png";
+
+/** Fressnapf Wortmarke 2023 (SVG, transparent), Wikimedia Commons — gleiche Fläche wie Otto (`DASHBOARD_MARKETPLACE_LOGO_FRAME`). */
+export const WIKIMEDIA_FRESSNAPF_LOGO_2023_SVG =
+  "https://upload.wikimedia.org/wikipedia/commons/9/9f/Fressnapf_Logo_2023.svg";
+
+/** Shopify Wortmarke 2018 (SVG, transparent), Wikimedia Commons. */
+export const WIKIMEDIA_SHOPIFY_LOGO_2018_SVG =
+  "https://upload.wikimedia.org/wikipedia/commons/0/0e/Shopify_logo_2018.svg";
+
+/**
+ * Zusatz zu `DASHBOARD_MARKETPLACE_LOGO_FRAME`: etwas breiter, gleiche Höhe (z. B. Fressnapf-Wortmarke).
+ */
+export const DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_MD =
+  "h-10 w-[min(100%,10rem)]";
+
+/**
+ * Zusatz zu `DASHBOARD_MARKETPLACE_LOGO_FRAME` für größere Markenlogos (tailwind-merge überschreibt Maße).
+ */
+export const DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_LG =
+  "h-12 w-[min(100%,15rem)] sm:h-14 sm:w-[17.5rem]";
+
+/** Extra breit (z. B. MediaMarkt & Saturn Kombi). */
+export const DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_XL =
+  "h-12 w-[min(100%,20rem)] sm:h-14 sm:w-[22rem]";
+
+/**
  * Root-Container wie `DataTable` mit `compact` (Toolbar + Karte).
  */
 export const DASHBOARD_COMPACT_CARD =
@@ -38,3 +82,14 @@ export const DASHBOARD_META_TEXT = "text-xs text-muted-foreground";
  */
 export const DASHBOARD_PLAIN_TABLE_WRAP =
   "overflow-x-auto rounded-lg border border-border/50 [&_th]:h-7 [&_th]:px-1.5 [&_th]:py-1 [&_th]:text-[11px] [&_th]:font-medium [&_td]:px-1.5 [&_td]:py-1 [&_td]:text-xs";
+
+/**
+ * Marktplatz „Produkte“-Listen (alle `MarketplaceProductsView`-Seiten): feste Tabellenaufteilung.
+ * Anteile: SKU 14 %, Sekundär-ID 14 %, Artikelname 58 %, Status 14 % (= 100 %).
+ */
+export const MARKETPLACE_PRODUCTS_TABLE_CLASS = "table-fixed w-full";
+
+export const MARKETPLACE_PRODUCTS_COL_SKU = "w-[14%] min-w-0";
+export const MARKETPLACE_PRODUCTS_COL_SECONDARY_ID = "w-[14%] min-w-0";
+export const MARKETPLACE_PRODUCTS_COL_TITLE = "w-[58%] min-w-0";
+export const MARKETPLACE_PRODUCTS_COL_STATUS = "w-[14%] min-w-0";

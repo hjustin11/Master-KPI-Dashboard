@@ -34,7 +34,7 @@ export function MarketplaceOrderIdLink({ marketplace, internetNumber, className 
         "tabular-nums font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         className
       )}
-      title={`Bestellung im Seller-Portal öffnen (${display})`}
+      title={`Auftrag im Seller-Portal öffnen (${display})`}
     >
       {display}
     </a>

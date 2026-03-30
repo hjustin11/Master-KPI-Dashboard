@@ -631,6 +631,113 @@ async function fetchShopifyOrdersPaginatedImpl(
   return out;
 }
 
+async function fetchShopifyOrdersRawPaginatedImpl(
+  config: FlexIntegrationConfig,
+  options: FetchFlexOrdersOptions = {}
+): Promise<unknown[]> {
+  const maxPages = options.maxPages ?? 40;
+  const pageLimit = 100;
+  const dateFilter =
+    options.createdFromMs != null && options.createdToMsExclusive != null
+      ? { fromMs: options.createdFromMs, toMsExclusive: options.createdToMsExclusive }
+      : undefined;
+
+  const out: unknown[] = [];
+  const label = config.marketplaceLabel;
+  let nextPath: string | null = buildShopifyOrdersPath(config, pageLimit, dateFilter);
+
+  for (let page = 0; page < maxPages && nextPath; page += 1) {
+    if (page > 0 && config.paginationDelayMs > 0) {
+      await sleep(config.paginationDelayMs);
+    }
+    const path = nextPath.startsWith("/") ? nextPath : `/${nextPath}`;
+    const { res, text } = await flexGetWith429Retry(config, path);
+    let json: unknown = null;
+    try {
+      json = text ? (JSON.parse(text) as unknown) : null;
+    } catch {
+      json = null;
+    }
+    if (!res.ok || json == null) {
+      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 400);
+      const htmlHint = json == null ? nonJsonBodyHint(text, config.envPrefix) : "";
+      if (page === 0) {
+        const rateHint =
+          res.status === 429
+            ? ` Zu viele Anfragen (Rate Limit). Optional ${config.envPrefix}_PAGINATION_DELAY_MS erhöhen.`
+            : "";
+        throw new Error(
+          `${label}: orders request failed (HTTP ${res.status}).${rateHint}${htmlHint || (snippet ? ` ${snippet}` : "")}`
+        );
+      }
+      break;
+    }
+    const chunk = extractOrdersArray(json);
+    for (const raw of chunk) {
+      out.push(raw);
+    }
+    if (chunk.length === 0) break;
+    nextPath = parseShopifyNextRelativePath(res.headers.get("Link"), config.baseUrl);
+    if (!nextPath) break;
+  }
+
+  return out;
+}
+
+/** Rohe Order-JSONs für Artikel-/Positions-Auswertung (Analytics-Dialog). */
+export async function fetchFlexOrdersRawPaginated(
+  config: FlexIntegrationConfig,
+  options: FetchFlexOrdersOptions = {}
+): Promise<unknown[]> {
+  if (config.spec.id === "shopify") {
+    return fetchShopifyOrdersRawPaginatedImpl(config, options);
+  }
+  const maxPages = options.maxPages ?? 40;
+  const limit = 100;
+  const dateFilter =
+    options.createdFromMs != null && options.createdToMsExclusive != null
+      ? { fromMs: options.createdFromMs, toMsExclusive: options.createdToMsExclusive }
+      : undefined;
+
+  const out: unknown[] = [];
+  const label = config.marketplaceLabel;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    if (page > 0 && config.paginationDelayMs > 0) {
+      await sleep(config.paginationDelayMs);
+    }
+    const path = buildOrdersListQuery(config, limit, page * limit, dateFilter);
+    const { res, text } = await flexGetWith429Retry(config, path);
+    let json: unknown = null;
+    try {
+      json = text ? (JSON.parse(text) as unknown) : null;
+    } catch {
+      json = null;
+    }
+    if (!res.ok || json == null) {
+      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 400);
+      const htmlHint = json == null ? nonJsonBodyHint(text, config.envPrefix) : "";
+      if (page === 0) {
+        const rateHint =
+          res.status === 429
+            ? ` Zu viele Anfragen (Rate Limit). Optional ${config.envPrefix}_PAGINATION_DELAY_MS erhöhen.`
+            : "";
+        throw new Error(
+          `${label}: orders request failed (HTTP ${res.status}).${rateHint}${htmlHint || (snippet ? ` ${snippet}` : "")}`
+        );
+      }
+      break;
+    }
+    const chunk = extractOrdersArray(json);
+    for (const raw of chunk) {
+      out.push(raw);
+    }
+    if (chunk.length < limit) break;
+  }
+
+  return out;
+}
+
 export async function fetchFlexOrdersPaginated(
   config: FlexIntegrationConfig,
   options: FetchFlexOrdersOptions = {}

@@ -6,17 +6,12 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/shared/components/DataTable";
 import {
   DASHBOARD_COMPACT_CARD,
+  DASHBOARD_MARKETPLACE_LOGO_FRAME,
+  DASHBOARD_MARKETPLACE_LOGO_IMAGE_FILL,
   DASHBOARD_PAGE_SHELL,
   DASHBOARD_PAGE_TITLE,
 } from "@/shared/lib/dashboardUi";
@@ -27,8 +22,6 @@ import {
 } from "@/shared/lib/dashboardClientCache";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
-
-type RangeMode = "today-yesterday" | "custom";
 
 type OttoOrderRow = {
   orderId: string;
@@ -109,7 +102,6 @@ export default function OttoOrdersPage() {
   const yesterday = new Date();
   yesterday.setDate(now.getDate() - 1);
 
-  const [mode, setMode] = useState<RangeMode>("today-yesterday");
   const [from, setFrom] = useState<string>(toDateInputValue(yesterday));
   const [to, setTo] = useState<string>(toDateInputValue(now));
   const [rows, setRows] = useState<OttoOrderRow[]>([]);
@@ -148,16 +140,6 @@ export default function OttoOrdersPage() {
         ),
       },
       {
-        accessorKey: "amount",
-        meta: { align: "center" },
-        header: () => <div className="block w-full text-center">{t("ottoOrders.total")}</div>,
-        cell: ({ row }) => (
-          <div className="block w-full text-center tabular-nums">
-            {formatAmount(row.original.amount, row.original.currency)}
-          </div>
-        ),
-      },
-      {
         accessorKey: "units",
         meta: { align: "center" },
         header: () => <div className="block w-full text-center">{t("ottoOrders.units")}</div>,
@@ -174,6 +156,16 @@ export default function OttoOrdersPage() {
           <Badge variant={statusVariantFromRaw(row.original.statusRaw)}>
             {labelForStatus(row.original.statusRaw)}
           </Badge>
+        ),
+      },
+      {
+        accessorKey: "amount",
+        meta: { align: "right" },
+        header: () => <div className="block w-full text-right">{t("ottoOrders.total")}</div>,
+        cell: ({ row }) => (
+          <div className="block w-full text-right tabular-nums">
+            {formatAmount(row.original.amount, row.original.currency)}
+          </div>
         ),
       },
     ],
@@ -257,9 +249,12 @@ export default function OttoOrdersPage() {
 
   useEffect(() => {
     setHasMounted(true);
-    void loadOrders(from, to, false, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialer Ladevorgang nur beim Mount
   }, []);
+
+  useEffect(() => {
+    if (!from || !to || from > to) return;
+    void loadOrders(from, to, true, false);
+  }, [from, to, loadOrders]);
 
   useEffect(() => {
     if (!hasMounted) return;
@@ -269,33 +264,16 @@ export default function OttoOrdersPage() {
     return () => window.clearInterval(id);
   }, [hasMounted, loadOrders]);
 
-  const handleModeChange = (value: RangeMode | null) => {
-    if (value === null) return;
-    setMode(value);
-    if (value === "today-yesterday") {
-      const todayValue = toDateInputValue(new Date());
-      const yesterdayValue = toDateInputValue(new Date(Date.now() - 24 * 60 * 60 * 1000));
-      setFrom(yesterdayValue);
-      setTo(todayValue);
-      void loadOrders(yesterdayValue, todayValue, true, false);
-    }
-  };
-
-  const applyCustomRange = () => {
-    if (!from || !to) return;
-    void loadOrders(from, to, true, false);
-  };
-
   return (
     <div className={DASHBOARD_PAGE_SHELL}>
       <div className="space-y-1">
         <div className="flex items-center gap-3">
-          <span className="relative block h-10 w-[120px] shrink-0">
+          <span className={DASHBOARD_MARKETPLACE_LOGO_FRAME}>
             <Image
               src="/brand/marketplaces/otto.svg"
               alt={t("nav.otto")}
               fill
-              className="object-contain object-left"
+              className={DASHBOARD_MARKETPLACE_LOGO_IMAGE_FILL}
               sizes="120px"
               priority
             />
@@ -325,41 +303,15 @@ export default function OttoOrdersPage() {
           ) : null}
         </div>
 
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          <div className="flex items-center gap-2">
-            <p className="text-xs font-medium text-muted-foreground">{t("ottoOrders.period")}</p>
-            <Select value={mode} onValueChange={handleModeChange}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue>
-                  {mode === "today-yesterday" ? t("ottoOrders.todayYesterday") : t("ottoOrders.customRange")}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today-yesterday">{t("ottoOrders.todayYesterday")}</SelectItem>
-                <SelectItem value="custom">{t("ottoOrders.customRange")}</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="ml-auto flex flex-wrap items-end justify-end gap-2">
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">{t("dates.from")}</p>
+            <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
           </div>
-
-          {mode === "custom" ? (
-            <>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">{t("dates.from")}</p>
-                <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">{t("dates.to")}</p>
-                <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
-              </div>
-              <button
-                type="button"
-                className="h-8 rounded-md border border-input px-3 text-sm font-medium hover:bg-muted"
-                onClick={applyCustomRange}
-              >
-                {t("ottoOrders.apply")}
-              </button>
-            </>
-          ) : null}
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">{t("dates.to")}</p>
+            <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          </div>
         </div>
       </div>
 

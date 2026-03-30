@@ -84,7 +84,6 @@ const navItems: NavItem[] = [
     children: [
       { labelKey: "nav.amazonOrders", href: "/amazon/orders" },
       { labelKey: "nav.amazonProducts", href: "/amazon/products" },
-      { labelKey: "nav.amazonReturns", href: "/amazon/returns" },
     ],
   },
   {
@@ -118,7 +117,6 @@ const navItems: NavItem[] = [
     children: [
       { labelKey: "nav.kauflandOrders", href: "/kaufland/orders" },
       { labelKey: "nav.kauflandProducts", href: "/kaufland/products" },
-      { labelKey: "nav.kauflandUnits", href: "/kaufland/units" },
     ],
   },
   {
@@ -340,16 +338,22 @@ function SingleNavItem({
   }, [childOrSelfActive]);
 
   const linkClass = cn(
-    "group flex items-center gap-3 rounded-md px-3 text-sm transition-all duration-200 hover:bg-accent/60",
+    "group flex w-full min-w-0 items-center gap-3 rounded-md px-3 text-sm font-medium transition-all duration-200 hover:bg-accent/60",
+    !collapsed && "border-l-2 border-transparent",
     compact ? "py-1.5" : "py-2",
-    active && "border-l-2 border-primary bg-primary/10 text-primary",
-    collapsed && "justify-center px-2"
+    active && "bg-primary/10 text-primary",
+    active && !collapsed && "border-primary",
+    collapsed && "justify-center border-l-0 px-2"
   );
 
   const baseLink = (
     <Link href={primaryHref} className={linkClass}>
-      <Icon className="h-4 w-4 shrink-0" />
-      {!collapsed ? <span className="truncate">{t(item.labelKey)}</span> : null}
+      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4">
+        <Icon aria-hidden />
+      </span>
+      {!collapsed ? (
+        <span className="min-w-0 flex-1 truncate text-left">{t(item.labelKey)}</span>
+      ) : null}
     </Link>
   );
 
@@ -357,16 +361,18 @@ function SingleNavItem({
     <button
       type="button"
       className={cn(
-        "flex w-full min-w-0 items-center gap-2 rounded-md px-3 text-left text-sm transition-all duration-200 hover:bg-accent/60",
+        "flex w-full min-w-0 items-center gap-3 rounded-md border-l-2 border-transparent px-3 text-left text-sm font-medium transition-all duration-200 hover:bg-accent/60",
         compact ? "py-1.5" : "py-2",
-        active && "border-l-2 border-primary bg-primary/10 text-primary"
+        active && "border-primary bg-primary/10 text-primary"
       )}
       aria-expanded={subOpen}
       aria-label={`${t(item.labelKey)} — ${t("sidebar.toggleSubnav")}`}
       onClick={() => setSubOpen((o) => !o)}
     >
-      <Icon className="h-4 w-4 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{t(item.labelKey)}</span>
+      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4">
+        <Icon aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1 truncate text-left">{t(item.labelKey)}</span>
       <ChevronDown
         className={cn(
           "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
@@ -451,12 +457,14 @@ function MarketplaceExpandedGroup({
         type="button"
         onClick={() => setOpen(!open)}
         className={cn(
-          "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-all duration-200 hover:bg-accent/60",
-          anyActive && "border-l-2 border-primary bg-primary/10 text-primary"
+          "flex w-full min-w-0 items-center gap-3 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium transition-all duration-200 hover:bg-accent/60",
+          anyActive && "border-primary bg-primary/10 text-primary"
         )}
       >
-        <Store className="h-4 w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-left font-medium">{t("sidebar.marketplacesGroup")}</span>
+        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4">
+          <Store aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-left">{t("sidebar.marketplacesGroup")}</span>
         <ChevronDown
           className={cn("h-4 w-4 shrink-0 transition-transform duration-200", open && "rotate-180")}
           aria-hidden
@@ -506,8 +514,8 @@ function CollapsedMarketplacePopover({
           <button
             type="button"
             className={cn(
-              "group flex w-full items-center justify-center rounded-md px-2 py-2 text-sm transition-all duration-200 hover:bg-accent/60",
-              anyActive && "border-l-2 border-primary bg-primary/10 text-primary"
+              "group flex w-full items-center justify-center rounded-md border-l-0 px-2 py-2 text-sm font-medium transition-all duration-200 hover:bg-accent/60",
+              anyActive && "bg-primary/10 text-primary"
             )}
             aria-label={t("sidebar.marketplacesGroup")}
             title={t("sidebar.marketplacesGroup")}

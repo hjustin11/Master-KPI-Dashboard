@@ -393,6 +393,54 @@ export async function fetchFressnapfOrdersPaginated(
   return out;
 }
 
+export async function fetchFressnapfOrdersRawPaginated(
+  config: FressnapfIntegrationConfig,
+  options: FetchFressnapfOrdersOptions = {}
+): Promise<unknown[]> {
+  const maxPages = options.maxPages ?? 40;
+  const limit = 100;
+  const dateFilter =
+    options.createdFromMs != null && options.createdToMsExclusive != null
+      ? { fromMs: options.createdFromMs, toMsExclusive: options.createdToMsExclusive }
+      : undefined;
+
+  const out: unknown[] = [];
+
+  for (let page = 0; page < maxPages; page += 1) {
+    if (page > 0 && config.paginationDelayMs > 0) {
+      await sleep(config.paginationDelayMs);
+    }
+    const path = buildOrdersListQuery(config, limit, page * limit, dateFilter);
+    const { res, text } = await fressnapfGetWith429Retry(config, path);
+    let json: unknown = null;
+    try {
+      json = text ? (JSON.parse(text) as unknown) : null;
+    } catch {
+      json = null;
+    }
+    if (!res.ok || json == null) {
+      const hint = text.replace(/\s+/g, " ").trim().slice(0, 400);
+      if (page === 0) {
+        const rateHint =
+          res.status === 429
+            ? " Zu viele Anfragen (Rate Limit). Bitte später erneut versuchen; optional FRESSNAPF_PAGINATION_DELAY_MS erhöhen (z. B. 800) oder Zeitraum verkleinern."
+            : "";
+        throw new Error(
+          `Fressnapf orders request failed (HTTP ${res.status}).${rateHint}${hint ? ` ${hint}` : ""}`
+        );
+      }
+      break;
+    }
+    const chunk = extractOrdersArray(json);
+    for (const raw of chunk) {
+      out.push(raw);
+    }
+    if (chunk.length < limit) break;
+  }
+
+  return out;
+}
+
 export function parseYmdParam(raw: string | null): string | null {
   if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
   const [y, m, d] = raw.split("-").map(Number);

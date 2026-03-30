@@ -1,24 +1,20 @@
 "use client";
 
-import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/shared/components/DataTable";
 import {
   DASHBOARD_COMPACT_CARD,
+  DASHBOARD_MARKETPLACE_LOGO_FRAME,
+  DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_MD,
+  DASHBOARD_MARKETPLACE_LOGO_IMG_IN_FRAME,
   DASHBOARD_PAGE_SHELL,
   DASHBOARD_PAGE_TITLE,
+  WIKIMEDIA_SHOPIFY_LOGO_2018_SVG,
 } from "@/shared/lib/dashboardUi";
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
@@ -27,8 +23,6 @@ import {
 } from "@/shared/lib/dashboardClientCache";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
-
-type RangeMode = "today-yesterday" | "custom";
 
 type ShopifyOrderRow = {
   orderId: string;
@@ -123,7 +117,6 @@ export default function ShopifyOrdersPage() {
   const yesterday = new Date();
   yesterday.setDate(now.getDate() - 1);
 
-  const [mode, setMode] = useState<RangeMode>("today-yesterday");
   const [from, setFrom] = useState<string>(toDateInputValue(yesterday));
   const [to, setTo] = useState<string>(toDateInputValue(now));
   const [rows, setRows] = useState<ShopifyOrderRow[]>([]);
@@ -162,16 +155,6 @@ export default function ShopifyOrdersPage() {
         ),
       },
       {
-        accessorKey: "amount",
-        meta: { align: "center" },
-        header: () => <div className="block w-full text-center">{t("shopifyOrders.total")}</div>,
-        cell: ({ row }) => (
-          <div className="block w-full text-center tabular-nums">
-            {formatAmount(row.original.amount, row.original.currency)}
-          </div>
-        ),
-      },
-      {
         accessorKey: "units",
         meta: { align: "center" },
         header: () => <div className="block w-full text-center">{t("shopifyOrders.units")}</div>,
@@ -188,6 +171,16 @@ export default function ShopifyOrdersPage() {
           <Badge variant={statusVariantFromRaw(row.original.statusRaw)}>
             {labelForStatus(row.original.statusRaw)}
           </Badge>
+        ),
+      },
+      {
+        accessorKey: "amount",
+        meta: { align: "right" },
+        header: () => <div className="block w-full text-right">{t("shopifyOrders.total")}</div>,
+        cell: ({ row }) => (
+          <div className="block w-full text-right tabular-nums">
+            {formatAmount(row.original.amount, row.original.currency)}
+          </div>
         ),
       },
     ],
@@ -271,9 +264,12 @@ export default function ShopifyOrdersPage() {
 
   useEffect(() => {
     setHasMounted(true);
-    void loadOrders(from, to, false, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialer Ladevorgang nur beim Mount
   }, []);
+
+  useEffect(() => {
+    if (!from || !to || from > to) return;
+    void loadOrders(from, to, true, false);
+  }, [from, to, loadOrders]);
 
   useEffect(() => {
     if (!hasMounted) return;
@@ -283,35 +279,16 @@ export default function ShopifyOrdersPage() {
     return () => window.clearInterval(id);
   }, [hasMounted, loadOrders]);
 
-  const handleModeChange = (value: RangeMode | null) => {
-    if (value === null) return;
-    setMode(value);
-    if (value === "today-yesterday") {
-      const todayValue = toDateInputValue(new Date());
-      const yesterdayValue = toDateInputValue(new Date(Date.now() - 24 * 60 * 60 * 1000));
-      setFrom(yesterdayValue);
-      setTo(todayValue);
-      void loadOrders(yesterdayValue, todayValue, true, false);
-    }
-  };
-
-  const applyCustomRange = () => {
-    if (!from || !to) return;
-    void loadOrders(from, to, true, false);
-  };
-
   return (
     <div className={DASHBOARD_PAGE_SHELL}>
       <div className="space-y-1">
         <div className="flex items-center gap-3">
-          <span className="relative block h-10 w-[130px] shrink-0">
-            <Image
-              src="/brand/marketplaces/shopify.svg"
+          <span className={cn(DASHBOARD_MARKETPLACE_LOGO_FRAME, DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_MD)}>
+            <img
+              src={WIKIMEDIA_SHOPIFY_LOGO_2018_SVG}
               alt={t("nav.shopify")}
-              fill
-              className="object-contain object-left"
-              sizes="130px"
-              priority
+              className={DASHBOARD_MARKETPLACE_LOGO_IMG_IN_FRAME}
+              loading="eager"
             />
           </span>
           <span className={cn(DASHBOARD_PAGE_TITLE, "text-muted-foreground")}>{t("nav.shopifyOrders")}</span>
@@ -339,43 +316,15 @@ export default function ShopifyOrdersPage() {
           ) : null}
         </div>
 
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          <div className="flex items-center gap-2">
-            <p className="text-xs font-medium text-muted-foreground">{t("shopifyOrders.period")}</p>
-            <Select value={mode} onValueChange={handleModeChange}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue>
-                  {mode === "today-yesterday"
-                    ? t("shopifyOrders.todayYesterday")
-                    : t("shopifyOrders.customRange")}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today-yesterday">{t("shopifyOrders.todayYesterday")}</SelectItem>
-                <SelectItem value="custom">{t("shopifyOrders.customRange")}</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="ml-auto flex flex-wrap items-end justify-end gap-2">
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">{t("dates.from")}</p>
+            <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
           </div>
-
-          {mode === "custom" ? (
-            <>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">{t("dates.from")}</p>
-                <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">{t("dates.to")}</p>
-                <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
-              </div>
-              <button
-                type="button"
-                className="h-8 rounded-md border border-input px-3 text-sm font-medium hover:bg-muted"
-                onClick={applyCustomRange}
-              >
-                {t("shopifyOrders.apply")}
-              </button>
-            </>
-          ) : null}
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">{t("dates.to")}</p>
+            <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          </div>
         </div>
       </div>
 

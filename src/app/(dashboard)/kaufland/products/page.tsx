@@ -10,7 +10,6 @@ export default function KauflandProductsPage() {
       serverPagination
       logoSrc="/brand/marketplaces/kaufland.svg"
       brandAlt="Kaufland"
-      subtitleKey="marketplaceProducts.subtitleKaufland"
     />
   );
 }

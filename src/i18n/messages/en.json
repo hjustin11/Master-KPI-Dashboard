@@ -33,12 +33,10 @@
     "amazon": "Amazon",
     "amazonOrders": "Orders",
     "amazonProducts": "Products",
-    "amazonReturns": "Returns",
     "otto": "Otto",
     "ottoOrders": "Orders",
     "kaufland": "Kaufland",
     "kauflandOrders": "Orders",
-    "kauflandUnits": "Offers",
     "fressnapf": "Fressnapf",
     "fressnapfOrders": "Orders",
     "mediamarktSaturn": "MediaMarkt & Saturn",
@@ -220,7 +218,6 @@
     "zooplusOrders": "Order ID, status, line items",
     "tiktokOrders": "Order ID, status, line items",
     "shopifyOrders": "Order ID, status, line items",
-    "kauflandUnits": "Offer ID, title, quantity",
     "xentralOrders": "Document, order ID, customer, or marketplace",
     "skuOrArticleNameFilter": "Filter by SKU or article name…",
     "procurementTable": "Container, manufacturer, product, SKU, quantity, arrival date, note",
@@ -324,10 +321,11 @@
   },
   "xentralProducts": {
     "title": "Articles",
-    "subtitle": "Article master from Xentral (incl. stock).",
     "loading": "Loading articles from Xentral…",
     "loadError": "Could not load Xentral articles.",
     "refresh": "Refresh",
+    "totalStockKpiLabel": "Total stock",
+    "totalInventoryValueKpiLabel": "Inventory value",
     "totalStock": "Total stock: {count}",
     "totalInventoryValue": "Inventory value total: {value}",
     "syncing": "Syncing with Xentral…",
@@ -352,7 +350,6 @@
   "amazonProducts": {
     "title": "Amazon products",
     "productsWord": "Products",
-    "subtitle": "All Amazon listings with status filter. Default is active.",
     "loading": "Loading Amazon products…",
     "totalCount": "Total listings: {count}",
     "syncing": "Syncing…",
@@ -374,6 +371,7 @@
     "sku": "SKU",
     "secondaryId": "ID",
     "article": "Article",
+    "articleName": "Product name",
     "productType": "Category / type",
     "status": "Status",
     "active": "Active",
@@ -383,14 +381,7 @@
     "missingEnvVars": "Missing variables: {keys}",
     "loadFailed": "Could not load products.",
     "reportPending": "Report is being prepared…",
-    "subtitleEbay": "eBay inventory (Inventory API) when credentials and scopes allow.",
-    "subtitleOtto": "Otto Market: products via GET /v4/products (include “products” in OTTO_API_SCOPES).",
-    "subtitleKaufland": "Kaufland items via Seller API (v2/items).",
-    "subtitleFressnapf": "Mirakl offers (GET /offers) for Fressnapf.",
-    "subtitleMms": "Mirakl offers (GET /offers) for MediaMarkt & Saturn.",
-    "subtitleZooplus": "Mirakl offers (GET /offers) for ZooPlus.",
-    "subtitleTiktok": "TikTok: product list will appear once the Product API is connected.",
-    "subtitleShopify": "Shopify products via Admin REST API (products.json)."
+    "reportPendingGiveUp": "The report was still not ready after several automatic retries. Please reload later or check the report status in Seller Central."
   },
   "amazonOrders": {
     "title": "Amazon orders",
@@ -584,18 +575,6 @@
     "statusPending": "Pending",
     "loadFailed": "Could not load TikTok orders."
   },
-  "kauflandUnits": {
-    "subtitle": "Active offers (units) from the Seller API.",
-    "hint": "First 100 offers · Refresh reloads.",
-    "loading": "Loading offers…",
-    "refresh": "Refresh",
-    "loadFailed": "Could not load Kaufland offers.",
-    "offerId": "Offer ID",
-    "title": "Title",
-    "quantity": "Quantity",
-    "price": "Price",
-    "status": "Status"
-  },
   "analyticsMp": {
     "totalTitle": "Total",
     "totalSubtitle": "Sum of connected channels · selected period and prior period of equal length · Amazon metrics via SP-API Sales ·",
@@ -667,7 +646,17 @@
     "tiktokMetricsError": "Could not load TikTok metrics.",
     "shopifyMetricsError": "Could not load Shopify metrics.",
     "revenue7d": "Revenue (7 days)",
-    "tileTrend": "Δ revenue vs. prior week"
+    "tileTrend": "Δ revenue vs. prior week",
+    "dialogArticlesHeading": "Sold articles",
+    "dialogArticlesPeriodHint": "Period for this list (this dialog only)",
+    "dialogArticlesPrevHint": "Compared to prior period: {span}",
+    "dialogArticlesLoading": "Loading articles…",
+    "dialogArticlesEmpty": "No sold articles in this period.",
+    "dialogArticlesUnsupported": "Article breakdown is not available for this marketplace here (e.g. Amazon).",
+    "dialogArticlesColArticle": "Article",
+    "dialogArticlesColUnits": "Units",
+    "dialogArticlesColDelta": "Δ units vs. prior period",
+    "dialogArticlesColAvgPrice": "Avg. price (per unit)"
   },
   "analyticsChart": {
     "title": "Revenue trend & actions",

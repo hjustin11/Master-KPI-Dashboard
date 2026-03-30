@@ -45,6 +45,8 @@ type DataTableProps<TData, TValue> = {
   compact?: boolean;
   /** Zusatzklassen auf dem inneren `<table>` (z. B. `w-max max-w-full`). */
   tableClassName?: string;
+  /** Zusatz auf dem Wrapper um Suchfeld + Icon (z. B. breiteres Feld bei Marktplatz-Produkten). */
+  filterSearchWrapClassName?: string;
   /** Zusätzliche Klassen auf dem Suchfeld (z. B. einheitliche `text-sm`). */
   filterInputClassName?: string;
   paginate?: boolean;
@@ -84,6 +86,7 @@ export function DataTable<TData, TValue>({
   tableWrapClassName,
   compact = false,
   tableClassName,
+  filterSearchWrapClassName,
   filterInputClassName,
   paginate = true,
   defaultPageSize = 10,
@@ -133,9 +136,11 @@ export function DataTable<TData, TValue>({
     ? "flex w-full flex-wrap items-center gap-2"
     : "flex w-full flex-wrap items-center gap-3";
 
-  const searchWrapClass = compact
-    ? "relative min-w-0 max-w-[min(100%,220px)] shrink-0 flex-none sm:flex-initial"
-    : "relative min-w-0 max-w-sm flex-1";
+  const searchWrapClass = cn(
+    "relative w-full min-w-0 shrink-0 max-w-[min(100%,30rem)]",
+    compact ? "min-w-[12rem] sm:min-w-[18rem]" : "min-w-[12rem] sm:min-w-[16rem]",
+    filterSearchWrapClassName
+  );
 
   const searchInputClass = compact ? "h-8 pl-8 text-xs" : "pl-8";
 
@@ -199,16 +204,12 @@ export function DataTable<TData, TValue>({
                         onClick={header.column.getToggleSortingHandler()}
                         disabled={!header.column.getCanSort()}
                         className={cn(
-                          "inline-flex items-center gap-1.5",
-                          meta?.align === "left"
-                            ? "flex w-full min-w-0 max-w-full items-center justify-start"
-                            : null,
+                          "flex w-full min-w-0 items-center",
                           meta?.align === "center"
-                            ? "flex w-full min-w-0 max-w-full items-center justify-center"
-                            : null,
-                          meta?.align === "right"
-                            ? "flex w-full min-w-0 max-w-full items-center justify-end"
-                            : null,
+                            ? "justify-center"
+                            : meta?.align === "right"
+                              ? "justify-end"
+                              : "justify-start",
                           header.column.getCanSort()
                             ? "cursor-pointer select-none hover:text-foreground"
                             : "cursor-default",
@@ -220,27 +221,29 @@ export function DataTable<TData, TValue>({
                             : undefined
                         }
                       >
-                        <span
-                          className={cn(
-                            meta?.align === "left" && "min-w-0 flex-1 overflow-hidden text-left",
-                            meta?.align === "right" && "min-w-0 flex-1 overflow-hidden text-right",
-                            meta?.headerLabelClassName
-                          )}
-                        >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
+                        <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "min-w-0 truncate",
+                              meta?.align === "right" && "text-right",
+                              meta?.headerLabelClassName
+                            )}
+                          >
+                            {flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                          </span>
+                          {header.column.getCanSort() ? (
+                            header.column.getIsSorted() === "asc" ? (
+                              <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            ) : header.column.getIsSorted() === "desc" ? (
+                              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            ) : (
+                              <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            )
+                          ) : null}
                         </span>
-                        {header.column.getCanSort() ? (
-                          header.column.getIsSorted() === "asc" ? (
-                            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                          ) : header.column.getIsSorted() === "desc" ? (
-                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                          ) : (
-                            <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-                          )
-                        ) : null}
                       </button>
                     )}
                   </TableHead>
