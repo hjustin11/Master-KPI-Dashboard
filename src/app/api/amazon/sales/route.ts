@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
-import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 
 type AmazonOrder = {
   AmazonOrderId?: string;
@@ -31,10 +31,6 @@ type SalesOrderMetricRow = {
   orderItemCount?: number;
   totalSales?: { amount?: string; currencyCode?: string };
 };
-
-function env(name: string) {
-  return (process.env[name] ?? "").trim();
-}
 
 function normalizeHost(value: string) {
   return value.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
@@ -79,38 +75,20 @@ function canonicalQuery(query: Record<string, string>) {
     .join("&");
 }
 
-async function getSupabaseSecret(key: string): Promise<string> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("integration_secrets")
-    .select("value")
-    .eq("key", key)
-    .maybeSingle();
-  if (error) return "";
-  return typeof data?.value === "string" ? data.value.trim() : "";
-}
-
 async function getConfig() {
-  const refreshToken = env("AMAZON_SP_API_REFRESH_TOKEN") || (await getSupabaseSecret("AMAZON_SP_API_REFRESH_TOKEN"));
-  const lwaClientId = env("AMAZON_SP_API_CLIENT_ID") || (await getSupabaseSecret("AMAZON_SP_API_CLIENT_ID"));
-  const lwaClientSecret =
-    env("AMAZON_SP_API_CLIENT_SECRET") || (await getSupabaseSecret("AMAZON_SP_API_CLIENT_SECRET"));
-  const awsAccessKeyId = env("AMAZON_AWS_ACCESS_KEY_ID") || (await getSupabaseSecret("AMAZON_AWS_ACCESS_KEY_ID"));
-  const awsSecretAccessKey =
-    env("AMAZON_AWS_SECRET_ACCESS_KEY") || (await getSupabaseSecret("AMAZON_AWS_SECRET_ACCESS_KEY"));
-  const awsSessionToken = env("AMAZON_AWS_SESSION_TOKEN") || (await getSupabaseSecret("AMAZON_AWS_SESSION_TOKEN"));
-  const region = env("AMAZON_SP_API_REGION") || (await getSupabaseSecret("AMAZON_SP_API_REGION")) || "eu-west-1";
-  const endpoint =
-    normalizeHost(
-      env("AMAZON_SP_API_ENDPOINT") ||
-        (await getSupabaseSecret("AMAZON_SP_API_ENDPOINT")) ||
-        "sellingpartnerapi-eu.amazon.com"
-    );
+  const refreshToken = await getIntegrationSecretValue("AMAZON_SP_API_REFRESH_TOKEN");
+  const lwaClientId = await getIntegrationSecretValue("AMAZON_SP_API_CLIENT_ID");
+  const lwaClientSecret = await getIntegrationSecretValue("AMAZON_SP_API_CLIENT_SECRET");
+  const awsAccessKeyId = await getIntegrationSecretValue("AMAZON_AWS_ACCESS_KEY_ID");
+  const awsSecretAccessKey = await getIntegrationSecretValue("AMAZON_AWS_SECRET_ACCESS_KEY");
+  const awsSessionToken = await getIntegrationSecretValue("AMAZON_AWS_SESSION_TOKEN");
+  const region = (await getIntegrationSecretValue("AMAZON_SP_API_REGION")) || "eu-west-1";
+  const endpoint = normalizeHost(
+    (await getIntegrationSecretValue("AMAZON_SP_API_ENDPOINT")) || "sellingpartnerapi-eu.amazon.com"
+  );
   const marketplaceIdsRaw =
-    env("AMAZON_SP_API_MARKETPLACE_IDS") ||
-    env("AMAZON_SP_API_MARKETPLACE_ID") ||
-    (await getSupabaseSecret("AMAZON_SP_API_MARKETPLACE_IDS")) ||
-    (await getSupabaseSecret("AMAZON_SP_API_MARKETPLACE_ID"));
+    (await getIntegrationSecretValue("AMAZON_SP_API_MARKETPLACE_IDS")) ||
+    (await getIntegrationSecretValue("AMAZON_SP_API_MARKETPLACE_ID"));
   const marketplaceIds = marketplaceIdsRaw
     .split(",")
     .map((v) => v.trim())
@@ -329,10 +307,7 @@ async function fetchSalesOrderMetricsDaySeries(args: {
   startMs: number;
   endMs: number;
 }): Promise<SalesPoint[] | null> {
-  const tz =
-    env("AMAZON_SALES_GRANULARITY_TIMEZONE") ||
-    (await getSupabaseSecret("AMAZON_SALES_GRANULARITY_TIMEZONE")) ||
-    "Europe/Berlin";
+  const tz = (await getIntegrationSecretValue("AMAZON_SALES_GRANULARITY_TIMEZONE")) || "Europe/Berlin";
   const interval = `${new Date(args.startMs).toISOString()}--${new Date(args.endMs).toISOString()}`;
   const ordersResult = await spApiGet({
     endpoint: args.endpoint,

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { INTEGRATION_SECRETS_CONFIGURATION_HINT_DE } from "@/shared/lib/integrationSecrets";
 import type { OttoOrder } from "@/shared/lib/ottoApiClient";
 import {
   OTTO_DAY_MS,
@@ -143,6 +144,8 @@ export async function GET(request: Request) {
         {
           error: "Otto API ist nicht vollständig konfiguriert.",
           missingKeys: Object.entries(missing).filter(([, v]) => v).map(([k]) => k),
+          hint: INTEGRATION_SECRETS_CONFIGURATION_HINT_DE,
+          integrationSecretsLoadErrors: config.integrationSecretsLoadErrors,
         },
         { status: 500 }
       );

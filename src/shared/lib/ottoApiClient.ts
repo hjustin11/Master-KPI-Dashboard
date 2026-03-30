@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { readIntegrationSecret } from "@/shared/lib/integrationSecrets";
 
 export type OttoAmount = { amount?: number | string; currency?: string };
 
@@ -33,10 +33,6 @@ type OttoOrdersPayload = {
 
 export const OTTO_DAY_MS = 24 * 60 * 60 * 1000;
 
-function env(name: string) {
-  return (process.env[name] ?? "").trim();
-}
-
 export function resolveOttoBaseUrl(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "https://api.otto.market";
@@ -44,34 +40,45 @@ export function resolveOttoBaseUrl(raw: string): string {
   return `https://${trimmed.replace(/\/+$/, "")}`;
 }
 
-async function getSupabaseSecret(key: string): Promise<string> {
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("integration_secrets")
-      .select("value")
-      .eq("key", key)
-      .maybeSingle();
-    if (error) return "";
-    return ((data?.value as string | undefined) ?? "").trim();
-  } catch {
-    return "";
-  }
-}
+export async function getOttoIntegrationConfig(): Promise<{
+  baseUrl: string;
+  clientId: string;
+  clientSecret: string;
+  scopes: string;
+  /** Nur gesetzt, wenn DB-Zugriff fehlgeschlagen ist (nicht bei „Zeile fehlt“). */
+  integrationSecretsLoadErrors?: string[];
+}> {
+  const loadErrors: string[] = [];
+  const rBase = await readIntegrationSecret("OTTO_API_BASE_URL");
+  const rId = await readIntegrationSecret("OTTO_API_CLIENT_ID");
+  const rSecret = await readIntegrationSecret("OTTO_API_CLIENT_SECRET");
+  const rScopes = await readIntegrationSecret("OTTO_API_SCOPES");
 
-export async function getOttoIntegrationConfig() {
-  const baseUrl = resolveOttoBaseUrl(
-    env("OTTO_API_BASE_URL") || (await getSupabaseSecret("OTTO_API_BASE_URL"))
-  );
-  const clientId = env("OTTO_API_CLIENT_ID") || (await getSupabaseSecret("OTTO_API_CLIENT_ID"));
-  const clientSecret = env("OTTO_API_CLIENT_SECRET") || (await getSupabaseSecret("OTTO_API_CLIENT_SECRET"));
-  const scopesRaw = env("OTTO_API_SCOPES") || (await getSupabaseSecret("OTTO_API_SCOPES")) || "orders";
+  for (const [label, r] of [
+    ["OTTO_API_BASE_URL", rBase],
+    ["OTTO_API_CLIENT_ID", rId],
+    ["OTTO_API_CLIENT_SECRET", rSecret],
+    ["OTTO_API_SCOPES", rScopes],
+  ] as const) {
+    if (r.databaseError) loadErrors.push(`${label}: ${r.databaseError}`);
+  }
+
+  const baseUrl = resolveOttoBaseUrl(rBase.value || "https://api.otto.market");
+  const clientId = rId.value;
+  const clientSecret = rSecret.value;
+  const scopesRaw = rScopes.value || "orders";
   const scopes = scopesRaw
     .split(/[,\s]+/)
     .map((s) => s.trim())
     .filter(Boolean)
     .join(" ");
-  return { baseUrl, clientId, clientSecret, scopes };
+  return {
+    baseUrl,
+    clientId,
+    clientSecret,
+    scopes,
+    integrationSecretsLoadErrors: loadErrors.length ? loadErrors : undefined,
+  };
 }
 
 export async function getOttoAccessToken(args: {

@@ -1,30 +1,10 @@
 import { Buffer } from "node:buffer";
-import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 
 export const FLEX_DAY_MS = 24 * 60 * 60 * 1000;
 
-function env(name: string) {
-  return (process.env[name] ?? "").trim();
-}
-
-async function getSupabaseSecret(key: string): Promise<string> {
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("integration_secrets")
-      .select("value")
-      .eq("key", key)
-      .maybeSingle();
-    if (error) return "";
-    return ((data?.value as string | undefined) ?? "").trim();
-  } catch {
-    return "";
-  }
-}
-
 async function readEnv(prefix: string, suffix: string): Promise<string> {
-  const k = `${prefix}_${suffix}`;
-  return (env(k) || (await getSupabaseSecret(k))).trim();
+  return getIntegrationSecretValue(`${prefix}_${suffix}`);
 }
 
 export function resolveFlexBaseUrl(raw: string): string {

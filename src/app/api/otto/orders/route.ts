@@ -7,6 +7,7 @@ import {
   parseYmdParam,
   ymdToUtcRangeExclusiveEnd,
 } from "@/shared/lib/ottoApiClient";
+import { INTEGRATION_SECRETS_CONFIGURATION_HINT_DE } from "@/shared/lib/integrationSecrets";
 
 export type OttoOrderListRow = {
   orderId: string;
@@ -102,6 +103,8 @@ export async function GET(request: Request) {
         {
           error: "Otto API ist nicht vollständig konfiguriert.",
           missingKeys: Object.entries(missing).filter(([, v]) => v).map(([k]) => k),
+          hint: INTEGRATION_SECRETS_CONFIGURATION_HINT_DE,
+          integrationSecretsLoadErrors: config.integrationSecretsLoadErrors,
         },
         { status: 500 }
       );

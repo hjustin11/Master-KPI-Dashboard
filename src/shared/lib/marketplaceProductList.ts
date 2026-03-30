@@ -16,6 +16,8 @@ export type MarketplaceProductsListResponse = {
   error?: string;
   missingKeys?: string[];
   hint?: string;
+  /** PostgREST-Fehler beim Lesen von integration_secrets (nur wenn leer). */
+  integrationSecretsLoadErrors?: string[];
   pending?: boolean;
 };
 

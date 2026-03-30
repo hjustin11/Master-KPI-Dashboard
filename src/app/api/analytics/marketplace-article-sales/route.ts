@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { INTEGRATION_SECRETS_CONFIGURATION_HINT_DE } from "@/shared/lib/integrationSecrets";
 import {
   fetchFressnapfOrdersRawPaginated,
   getFressnapfIntegrationConfig,
@@ -135,7 +136,18 @@ export async function GET(request: Request) {
     if (marketplace === "otto") {
       const cfg = await getOttoIntegrationConfig();
       if (!cfg.clientId || !cfg.clientSecret) {
-        return NextResponse.json({ error: "Otto API nicht konfiguriert.", missingKeys: ["OTTO_API_CLIENT_ID"] }, { status: 500 });
+        return NextResponse.json(
+          {
+            error: "Otto API nicht konfiguriert.",
+            missingKeys: [
+              ...(!cfg.clientId ? (["OTTO_API_CLIENT_ID"] as const) : []),
+              ...(!cfg.clientSecret ? (["OTTO_API_CLIENT_SECRET"] as const) : []),
+            ],
+            hint: INTEGRATION_SECRETS_CONFIGURATION_HINT_DE,
+            integrationSecretsLoadErrors: cfg.integrationSecretsLoadErrors,
+          },
+          { status: 500 }
+        );
       }
       const scopes = ensureOttoProductsScope(cfg.scopes);
       const token = await getOttoAccessToken({ ...cfg, scopes });

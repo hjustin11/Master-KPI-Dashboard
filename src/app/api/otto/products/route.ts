@@ -5,6 +5,7 @@ import {
   getOttoAccessToken,
   getOttoIntegrationConfig,
 } from "@/shared/lib/ottoApiClient";
+import { INTEGRATION_SECRETS_CONFIGURATION_HINT_DE } from "@/shared/lib/integrationSecrets";
 import type { MarketplaceProductsListResponse } from "@/shared/lib/marketplaceProductList";
 
 export async function GET() {
@@ -21,6 +22,8 @@ export async function GET() {
           missingKeys: Object.entries(missing)
             .filter(([, v]) => v)
             .map(([k]) => k),
+          hint: INTEGRATION_SECRETS_CONFIGURATION_HINT_DE,
+          integrationSecretsLoadErrors: config.integrationSecretsLoadErrors,
         } satisfies MarketplaceProductsListResponse,
         { status: 500 }
       );

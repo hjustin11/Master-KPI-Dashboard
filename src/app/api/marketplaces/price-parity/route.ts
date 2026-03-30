@@ -3,7 +3,7 @@ import {
   ANALYTICS_MARKETPLACES,
   type AnalyticsMarketplaceSlug,
 } from "@/shared/lib/analytics-marketplaces";
-import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 
 type XentralArticle = {
   sku: string;
@@ -201,21 +201,6 @@ function toNumber(value: unknown) {
   return 0;
 }
 
-async function getSupabaseSecret(key: string): Promise<string> {
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("integration_secrets")
-      .select("value")
-      .eq("key", key)
-      .maybeSingle();
-    if (error) return "";
-    return typeof data?.value === "string" ? data.value.trim() : "";
-  } catch {
-    return "";
-  }
-}
-
 function resolveBaseUrl(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "https://api.otto.market";
@@ -227,16 +212,14 @@ async function fetchOttoLatestSkuPrices(): Promise<{
   bySku: Map<string, number | null>;
   warning: string | null;
 }> {
-  const clientId = env("OTTO_API_CLIENT_ID") || (await getSupabaseSecret("OTTO_API_CLIENT_ID"));
-  const clientSecret =
-    env("OTTO_API_CLIENT_SECRET") || (await getSupabaseSecret("OTTO_API_CLIENT_SECRET"));
+  const clientId = await getIntegrationSecretValue("OTTO_API_CLIENT_ID");
+  const clientSecret = await getIntegrationSecretValue("OTTO_API_CLIENT_SECRET");
   if (!clientId || !clientSecret) {
     return { bySku: new Map(), warning: null };
   }
 
-  const baseUrl = resolveBaseUrl(env("OTTO_API_BASE_URL") || (await getSupabaseSecret("OTTO_API_BASE_URL")));
-  const scopes =
-    env("OTTO_API_SCOPES") || (await getSupabaseSecret("OTTO_API_SCOPES")) || "orders";
+  const baseUrl = resolveBaseUrl(await getIntegrationSecretValue("OTTO_API_BASE_URL"));
+  const scopes = (await getIntegrationSecretValue("OTTO_API_SCOPES")) || "orders";
 
   const tokenBody = new URLSearchParams({
     grant_type: "client_credentials",

@@ -22,7 +22,7 @@ create index if not exists integration_secrets_key_idx on public.integration_sec
 -- grant select, insert, update, delete on public.integration_secrets to service_role;
 
 -- =============================================================================
--- Secrets (alle Keys, die getSupabaseSecret() in den API-Routen verwendet)
+-- Secrets (alle Keys, die readIntegrationSecret() / getIntegrationSecretValue() nutzen)
 -- =============================================================================
 
 insert into public.integration_secrets (key, value) values

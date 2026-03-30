@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import {
   cacheExclusiveEndYmd,
   DELIVERY_SALES_ANCHOR_YMD,
@@ -16,24 +16,10 @@ function env(name: string) {
   return (process.env[name] ?? "").trim();
 }
 
-async function getSupabaseSecret(key: string): Promise<string> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("integration_secrets")
-    .select("value")
-    .eq("key", key)
-    .maybeSingle();
-  if (error) return "";
-  return ((data?.value as string | undefined) ?? "").trim();
-}
-
 async function resolveXentralConfig() {
-  const baseUrl = env("XENTRAL_BASE_URL") || (await getSupabaseSecret("XENTRAL_BASE_URL"));
+  const baseUrl = await getIntegrationSecretValue("XENTRAL_BASE_URL");
   const token =
-    env("XENTRAL_PAT") ||
-    env("XENTRAL_KEY") ||
-    (await getSupabaseSecret("XENTRAL_PAT")) ||
-    (await getSupabaseSecret("XENTRAL_KEY"));
+    (await getIntegrationSecretValue("XENTRAL_PAT")) || (await getIntegrationSecretValue("XENTRAL_KEY"));
   return { baseUrl, token };
 }
 

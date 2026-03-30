@@ -1,25 +1,6 @@
-import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 
 export const FRESSNAPF_DAY_MS = 24 * 60 * 60 * 1000;
-
-function env(name: string) {
-  return (process.env[name] ?? "").trim();
-}
-
-async function getSupabaseSecret(key: string): Promise<string> {
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("integration_secrets")
-      .select("value")
-      .eq("key", key)
-      .maybeSingle();
-    if (error) return "";
-    return ((data?.value as string | undefined) ?? "").trim();
-  } catch {
-    return "";
-  }
-}
 
 export function resolveFressnapfBaseUrl(raw: string): string {
   const trimmed = raw.trim();
@@ -58,31 +39,21 @@ export type FressnapfIntegrationConfig = {
 };
 
 export async function getFressnapfIntegrationConfig(): Promise<FressnapfIntegrationConfig> {
-  const baseUrl = resolveFressnapfBaseUrl(
-    env("FRESSNAPF_API_BASE_URL") || (await getSupabaseSecret("FRESSNAPF_API_BASE_URL"))
-  );
-  const apiKey = env("FRESSNAPF_API_KEY") || (await getSupabaseSecret("FRESSNAPF_API_KEY"));
+  const baseUrl = resolveFressnapfBaseUrl(await getIntegrationSecretValue("FRESSNAPF_API_BASE_URL"));
+  const apiKey = await getIntegrationSecretValue("FRESSNAPF_API_KEY");
   const ordersPathRaw =
-    env("FRESSNAPF_ORDERS_PATH") || (await getSupabaseSecret("FRESSNAPF_ORDERS_PATH")) || "/api/orders";
+    (await getIntegrationSecretValue("FRESSNAPF_ORDERS_PATH")) || "/api/orders";
   const ordersPath = ordersPathRaw.startsWith("/") ? ordersPathRaw : `/${ordersPathRaw}`;
-  const authRaw = (
-    env("FRESSNAPF_AUTH_MODE") ||
-    (await getSupabaseSecret("FRESSNAPF_AUTH_MODE")) ||
-    "mirakl"
-  ).toLowerCase();
+  const authRaw = ((await getIntegrationSecretValue("FRESSNAPF_AUTH_MODE")) || "mirakl").toLowerCase();
   const authMode: FressnapfAuthMode =
     authRaw === "x-api-key"
       ? "x-api-key"
       : authRaw === "mirakl" || authRaw === "authorization"
         ? "mirakl"
         : "bearer";
-  const scaleRaw = env("FRESSNAPF_AMOUNT_SCALE") || (await getSupabaseSecret("FRESSNAPF_AMOUNT_SCALE"));
+  const scaleRaw = await getIntegrationSecretValue("FRESSNAPF_AMOUNT_SCALE");
   const amountScale = Math.max(1, Number(scaleRaw) || 1);
-  const pageSizeRaw = (
-    env("FRESSNAPF_PAGE_SIZE_PARAM") ||
-    (await getSupabaseSecret("FRESSNAPF_PAGE_SIZE_PARAM")) ||
-    ""
-  ).toLowerCase();
+  const pageSizeRaw = ((await getIntegrationSecretValue("FRESSNAPF_PAGE_SIZE_PARAM")) || "").toLowerCase();
   const pageSizeParam: "max" | "limit" =
     pageSizeRaw === "limit"
       ? "limit"
@@ -92,17 +63,13 @@ export async function getFressnapfIntegrationConfig(): Promise<FressnapfIntegrat
           ? "max"
           : "limit";
 
-  const delayRaw = env("FRESSNAPF_PAGINATION_DELAY_MS") || (await getSupabaseSecret("FRESSNAPF_PAGINATION_DELAY_MS"));
+  const delayRaw = await getIntegrationSecretValue("FRESSNAPF_PAGINATION_DELAY_MS");
   const paginationDelayMs = Math.max(0, Number(delayRaw) || 450);
 
-  const retriesRaw = env("FRESSNAPF_MAX_429_RETRIES") || (await getSupabaseSecret("FRESSNAPF_MAX_429_RETRIES"));
+  const retriesRaw = await getIntegrationSecretValue("FRESSNAPF_MAX_429_RETRIES");
   const max429Retries = Math.min(30, Math.max(1, Number(retriesRaw) || 8));
 
-  const dateFilterRaw = (
-    env("FRESSNAPF_USE_ORDER_DATE_FILTER") ||
-    (await getSupabaseSecret("FRESSNAPF_USE_ORDER_DATE_FILTER")) ||
-    ""
-  )
+  const dateFilterRaw = ((await getIntegrationSecretValue("FRESSNAPF_USE_ORDER_DATE_FILTER")) || "")
     .trim()
     .toLowerCase();
   const useOrderDateFilter =

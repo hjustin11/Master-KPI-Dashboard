@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 
 export type KauflandOrderUnit = {
   id_order_unit?: number;
@@ -20,25 +20,6 @@ export type KauflandOrdersListItem = {
 };
 
 export const KAUFLAND_DAY_MS = 24 * 60 * 60 * 1000;
-
-function env(name: string) {
-  return (process.env[name] ?? "").trim();
-}
-
-async function getSupabaseSecret(key: string): Promise<string> {
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("integration_secrets")
-      .select("value")
-      .eq("key", key)
-      .maybeSingle();
-    if (error) return "";
-    return ((data?.value as string | undefined) ?? "").trim();
-  } catch {
-    return "";
-  }
-}
 
 export function resolveKauflandBaseUrl(raw: string): string {
   const trimmed = raw.trim();
@@ -73,21 +54,14 @@ export type KauflandIntegrationConfig = {
 };
 
 export async function getKauflandIntegrationConfig(): Promise<KauflandIntegrationConfig> {
-  const baseUrl = resolveKauflandBaseUrl(
-    env("KAUFLAND_API_BASE_URL") || (await getSupabaseSecret("KAUFLAND_API_BASE_URL"))
-  );
-  const clientKey = env("KAUFLAND_CLIENT_KEY") || (await getSupabaseSecret("KAUFLAND_CLIENT_KEY"));
-  const secretKey = env("KAUFLAND_SECRET_KEY") || (await getSupabaseSecret("KAUFLAND_SECRET_KEY"));
+  const baseUrl = resolveKauflandBaseUrl(await getIntegrationSecretValue("KAUFLAND_API_BASE_URL"));
+  const clientKey = await getIntegrationSecretValue("KAUFLAND_CLIENT_KEY");
+  const secretKey = await getIntegrationSecretValue("KAUFLAND_SECRET_KEY");
   const userAgent =
-    env("KAUFLAND_USER_AGENT") ||
-    (await getSupabaseSecret("KAUFLAND_USER_AGENT")) ||
-    "Inhouse_development";
-  const partnerClientKey =
-    env("KAUFLAND_PARTNER_CLIENT_KEY") || (await getSupabaseSecret("KAUFLAND_PARTNER_CLIENT_KEY"));
-  const partnerSecretKey =
-    env("KAUFLAND_PARTNER_SECRET_KEY") || (await getSupabaseSecret("KAUFLAND_PARTNER_SECRET_KEY"));
-  const storefront =
-    env("KAUFLAND_STOREFRONT") || (await getSupabaseSecret("KAUFLAND_STOREFRONT")) || "de";
+    (await getIntegrationSecretValue("KAUFLAND_USER_AGENT")) || "Inhouse_development";
+  const partnerClientKey = await getIntegrationSecretValue("KAUFLAND_PARTNER_CLIENT_KEY");
+  const partnerSecretKey = await getIntegrationSecretValue("KAUFLAND_PARTNER_SECRET_KEY");
+  const storefront = (await getIntegrationSecretValue("KAUFLAND_STOREFRONT")) || "de";
   return {
     baseUrl,
     clientKey,
