@@ -64,6 +64,7 @@ import {
 import { useAppStore } from "@/shared/stores/useAppStore";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { resolveRoleLabel } from "@/i18n/resolve-role-label";
+import { useTutorialNavGate } from "@/shared/components/tutorial/TutorialNavContext";
 
 type NavItem = {
   key: SidebarItemKey;
@@ -214,6 +215,11 @@ const navItems: NavItem[] = [
     labelKey: "nav.settings",
     href: "/settings/users",
     icon: Settings,
+    children: [
+      { labelKey: "nav.settingsUsers", href: "/settings/users" },
+      { labelKey: "nav.settingsProfile", href: "/settings/profile" },
+      { labelKey: "nav.settingsTutorials", href: "/settings/tutorials" },
+    ],
   },
   {
     key: "updates",
@@ -334,7 +340,9 @@ function SingleNavItem({
 
   const [subOpen, setSubOpen] = useState(false);
   useEffect(() => {
-    if (childOrSelfActive) setSubOpen(true);
+    if (!childOrSelfActive) return;
+    const id = window.setTimeout(() => setSubOpen(true), 0);
+    return () => window.clearTimeout(id);
   }, [childOrSelfActive]);
 
   const linkClass = cn(
@@ -391,7 +399,7 @@ function SingleNavItem({
   const showSubnav = !collapsed && hasSubnav && subOpen;
 
   return (
-    <div className={cn("space-y-1", compact && "space-y-0.5")}>
+    <div data-tutorial-nav={item.key} className={cn("space-y-1", compact && "space-y-0.5")}>
       {collapsed ? (
         <Tooltip>
           <TooltipTrigger render={<div />}>{baseLink}</TooltipTrigger>
@@ -416,6 +424,7 @@ function SingleNavItem({
               <Link
                 key={child.href}
                 href={child.href}
+                data-tutorial-subnav={child.href}
                 className={cn(childClass, childActive && "text-primary")}
               >
                 {t(child.labelKey)}
@@ -446,7 +455,9 @@ function MarketplaceExpandedGroup({
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (anyActive) setOpen(true);
+    if (!anyActive) return;
+    const id = window.setTimeout(() => setOpen(true), 0);
+    return () => window.clearTimeout(id);
   }, [anyActive]);
 
   if (items.length === 0) return null;
@@ -574,6 +585,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { t, locale } = useTranslation();
   const { state, toggleSidebar } = useSidebar();
+  const { visibleSidebarKeys } = useTutorialNavGate();
   const user = useUser();
   const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole } = usePermissions();
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
@@ -602,10 +614,7 @@ export function AppSidebar() {
   );
 
   /** Sidebar-Klapp-Button nur nach Mount: identisches SSR- und erstes Client-HTML (vermeidet Hydration-Fehler). */
-  const [sidebarToggleMounted, setSidebarToggleMounted] = useState(false);
-  useEffect(() => {
-    setSidebarToggleMounted(true);
-  }, []);
+  const sidebarToggleMounted = isHydrated;
 
   // Verhindert Hydration-Mismatch: initial immer expanded rendern,
   // erst nach dem Client-Mount den echten Sidebar-State verwenden.
@@ -621,9 +630,14 @@ export function AppSidebar() {
       ),
     [canAccessSidebarItem, hasPermission]
   );
+  const tutorialGatedNavItems = useMemo(() => {
+    if (visibleSidebarKeys === null) return filteredNavItems;
+    const allow = new Set(visibleSidebarKeys);
+    return filteredNavItems.filter((item) => allow.has(item.key));
+  }, [filteredNavItems, visibleSidebarKeys]);
   const { marketplaces, rest } = useMemo(
-    () => partitionNavItems(filteredNavItems),
-    [filteredNavItems]
+    () => partitionNavItems(tutorialGatedNavItems),
+    [tutorialGatedNavItems]
   );
 
   const cycleRole = (direction: "prev" | "next") => {
@@ -639,7 +653,11 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon" className="hidden border-r border-border/50 bg-sidebar md:flex">
+    <Sidebar
+      data-tutorial-target="sidebar"
+      collapsible="icon"
+      className="hidden border-r border-border/50 bg-sidebar md:flex"
+    >
       <SidebarHeader className="h-14 border-b border-border/50 px-3">
         <div
           className={cn(
@@ -837,6 +855,7 @@ export function MobileSidebarTrigger() {
   const router = useRouter();
   const pathname = usePathname();
   const { t, locale } = useTranslation();
+  const { visibleSidebarKeys } = useTutorialNavGate();
   const user = useUser();
   const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole } = usePermissions();
 
@@ -849,9 +868,14 @@ export function MobileSidebarTrigger() {
       ),
     [canAccessSidebarItem, hasPermission]
   );
+  const tutorialGatedNavItems = useMemo(() => {
+    if (visibleSidebarKeys === null) return filteredNavItems;
+    const allow = new Set(visibleSidebarKeys);
+    return filteredNavItems.filter((item) => allow.has(item.key));
+  }, [filteredNavItems, visibleSidebarKeys]);
   const { marketplaces, rest } = useMemo(
-    () => partitionNavItems(filteredNavItems),
-    [filteredNavItems]
+    () => partitionNavItems(tutorialGatedNavItems),
+    [tutorialGatedNavItems]
   );
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
   const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);

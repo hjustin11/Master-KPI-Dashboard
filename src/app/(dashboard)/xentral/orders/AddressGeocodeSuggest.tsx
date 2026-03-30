@@ -75,20 +75,24 @@ export function useAddressGeocodeSuggest({
   const zipKeyRef = useRef(zipKey);
   const cityKeyRef = useRef(cityKey);
 
-  streetRef.current = street;
-  zipRef.current = zipValue;
-  cityRef.current = cityValue;
-  countryRef.current = country;
-  issuesRef.current = issues;
-  onApplyGeocodeRef.current = onApplyGeocode;
-  zipKeyRef.current = zipKey;
-  cityKeyRef.current = cityKey;
+  useEffect(() => {
+    streetRef.current = street;
+    zipRef.current = zipValue;
+    cityRef.current = cityValue;
+    countryRef.current = country;
+    issuesRef.current = issues;
+    onApplyGeocodeRef.current = onApplyGeocode;
+    zipKeyRef.current = zipKey;
+    cityKeyRef.current = cityKey;
+  }, [street, zipValue, cityValue, country, issues, onApplyGeocode, zipKey, cityKey]);
 
   useEffect(() => {
     if (!dialogOpen) {
       appliedRef.current = false;
-      setStatus("idle");
-      setHints(null);
+      queueMicrotask(() => {
+        setStatus("idle");
+        setHints(null);
+      });
       return;
     }
 
@@ -99,14 +103,18 @@ export function useAddressGeocodeSuggest({
     const hasAddressHint = st0.trim().length > 0 || z0.trim().length > 0 || city0.length > 0;
 
     if (iss0.length === 0 || !hasAddressHint || !issuesNeedAddressGeocode(iss0)) {
-      setStatus("idle");
-      setHints(null);
+      queueMicrotask(() => {
+        setStatus("idle");
+        setHints(null);
+      });
       return;
     }
 
     appliedRef.current = false;
-    setHints(null);
-    setStatus("loading");
+    queueMicrotask(() => {
+      setHints(null);
+      setStatus("loading");
+    });
 
     const staggerMs = rowIndex * 1100;
     const debounceMs = 600;

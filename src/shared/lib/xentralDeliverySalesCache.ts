@@ -324,7 +324,7 @@ export async function syncDeliverySalesCacheStep(args: {
 }> {
   const maxPages = args.maxPages ?? resolveSyncPagesPerRun();
   const pageSize = resolveSyncPageSize();
-  let cache = args.reset ? emptyCache() : await loadDeliverySalesCacheFile();
+  const cache = args.reset ? emptyCache() : await loadDeliverySalesCacheFile();
 
   if (cache.sync.backfillComplete && !args.reset) {
     return {

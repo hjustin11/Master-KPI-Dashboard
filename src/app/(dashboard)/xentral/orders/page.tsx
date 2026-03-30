@@ -54,7 +54,10 @@ import {
   type XentralPrimaryAddressFieldKey,
   type XentralPrimaryAddressFields,
 } from "@/shared/lib/xentralPrimaryAddressFields";
-import { DASHBOARD_CLIENT_BACKGROUND_SYNC_MS } from "@/shared/lib/dashboardClientCache";
+import {
+  DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
+  shouldRunBackgroundSync,
+} from "@/shared/lib/dashboardClientCache";
 import { mergeXentralOrderLists } from "@/shared/lib/xentralOrderMerge";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/i18n/I18nProvider";
@@ -196,7 +199,8 @@ function sortAddressDialogOrders(rows: XentralOrderRow[]): XentralOrderRow[] {
 
 function withNormalizedPrimaryFields(items: XentralOrderRow[]): XentralOrderRow[] {
   return items.map((item) => {
-    const { status: _removedStatus, ...rest } = item as XentralOrderRow & { status?: string };
+    const rest = { ...(item as XentralOrderRow & { status?: string }) };
+    delete rest.status;
     return {
       ...rest,
       addressPrimaryFields: mergePrimaryFields(item),
@@ -1263,6 +1267,7 @@ export default function XentralOrdersPage() {
   useEffect(() => {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
+      if (!shouldRunBackgroundSync()) return;
       void load(false, undefined, true);
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);

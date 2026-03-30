@@ -29,6 +29,7 @@ import {
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
   readLocalJsonCache,
+  shouldRunBackgroundSync,
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
 import type { MarketplaceProductListRow } from "@/shared/lib/marketplaceProductList";
@@ -393,6 +394,7 @@ export function MarketplaceProductsView({
   useEffect(() => {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
+      if (!shouldRunBackgroundSync()) return;
       void load(false, true);
     }, backgroundSyncIntervalMs);
     return () => window.clearInterval(id);

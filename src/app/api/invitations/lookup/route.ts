@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 import { type Role } from "@/shared/lib/invitations";
+import { getClientIpFromHeaders, isRateLimited } from "@/shared/lib/serverRateLimit";
+
+const LOOKUP_RATE_LIMIT = 30;
+const LOOKUP_RATE_WINDOW_MS = 60_000;
 
 function resolveRole(value: unknown): Role | null {
   if (
@@ -17,6 +21,18 @@ function resolveRole(value: unknown): Role | null {
 
 export async function POST(request: Request) {
   try {
+    const ip = getClientIpFromHeaders(request.headers);
+    if (
+      isRateLimited({
+        key: `invite-lookup:${ip}`,
+        limit: LOOKUP_RATE_LIMIT,
+        windowMs: LOOKUP_RATE_WINDOW_MS,
+      })
+    ) {
+      // Keep the response shape stable to avoid invitation enumeration.
+      return NextResponse.json({ invited: false }, { status: 429 });
+    }
+
     const body = (await request.json()) as { email?: string };
     const email = body.email?.trim().toLowerCase() ?? "";
 

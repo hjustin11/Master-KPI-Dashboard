@@ -18,6 +18,7 @@ import {
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
   readLocalJsonCache,
+  shouldRunBackgroundSync,
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
 import { useTranslation } from "@/i18n/I18nProvider";
@@ -261,6 +262,7 @@ export default function TiktokOrdersPage() {
   useEffect(() => {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
+      if (!shouldRunBackgroundSync()) return;
       void loadOrders(undefined, undefined, false, true);
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);

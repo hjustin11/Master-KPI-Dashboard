@@ -15,7 +15,9 @@ export function usePromotionDeals() {
   useEffect(() => {
     migrateLegacyBandsToGlobalIfNeeded();
     const local = loadPromotionDeals();
-    setDeals(local);
+    queueMicrotask(() => {
+      setDeals(local);
+    });
 
     let cancelled = false;
     (async () => {

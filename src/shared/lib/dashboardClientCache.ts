@@ -5,6 +5,12 @@
 
 export const DASHBOARD_CLIENT_BACKGROUND_SYNC_MS = 5 * 60 * 1000;
 
+/** Reduziert unnötige Polling-Last in versteckten Browser-Tabs. */
+export function shouldRunBackgroundSync(): boolean {
+  if (typeof document === "undefined") return true;
+  return document.visibilityState === "visible";
+}
+
 export function readLocalJsonCache<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
   try {
@@ -40,8 +46,7 @@ export function readAnalyticsSalesCompareInitial<T extends SalesCompareLike>(
   if (typeof window === "undefined") return { data: null, loading: true };
   const parsed = readLocalJsonCache<{ savedAt: number } & T>(cacheKey);
   if (parsed?.summary && !parsed.error) {
-    const { savedAt: _savedAt, ...data } = parsed;
-    return { data: data as unknown as T, loading: false };
+    return { data: parsed as unknown as T, loading: false };
   }
   return { data: null, loading: true };
 }

@@ -16,9 +16,37 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Copy `.env.example` to `.env.local` and fill in values. Never commit `.env.local`.
+2. On the host (e.g. Vercel), define the **same variable names** as in `.env.example` (from your secret store or GitHub Actions secrets).
+3. **Supabase `integration_secrets`**: For many marketplace integrations, the app falls back to the `integration_secrets` table when an env var is empty — the `key` column must match the env name exactly (e.g. `SHOPIFY_API_BASE_URL`). See `readEnv()` in `src/shared/lib/flexMarketplaceApiClient.ts`. `SUPABASE_SERVICE_ROLE_KEY` must be set on the server so the admin client can read those rows.
+4. **Client-exposed vars** (`NEXT_PUBLIC_*`) are visible in the browser — do not put private API secrets there.
+
+## Quality Gates
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Run all gates in sequence:
+
+```bash
+npm run verify
+```
+
+## Audit and Operations Docs
+
+- `docs/audit/project-architecture.md`
+- `docs/audit/stability-performance-audit.md`
+- `docs/quality/smoke-checklist.md`
+- `docs/quality/quality-gates-baseline.md`
+- `docs/ops/public-launch-checklist.md`
+- `CONTRIBUTING.md`
+
+You can start editing pages inside `src/app`. The page auto-updates as you edit files.
 
 ## Learn More
 

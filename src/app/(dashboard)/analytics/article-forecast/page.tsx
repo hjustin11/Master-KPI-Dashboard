@@ -35,6 +35,7 @@ import { sentenceCaseColumnLabel } from "@/shared/lib/sentenceCaseColumnLabel";
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
   readLocalJsonCache,
+  shouldRunBackgroundSync,
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
 import {
@@ -436,6 +437,7 @@ export default function AnalyticsArticleForecastPage() {
   useEffect(() => {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
+      if (!shouldRunBackgroundSync()) return;
       void load(false, true);
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
@@ -915,7 +917,6 @@ export default function AnalyticsArticleForecastPage() {
     activeRules.projectionDays,
     forecastBySku,
     qtyFmt,
-    projectColumns,
     toYmd,
     visibleProjectColumns,
     visibleWarehouseColumns,

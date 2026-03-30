@@ -39,7 +39,7 @@ async function resolveXentralConfig() {
 
 function checkSyncAuth(request: Request): boolean {
   const secret = (process.env.XENTRAL_DELIVERY_SALES_SYNC_SECRET ?? "").trim();
-  if (!secret) return true;
+  if (!secret) return process.env.NODE_ENV !== "production";
   const auth = request.headers.get("authorization");
   return auth === `Bearer ${secret}`;
 }
@@ -59,6 +59,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (process.env.NODE_ENV === "production" && !env("XENTRAL_DELIVERY_SALES_SYNC_SECRET")) {
+    return NextResponse.json(
+      { error: "XENTRAL_DELIVERY_SALES_SYNC_SECRET ist in Production erforderlich." },
+      { status: 500 }
+    );
+  }
   if (!checkSyncAuth(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

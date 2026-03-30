@@ -3,7 +3,6 @@ import type { FlexIntegrationConfig } from "@/shared/lib/flexMarketplaceApiClien
 import type { MarketplaceProductListRow } from "@/shared/lib/marketplaceProductList";
 
 function inventoryPriceEur(item: Record<string, unknown>): number | null {
-  const pkg = item.packageWeightAndSize as Record<string, unknown> | undefined;
   const pricing =
     (item.pricingSummary as Record<string, unknown> | undefined) ??
     (item.pricing as Record<string, unknown> | undefined);

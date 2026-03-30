@@ -6,9 +6,11 @@ import { useUser } from "@/shared/hooks/useUser";
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
   readLocalJsonCache,
+  shouldRunBackgroundSync,
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
 import { DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboardUi";
+import { dispatchStartTutorialEvent } from "@/shared/components/tutorial/TutorialRuntimeController";
 
 type FeatureRequestItem = {
   id: string;
@@ -28,6 +30,18 @@ type CachedFeedbackInboxPayload = {
   items: FeatureRequestItem[];
 };
 
+type UpdateTutorialItem = {
+  tour: {
+    id: string;
+    title: string;
+    summary: string;
+    release_key: string | null;
+    scenes: Array<{ id: string }>;
+  };
+  completed: boolean;
+  dismissed: boolean;
+};
+
 export default function UpdatesPage() {
   const user = useUser();
   const isOwner = user.roleKey?.toLowerCase() === "owner";
@@ -42,6 +56,8 @@ export default function UpdatesPage() {
   const [inboxBackgroundSyncing, setInboxBackgroundSyncing] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [ownerInboxMounted, setOwnerInboxMounted] = useState(false);
+  const [updateTutorials, setUpdateTutorials] = useState<UpdateTutorialItem[]>([]);
+  const [tutorialsLoading, setTutorialsLoading] = useState(false);
 
   const updates = useMemo(
     () => [
@@ -123,10 +139,31 @@ export default function UpdatesPage() {
   useEffect(() => {
     if (!isOwner || !ownerInboxMounted) return;
     const id = window.setInterval(() => {
+      if (!shouldRunBackgroundSync()) return;
       void loadOwnerInbox(true);
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
   }, [isOwner, ownerInboxMounted, loadOwnerInbox]);
+
+  const loadUpdateTutorials = useCallback(async () => {
+    if (!user.id) return;
+    setTutorialsLoading(true);
+    try {
+      const res = await fetch("/api/tutorials/runtime", { cache: "no-store" });
+      const payload = (await res.json()) as { updates?: UpdateTutorialItem[]; error?: string };
+      if (!res.ok) throw new Error(payload.error ?? "Tutorials konnten nicht geladen werden.");
+      setUpdateTutorials(payload.updates ?? []);
+    } catch (error) {
+      console.warn("[Tutorial] Updates konnten nicht geladen werden:", error);
+    } finally {
+      setTutorialsLoading(false);
+    }
+  }, [user.id]);
+
+  useEffect(() => {
+    if (!user.id) return;
+    void loadUpdateTutorials();
+  }, [user.id, loadUpdateTutorials]);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -214,6 +251,62 @@ export default function UpdatesPage() {
                   <p className="text-xs tabular-nums text-muted-foreground">{u.date}</p>
                 </div>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{u.text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section
+        data-tutorial-target="updates-card"
+        className="space-y-3 rounded-xl border border-border/50 bg-card/80 p-4 backdrop-blur-sm md:p-5"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">Update-Tutorials</h2>
+          <button
+            type="button"
+            onClick={() => void loadUpdateTutorials()}
+            className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs transition-colors hover:bg-accent/40"
+          >
+            Neu laden
+          </button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Bei Releases kannst du hier das passende Tutorial starten oder erneut ansehen.
+        </p>
+        {tutorialsLoading ? (
+          <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Tutorials werden geladen...
+          </div>
+        ) : null}
+        {!tutorialsLoading && updateTutorials.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Aktuell keine Update-Tutorials verfuegbar.</p>
+        ) : null}
+        <div className="space-y-2">
+          {updateTutorials.map((item) => (
+            <div
+              key={item.tour.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/50 bg-background/70 px-3 py-2"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{item.tour.title}</p>
+                <p className="text-xs text-muted-foreground">{item.tour.summary}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Release: {item.tour.release_key ?? "manual-release"} · Szenen: {item.tour.scenes.length}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-muted-foreground">
+                  {item.completed ? "Abgeschlossen" : item.dismissed ? "Abgebrochen" : "Neu"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => dispatchStartTutorialEvent(item.tour.id)}
+                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+                >
+                  {item.completed ? "Erneut ansehen" : "Starten"}
+                </button>
               </div>
             </div>
           ))}

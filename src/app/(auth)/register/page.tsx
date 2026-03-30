@@ -61,8 +61,8 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
       redirect("/login");
     }
 
-    const expiresAt = new Date(inviteRow.expires_at as string).getTime();
-    if (Number.isFinite(expiresAt) && expiresAt < Date.now()) {
+    const expiresRaw = typeof inviteRow.expires_at === "string" ? inviteRow.expires_at : "";
+    if (!expiresRaw) {
       redirect("/login");
     }
 

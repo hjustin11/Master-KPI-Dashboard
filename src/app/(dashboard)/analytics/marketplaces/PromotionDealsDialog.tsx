@@ -5,7 +5,6 @@ import { Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -42,6 +41,67 @@ function marketplaceLabel(slug: string | null, t: (k: string) => string): string
 
 const ALL_VALUE = "all";
 const MARKETPLACE_SELECT_VALUES = [ALL_VALUE, "amazon", ...ANALYTICS_MARKETPLACES.map((m) => m.slug)] as const;
+
+function DealColumn({
+  title,
+  items,
+  t,
+  onRemove,
+}: {
+  title: string;
+  items: PromotionDeal[];
+  t: (key: string, params?: Record<string, string | number>) => string;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-border/50 bg-muted/10">
+      <p className="border-b border-border/40 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </p>
+      <ul className="max-h-[min(55vh,420px)] space-y-1 overflow-y-auto p-2">
+        {items.length === 0 ? (
+          <li className="px-1 py-3 text-center text-[11px] text-muted-foreground">
+            {t("analyticsMp.promotionsEmptyColumn")}
+          </li>
+        ) : (
+          items.map((b) => (
+            <li
+              key={b.id}
+              className="flex items-start justify-between gap-2 rounded-md border border-border/40 bg-background/80 px-2 py-1.5 text-xs"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-sm border border-border/50"
+                    style={{ backgroundColor: b.color }}
+                    aria-hidden
+                  />
+                  <span className="font-medium leading-tight">{b.label}</span>
+                </span>
+                <span className="mt-0.5 block pl-4 text-[10px] text-muted-foreground">
+                  {b.from} – {b.to}
+                </span>
+                <span className="mt-0.5 block pl-4 text-[10px] text-primary/80">
+                  {marketplaceLabel(b.marketplaceSlug, t)}
+                </span>
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+                aria-label={t("analyticsChart.removeBandAria", { label: b.label })}
+                onClick={() => onRemove(b.id)}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </li>
+          ))
+        )}
+      </ul>
+    </div>
+  );
+}
 
 export function PromotionDealsDialog({
   open,
@@ -105,63 +165,6 @@ export function PromotionDealsDialog({
     void onPersist(deals.filter((x) => x.id !== id));
   };
 
-  function DealColumn({
-    title,
-    items,
-  }: {
-    title: string;
-    items: PromotionDeal[];
-  }) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-border/50 bg-muted/10">
-        <p className="border-b border-border/40 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {title}
-        </p>
-        <ul className="max-h-[min(55vh,420px)] space-y-1 overflow-y-auto p-2">
-          {items.length === 0 ? (
-            <li className="px-1 py-3 text-center text-[11px] text-muted-foreground">
-              {t("analyticsMp.promotionsEmptyColumn")}
-            </li>
-          ) : (
-            items.map((b) => (
-              <li
-                key={b.id}
-                className="flex items-start justify-between gap-2 rounded-md border border-border/40 bg-background/80 px-2 py-1.5 text-xs"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-sm border border-border/50"
-                      style={{ backgroundColor: b.color }}
-                      aria-hidden
-                    />
-                    <span className="font-medium leading-tight">{b.label}</span>
-                  </span>
-                  <span className="mt-0.5 block pl-4 text-[10px] text-muted-foreground">
-                    {b.from} – {b.to}
-                  </span>
-                  <span className="mt-0.5 block pl-4 text-[10px] text-primary/80">
-                    {marketplaceLabel(b.marketplaceSlug, t)}
-                  </span>
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="shrink-0 text-muted-foreground hover:text-destructive"
-                  aria-label={t("analyticsChart.removeBandAria", { label: b.label })}
-                  onClick={() => remove(b.id)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </li>
-            ))
-          )}
-        </ul>
-      </div>
-    );
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[min(96vh,980px)] max-w-[calc(100%-1.25rem)] gap-0 overflow-y-auto p-0 sm:max-w-6xl">
@@ -177,9 +180,24 @@ export function PromotionDealsDialog({
           ) : null}
 
           <div className="grid gap-3 md:grid-cols-3">
-            <DealColumn title={t("analyticsMp.promotionsRunning")} items={running} />
-            <DealColumn title={t("analyticsMp.promotionsUpcoming")} items={upcoming} />
-            <DealColumn title={t("analyticsMp.promotionsPast")} items={past} />
+            <DealColumn
+              title={t("analyticsMp.promotionsRunning")}
+              items={running}
+              t={t}
+              onRemove={remove}
+            />
+            <DealColumn
+              title={t("analyticsMp.promotionsUpcoming")}
+              items={upcoming}
+              t={t}
+              onRemove={remove}
+            />
+            <DealColumn
+              title={t("analyticsMp.promotionsPast")}
+              items={past}
+              t={t}
+              onRemove={remove}
+            />
           </div>
 
           <div className="rounded-lg border border-border/60 bg-muted/15 p-3">

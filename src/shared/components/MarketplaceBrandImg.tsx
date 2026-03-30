@@ -23,12 +23,12 @@ type MarketplaceBrandImgProps = {
  * Marktplatz-Logos unter `/public` — nach erstem Fetch als Blob-URL gecacht, weiteres Laden entfällt.
  */
 export function MarketplaceBrandImg({ src, alt, className }: MarketplaceBrandImgProps) {
-  const [displaySrc, setDisplaySrc] = useState(() => getSyncDisplaySrc(src));
+  const [, forceRefresh] = useState(0);
+  const displaySrc = getSyncDisplaySrc(src);
 
   useEffect(() => {
     const cached = objectUrlByPublicPath.get(src);
     if (cached) {
-      setDisplaySrc(cached);
       return;
     }
     let cancelled = false;
@@ -38,11 +38,9 @@ export function MarketplaceBrandImg({ src, alt, className }: MarketplaceBrandImg
         if (cancelled) return;
         const url = URL.createObjectURL(blob);
         objectUrlByPublicPath.set(src, url);
-        setDisplaySrc(url);
+        forceRefresh((v) => v + 1);
       })
-      .catch(() => {
-        if (!cancelled) setDisplaySrc(src);
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };

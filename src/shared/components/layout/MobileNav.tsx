@@ -4,20 +4,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  Cat,
   Megaphone,
   Menu,
-  Monitor,
   Package,
   PawPrint,
   ShoppingBag,
   ShoppingCart,
   Store,
-  Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePermissions } from "@/shared/hooks/usePermissions";
+import { useTutorialNavGate } from "@/shared/components/tutorial/TutorialNavContext";
 import { type PermissionKey, type SidebarItemKey } from "@/shared/lib/access-control";
 import {
   Sheet,
@@ -128,6 +126,7 @@ function isActive(pathname: string, href: string) {
 
 export function MobileNav() {
   const pathname = usePathname();
+  const { visibleSidebarKeys } = useTutorialNavGate();
   const { canAccessSidebarItem, hasPermission } = usePermissions();
   const visibleMainItems = mainItems.filter(
     (item) =>
@@ -139,7 +138,16 @@ export function MobileNav() {
       canAccessSidebarItem(item.key) &&
       (item.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true)
   );
-  const moreActive = visibleMoreItems.some((item) =>
+  const gateAllow = visibleSidebarKeys === null ? null : new Set(visibleSidebarKeys);
+  const visibleMainItemsGated =
+    gateAllow === null
+      ? visibleMainItems
+      : visibleMainItems.filter((item) => gateAllow.has(item.key));
+  const visibleMoreItemsGated =
+    gateAllow === null
+      ? visibleMoreItems
+      : visibleMoreItems.filter((item) => gateAllow.has(item.key));
+  const moreActive = visibleMoreItemsGated.some((item) =>
     isActive(pathname, item.activePrefix ?? item.href)
   );
 
@@ -147,7 +155,7 @@ export function MobileNav() {
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/80 backdrop-blur-lg md:hidden">
       <div className="flex h-16 items-stretch">
         <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
-          {visibleMainItems.map((item) => {
+          {visibleMainItemsGated.map((item) => {
             const Icon = item.icon;
             const active = isActive(pathname, item.activeGroup ?? item.href);
 
@@ -155,6 +163,7 @@ export function MobileNav() {
               <Link
                 key={item.key}
                 href={item.href}
+                data-tutorial-nav={item.key}
                 className={cn(
                   "flex min-w-[68px] shrink-0 flex-col items-center justify-center gap-1 px-0.5 text-[10px] transition-colors duration-150 sm:text-[11px]",
                   active ? "text-primary" : "text-muted-foreground"
@@ -188,10 +197,11 @@ export function MobileNav() {
               <SheetDescription>Schnellzugriff auf alle Menuepunkte</SheetDescription>
             </SheetHeader>
             <div className="space-y-2 p-4 pt-0">
-              {visibleMoreItems.map((item) => (
+              {visibleMoreItemsGated.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
+                  data-tutorial-subnav={item.href}
                   className={cn(
                     "block rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent/60",
                     isActive(pathname, item.activePrefix ?? item.href) ? "bg-primary/10 text-primary" : ""

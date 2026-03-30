@@ -7,11 +7,16 @@ import { Header } from "@/shared/components/layout/Header";
 import { MobileNav } from "@/shared/components/layout/MobileNav";
 import { Toaster } from "@/components/ui/sonner";
 import { DashboardAccessConfigSync } from "@/shared/components/DashboardAccessConfigSync";
+import { TutorialRuntimeController } from "@/shared/components/tutorial/TutorialRuntimeController";
+import { TutorialNavProvider } from "@/shared/components/tutorial/TutorialNavContext";
 
 export default function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const [open, setOpen] = useState(true);
+  const [tutorialLocked, setTutorialLocked] = useState(false);
+  const [tutorialSidebarVisible, setTutorialSidebarVisible] = useState(true);
+  const [tutorialVisibleSidebarKeys, setTutorialVisibleSidebarKeys] = useState<string[] | null>(null);
 
   useEffect(() => {
     const applyByWidth = () => {
@@ -48,14 +53,29 @@ export default function DashboardLayout({
         </div>
         <div className="pointer-events-none absolute inset-0 bg-slate-900/[0.015]" />
 
-        <AppSidebar />
-        <main className="relative z-10 flex min-h-screen min-w-0 w-full flex-1 basis-0 flex-col">
-          <Header />
-          <div className="flex flex-1 flex-col w-full max-w-none p-4 pb-20 md:p-6 md:pb-6 lg:p-8">
-            {children}
-          </div>
-          <MobileNav />
-        </main>
+        <TutorialNavProvider value={{ visibleSidebarKeys: tutorialVisibleSidebarKeys }}>
+          {tutorialSidebarVisible ? <AppSidebar /> : null}
+          <main
+            data-tutorial-target="main-content"
+            className="relative z-10 flex min-h-screen min-w-0 w-full flex-1 basis-0 flex-col"
+          >
+            <Header />
+            <div
+              className="flex flex-1 flex-col w-full max-w-none p-4 pb-20 md:p-6 md:pb-6 lg:p-8"
+              style={tutorialLocked ? { filter: "blur(1.8px)", pointerEvents: "none" } : undefined}
+            >
+              {children}
+            </div>
+            {tutorialSidebarVisible ? <MobileNav /> : null}
+          </main>
+        </TutorialNavProvider>
+        <TutorialRuntimeController
+          onStateChange={(state) => {
+            setTutorialLocked(state.locked);
+            setTutorialSidebarVisible(state.sidebarVisible);
+            setTutorialVisibleSidebarKeys(state.visibleSidebarKeys);
+          }}
+        />
         <Toaster richColors position="top-center" />
       </div>
     </SidebarProvider>

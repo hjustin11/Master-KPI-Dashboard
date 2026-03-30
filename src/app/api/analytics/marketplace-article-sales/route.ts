@@ -26,7 +26,6 @@ import {
   extractLinesFromFlexRawOrder,
   extractLinesFromOttoOrder,
   getCreatedMsFromFlexRaw,
-  getKauflandUnitCreatedMs,
   getOttoOrderCreatedMs,
 } from "@/shared/lib/marketplaceArticleLines";
 import {

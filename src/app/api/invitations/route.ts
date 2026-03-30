@@ -134,7 +134,6 @@ export async function POST(request: Request) {
     email
   )}&role=${role}`;
   const inviteUrl = `${appBaseUrl}/auth/callback?next=${encodeURIComponent(nextPath)}`;
-  const appName = "Master Dashboard";
 
   const admin = createAdminClient();
 

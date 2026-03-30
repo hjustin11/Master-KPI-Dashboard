@@ -26,6 +26,7 @@ import {
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
   readLocalJsonCache,
+  shouldRunBackgroundSync,
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
 import { useTranslation } from "@/i18n/I18nProvider";
@@ -206,8 +207,7 @@ export function MarketplacePriceParitySection() {
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<CachedParityPayload>(PRICE_PARITY_CACHE_KEY);
       if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0 && !parsed.error) {
-        const { savedAt: _s, ...rest } = parsed;
-        setPayload(rest);
+        setPayload(parsed);
         hadCache = true;
         setLoading(false);
       }
@@ -266,12 +266,13 @@ export function MarketplacePriceParitySection() {
   useEffect(() => {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
+      if (!shouldRunBackgroundSync()) return;
       void load(false, true);
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
   }, [hasMounted, load]);
 
-  const rows = payload?.rows ?? [];
+  const rows = useMemo(() => payload?.rows ?? [], [payload]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;

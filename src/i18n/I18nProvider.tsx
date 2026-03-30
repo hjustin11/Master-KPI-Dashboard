@@ -26,22 +26,16 @@ type I18nContextValue = {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
+  const [locale, setLocaleState] = useState<Locale>(() => {
     const raw = typeof window !== "undefined" ? localStorage.getItem(LOCALE_STORAGE_KEY) : null;
-    if (isLocale(raw)) {
-      setLocaleState(raw);
-    }
-    setReady(true);
-  }, []);
+    return isLocale(raw) ? raw : DEFAULT_LOCALE;
+  });
 
   useEffect(() => {
-    if (!ready || typeof document === "undefined") return;
+    if (typeof document === "undefined") return;
     localStorage.setItem(LOCALE_STORAGE_KEY, locale);
     document.documentElement.lang = locale === "zh" ? "zh-CN" : locale;
-  }, [locale, ready]);
+  }, [locale]);
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);

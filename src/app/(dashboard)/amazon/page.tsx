@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
   readLocalJsonCache,
+  shouldRunBackgroundSync,
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
 import { DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboardUi";
@@ -114,6 +115,7 @@ export default function AmazonPage() {
   useEffect(() => {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
+      if (!shouldRunBackgroundSync()) return;
       void load(false, true);
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);

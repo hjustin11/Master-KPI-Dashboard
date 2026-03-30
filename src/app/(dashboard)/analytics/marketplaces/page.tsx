@@ -26,8 +26,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { MarketplacePriceParitySection } from "./MarketplacePriceParitySection";
@@ -50,6 +48,7 @@ import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
   readAnalyticsSalesCompareInitial,
   readLocalJsonCache,
+  shouldRunBackgroundSync,
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
 import { useTranslation } from "@/i18n/I18nProvider";
@@ -163,7 +162,7 @@ const MARKETPLACE_TILE_BTN_CLASS =
 
 const MARKETPLACE_TILE_KPI_GRID_CLASS = "mt-auto grid grid-cols-2 gap-1 pt-2";
 
-function placeholderTileLogoPreset(_slug: string): Exclude<MarketplaceTileLogoPreset, "amazon"> {
+function placeholderTileLogoPreset(): Exclude<MarketplaceTileLogoPreset, "amazon"> {
   return "compact";
 }
 
@@ -769,8 +768,10 @@ function MarketplaceDetailDialog({
     const reopenOrMarketplaceChange =
       !detailPeriodGateRef.current.open || detailPeriodGateRef.current.index !== index;
     if (reopenOrMarketplaceChange) {
-      setDetailPeriodFrom(periodFrom);
-      setDetailPeriodTo(periodTo);
+      queueMicrotask(() => {
+        setDetailPeriodFrom(periodFrom);
+        setDetailPeriodTo(periodTo);
+      });
     }
     detailPeriodGateRef.current = { open: true, index };
   }, [open, index, periodFrom, periodTo]);
@@ -778,10 +779,13 @@ function MarketplaceDetailDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setArticlesLoading(true);
-    setArticlesError(null);
-    setArticlesUnsupported(false);
-    setArticlePrevRange({ from: "", to: "" });
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setArticlesLoading(true);
+      setArticlesError(null);
+      setArticlesUnsupported(false);
+      setArticlePrevRange({ from: "", to: "" });
+    });
     const params = new URLSearchParams({
       marketplace: marketplaceId,
       from: detailPeriodFrom,
@@ -991,7 +995,7 @@ function MarketplaceDetailDialog({
       (() => {
         const m = getMarketplaceBySlug(marketplaceId);
         if (!m) return null;
-        const { slot, img } = MARKETPLACE_TILE_LOGO[placeholderTileLogoPreset(marketplaceId)];
+        const { slot, img } = MARKETPLACE_TILE_LOGO[placeholderTileLogoPreset()];
         return (
           <div
             className={cn(
@@ -1333,19 +1337,17 @@ function MarketplaceDetailDialog({
 }
 
 function PlaceholderTile({
-  slug,
   label,
   logo,
   onOpenDetail,
   t,
 }: {
-  slug: string;
   label: string;
   logo: string;
   onOpenDetail: () => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
-  const { slot, img } = MARKETPLACE_TILE_LOGO[placeholderTileLogoPreset(slug)];
+  const { slot, img } = MARKETPLACE_TILE_LOGO[placeholderTileLogoPreset()];
   return (
     <button
       type="button"
@@ -1466,7 +1468,7 @@ function AnalyticsMarketplacesPage() {
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<{ savedAt: number } & AmazonSalesCompareResponse>(cacheKey);
       if (parsed?.summary && !parsed.error) {
-        const { savedAt: _s, ...data } = parsed;
+        const data = parsed;
         setAmazonData(data);
         hadCache = true;
         setAmazonLoading(false);
@@ -1525,7 +1527,7 @@ function AnalyticsMarketplacesPage() {
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<{ savedAt: number } & EbaySalesCompareResponse>(cacheKey);
       if (parsed?.summary && !parsed.error) {
-        const { savedAt: _s, ...data } = parsed;
+        const data = parsed;
         setEbayData(data);
         hadCache = true;
         setEbayLoading(false);
@@ -1584,7 +1586,7 @@ function AnalyticsMarketplacesPage() {
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<{ savedAt: number } & OttoSalesCompareResponse>(cacheKey);
       if (parsed?.summary && !parsed.error) {
-        const { savedAt: _s, ...data } = parsed;
+        const data = parsed;
         setOttoData(data);
         hadCache = true;
         setOttoLoading(false);
@@ -1643,7 +1645,7 @@ function AnalyticsMarketplacesPage() {
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<{ savedAt: number } & KauflandSalesCompareResponse>(cacheKey);
       if (parsed?.summary && !parsed.error) {
-        const { savedAt: _s, ...data } = parsed;
+        const data = parsed;
         setKauflandData(data);
         hadCache = true;
         setKauflandLoading(false);
@@ -1702,7 +1704,7 @@ function AnalyticsMarketplacesPage() {
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<{ savedAt: number } & FressnapfSalesCompareResponse>(cacheKey);
       if (parsed?.summary && !parsed.error) {
-        const { savedAt: _s, ...data } = parsed;
+        const data = parsed;
         setFressnapfData(data);
         hadCache = true;
         setFressnapfLoading(false);
@@ -1761,7 +1763,7 @@ function AnalyticsMarketplacesPage() {
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<{ savedAt: number } & MmsSalesCompareResponse>(cacheKey);
       if (parsed?.summary && !parsed.error) {
-        const { savedAt: _s, ...data } = parsed;
+        const data = parsed;
         setMmsData(data);
         hadCache = true;
         setMmsLoading(false);
@@ -1820,7 +1822,7 @@ function AnalyticsMarketplacesPage() {
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<{ savedAt: number } & ZooplusSalesCompareResponse>(cacheKey);
       if (parsed?.summary && !parsed.error) {
-        const { savedAt: _s, ...data } = parsed;
+        const data = parsed;
         setZooplusData(data);
         hadCache = true;
         setZooplusLoading(false);
@@ -1879,7 +1881,7 @@ function AnalyticsMarketplacesPage() {
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<{ savedAt: number } & TiktokSalesCompareResponse>(cacheKey);
       if (parsed?.summary && !parsed.error) {
-        const { savedAt: _s, ...data } = parsed;
+        const data = parsed;
         setTiktokData(data);
         hadCache = true;
         setTiktokLoading(false);
@@ -1938,7 +1940,7 @@ function AnalyticsMarketplacesPage() {
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<{ savedAt: number } & ShopifySalesCompareResponse>(cacheKey);
       if (parsed?.summary && !parsed.error) {
-        const { savedAt: _s, ...data } = parsed;
+        const data = parsed;
         setShopifyData(data);
         hadCache = true;
         setShopifyLoading(false);
@@ -2020,6 +2022,7 @@ function AnalyticsMarketplacesPage() {
   useEffect(() => {
     if (!analyticsHasMounted) return;
     const id = window.setInterval(() => {
+      if (!shouldRunBackgroundSync()) return;
       void loadAmazonSales(false, true);
       void loadEbaySales(false, true);
       void loadOttoSales(false, true);
@@ -3083,7 +3086,6 @@ function AnalyticsMarketplacesPage() {
         ).map(({ slug, label, logo }) => (
           <PlaceholderTile
             key={slug}
-            slug={slug}
             label={label}
             logo={logo}
             onOpenDetail={() => openDetailAt(slug)}

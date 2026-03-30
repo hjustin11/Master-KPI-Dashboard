@@ -10,6 +10,7 @@ import { DASHBOARD_PAGE_SHELL, DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboa
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
   readLocalJsonCache,
+  shouldRunBackgroundSync,
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
 import { useTranslation } from "@/i18n/I18nProvider";
@@ -659,6 +660,7 @@ export default function XentralProductsPage() {
   useEffect(() => {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
+      if (!shouldRunBackgroundSync()) return;
       void load(false, true);
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
@@ -750,7 +752,7 @@ export default function XentralProductsPage() {
         },
       },
     ],
-    [t, formatEkPrice, tagDefs, tagBySku, getTagForSku, setTagOverride, addTagDef, removeTagDef]
+    [t, formatEkPrice, tagDefs, getTagForSku, setTagOverride, addTagDef, removeTagDef]
   );
 
   return (
