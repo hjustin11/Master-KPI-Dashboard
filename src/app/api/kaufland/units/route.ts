@@ -39,7 +39,12 @@ export async function GET() {
       );
     }
 
-    const res = await kauflandSignedFetch(config, "/v2/units?limit=100&offset=0");
+    const unitsParams = new URLSearchParams({
+      limit: "100",
+      offset: "0",
+      storefront: config.storefront,
+    });
+    const res = await kauflandSignedFetch(config, `/v2/units?${unitsParams.toString()}`);
     const text = await res.text();
     let json: { data?: unknown[] } | null = null;
     try {

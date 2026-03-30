@@ -6,7 +6,6 @@ import { createAdminClient } from "@/shared/lib/supabase/admin";
 
 type ListingSummary = {
   asin?: string;
-  productType?: string;
   itemName?: string;
   status?: string[];
   fnSku?: string;
@@ -19,10 +18,10 @@ type ListingItem = {
 
 type ProductRow = {
   sku: string;
-  asin: string;
+  /** Amazon ASIN, gleiche Rolle wie secondaryId in anderen Marktplätzen. */
+  secondaryId: string;
   title: string;
   statusLabel: string;
-  productType: string;
   isActive: boolean;
   /** Aus Listings-Report/TSV, sonst null. */
   price: number | null;
@@ -317,7 +316,6 @@ function parseListingsTsv(content: string) {
   const asinIdx = idx(["asin1", "asin"]);
   const titleIdx = idx(["item-name", "item_name", "title", "product-name"]);
   const statusIdx = idx(["status", "item-status"]);
-  const productTypeIdx = idx(["product-id-type", "product_type"]);
   const priceIdx = idx([
     "price",
     "standard-price",
@@ -334,11 +332,16 @@ function parseListingsTsv(content: string) {
     const value = (index: number) => (index >= 0 ? (cols[index] ?? "").trim() : "");
     const statusLabel = value(statusIdx) || "Unbekannt";
     const normalized = statusLabel.toLowerCase();
-    const isActive = normalized.includes("active") || normalized.includes("buyable") || normalized.includes("discoverable");
+    // Viele Reports liefern keinen verlässlichen Status. Damit aktive Ansicht nicht leer läuft,
+    // behandeln wir fehlenden/unklaren Status als aktiv.
+    const isActive =
+      normalized === "unbekannt" ||
+      normalized.includes("active") ||
+      normalized.includes("buyable") ||
+      normalized.includes("discoverable");
     const sku = value(skuIdx);
-    const asin = value(asinIdx);
+    const secondaryId = value(asinIdx);
     const title = value(titleIdx);
-    const productType = value(productTypeIdx);
     let price: number | null = null;
     const rawPrice = value(priceIdx);
     if (rawPrice) {
@@ -346,8 +349,8 @@ function parseListingsTsv(content: string) {
       const n = Number(norm);
       if (Number.isFinite(n) && n >= 0) price = n;
     }
-    if (!sku && !asin && !title) continue;
-    rows.push({ sku, asin, title, statusLabel, productType, isActive, price });
+    if (!sku && !secondaryId && !title) continue;
+    rows.push({ sku, secondaryId, title, statusLabel, isActive, price });
   }
   return rows;
 }
@@ -565,9 +568,8 @@ export async function GET(request: Request) {
     let guard = 0;
     const rows: Array<{
       sku: string;
-      asin: string;
+      secondaryId: string;
       title: string;
-      productType: string;
       statusLabel: string;
       isActive: boolean;
       price: number | null;
@@ -689,12 +691,13 @@ export async function GET(request: Request) {
       for (const item of items) {
         const summary = item.summaries?.[0];
         const statuses = Array.isArray(summary?.status) ? summary.status : [];
-        const active = isActiveStatus(statuses);
+        // Listings API liefert in einigen Konten nur SKU ohne status/summaries.
+        // Diese Einträge sollen in "aktiv" sichtbar bleiben.
+        const active = statuses.length > 0 ? isActiveStatus(statuses) : true;
         rows.push({
           sku: item.sku ?? "",
-          asin: summary?.asin ?? "",
+          secondaryId: summary?.asin ?? "",
           title: summary?.itemName ?? "",
-          productType: summary?.productType ?? "",
           statusLabel: statuses.length ? statuses.join(", ") : "Unbekannt",
           isActive: active,
           price: null,

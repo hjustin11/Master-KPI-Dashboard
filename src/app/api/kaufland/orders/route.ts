@@ -18,10 +18,6 @@ export type KauflandOrderListRow = {
   statusRaw: string;
 };
 
-function env(name: string) {
-  return (process.env[name] ?? "").trim();
-}
-
 function localYmd(d: Date): string {
   const x = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
   return x.toISOString().slice(0, 10);
@@ -78,8 +74,6 @@ export async function GET(request: Request) {
       );
     }
 
-    const storefront = env("KAUFLAND_STOREFRONT") || "de";
-
     const { searchParams } = new URL(request.url);
     const now = new Date();
     const yesterday = new Date(now);
@@ -101,7 +95,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Zeitraum muss 1–60 Tage umfassen." }, { status: 400 });
     }
 
-    const allUnits = await fetchKauflandOrderUnitsAllStatuses({ config, storefront });
+    const allUnits = await fetchKauflandOrderUnitsAllStatuses({ config });
     const filtered = filterOrderUnitsByCreatedRange(allUnits, startMs, endMs);
     const byOrder = new Map<string, KauflandOrderUnit[]>();
     for (const u of filtered) {
@@ -119,7 +113,7 @@ export async function GET(request: Request) {
         from: fromYmd,
         to: toYmd,
         baseUrl: config.baseUrl,
-        storefront,
+        storefront: config.storefront,
       },
       totalCount: items.length,
       items,

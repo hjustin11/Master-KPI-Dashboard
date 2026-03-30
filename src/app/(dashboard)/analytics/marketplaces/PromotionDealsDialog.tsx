@@ -40,7 +40,8 @@ function marketplaceLabel(slug: string | null, t: (k: string) => string): string
   return getMarketplaceBySlug(slug)?.label ?? slug;
 }
 
-const MARKETPLACE_SELECT_VALUES = ["__all__", "amazon", ...ANALYTICS_MARKETPLACES.map((m) => m.slug)] as const;
+const ALL_VALUE = "all";
+const MARKETPLACE_SELECT_VALUES = [ALL_VALUE, "amazon", ...ANALYTICS_MARKETPLACES.map((m) => m.slug)] as const;
 
 export function PromotionDealsDialog({
   open,
@@ -62,7 +63,7 @@ export function PromotionDealsDialog({
     from: today,
     to: today,
     color: "#f97316",
-    marketplace: "__all__" as string,
+    marketplace: ALL_VALUE,
   });
 
   const { running, upcoming, past } = useMemo(() => {
@@ -87,7 +88,7 @@ export function PromotionDealsDialog({
     let from = draft.from;
     let to = draft.to;
     if (from > to) [from, to] = [to, from];
-    const marketplaceSlug = draft.marketplace === "__all__" ? null : draft.marketplace;
+    const marketplaceSlug = draft.marketplace === ALL_VALUE ? null : draft.marketplace;
     const next: PromotionDeal = {
       id,
       label: draft.label.trim() || t("analyticsChart.defaultBandLabel"),
@@ -116,7 +117,7 @@ export function PromotionDealsDialog({
         <p className="border-b border-border/40 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           {title}
         </p>
-        <ul className="max-h-[min(40vh,280px)] space-y-1 overflow-y-auto p-2">
+        <ul className="max-h-[min(55vh,420px)] space-y-1 overflow-y-auto p-2">
           {items.length === 0 ? (
             <li className="px-1 py-3 text-center text-[11px] text-muted-foreground">
               {t("analyticsMp.promotionsEmptyColumn")}
@@ -163,12 +164,9 @@ export function PromotionDealsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(92vh,860px)] max-w-[calc(100%-1.25rem)] gap-0 overflow-y-auto p-0 sm:max-w-3xl">
+      <DialogContent className="max-h-[min(96vh,980px)] max-w-[calc(100%-1.25rem)] gap-0 overflow-y-auto p-0 sm:max-w-6xl">
         <DialogHeader className="border-b border-border/60 px-4 pb-3 pt-4 text-left">
           <DialogTitle>{t("analyticsMp.promotionsTitle")}</DialogTitle>
-          <DialogDescription className="text-xs">
-            {t("analyticsMp.promotionsDescription")}
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 px-4 py-4">
@@ -239,7 +237,7 @@ export function PromotionDealsDialog({
                   <SelectContent>
                     {MARKETPLACE_SELECT_VALUES.map((val) => (
                       <SelectItem key={val} value={val}>
-                        {val === "__all__"
+                        {val === ALL_VALUE
                           ? t("analyticsMp.promotionsAllMarketplaces")
                           : val === "amazon"
                             ? "Amazon"

@@ -88,12 +88,26 @@ const navItems: NavItem[] = [
     ],
   },
   {
+    key: "ebay",
+    labelKey: "nav.ebay",
+    href: "/ebay",
+    icon: ShoppingBag,
+    requiredPermissions: ["manage_integrations"],
+    children: [
+      { labelKey: "nav.ebayOrders", href: "/ebay/orders" },
+      { labelKey: "nav.ebayProducts", href: "/ebay/products" },
+    ],
+  },
+  {
     key: "otto",
     labelKey: "nav.otto",
     href: "/otto",
     icon: ShoppingBag,
     requiredPermissions: ["manage_integrations"],
-    children: [{ labelKey: "nav.ottoOrders", href: "/otto/orders" }],
+    children: [
+      { labelKey: "nav.ottoOrders", href: "/otto/orders" },
+      { labelKey: "nav.ottoProducts", href: "/otto/products" },
+    ],
   },
   {
     key: "kaufland",
@@ -103,6 +117,7 @@ const navItems: NavItem[] = [
     requiredPermissions: ["manage_integrations"],
     children: [
       { labelKey: "nav.kauflandOrders", href: "/kaufland/orders" },
+      { labelKey: "nav.kauflandProducts", href: "/kaufland/products" },
       { labelKey: "nav.kauflandUnits", href: "/kaufland/units" },
     ],
   },
@@ -112,7 +127,10 @@ const navItems: NavItem[] = [
     href: "/fressnapf",
     icon: PawPrint,
     requiredPermissions: ["manage_integrations"],
-    children: [{ labelKey: "nav.fressnapfOrders", href: "/fressnapf/orders" }],
+    children: [
+      { labelKey: "nav.fressnapfOrders", href: "/fressnapf/orders" },
+      { labelKey: "nav.fressnapfProducts", href: "/fressnapf/products" },
+    ],
   },
   {
     key: "mediamarktSaturn",
@@ -120,7 +138,10 @@ const navItems: NavItem[] = [
     href: "/mediamarkt-saturn",
     icon: Monitor,
     requiredPermissions: ["manage_integrations"],
-    children: [{ labelKey: "nav.mediamarktSaturnOrders", href: "/mediamarkt-saturn/orders" }],
+    children: [
+      { labelKey: "nav.mediamarktSaturnOrders", href: "/mediamarkt-saturn/orders" },
+      { labelKey: "nav.mediamarktSaturnProducts", href: "/mediamarkt-saturn/products" },
+    ],
   },
   {
     key: "zooplus",
@@ -128,7 +149,10 @@ const navItems: NavItem[] = [
     href: "/zooplus",
     icon: Cat,
     requiredPermissions: ["manage_integrations"],
-    children: [{ labelKey: "nav.zooplusOrders", href: "/zooplus/orders" }],
+    children: [
+      { labelKey: "nav.zooplusOrders", href: "/zooplus/orders" },
+      { labelKey: "nav.zooplusProducts", href: "/zooplus/products" },
+    ],
   },
   {
     key: "tiktok",
@@ -136,7 +160,10 @@ const navItems: NavItem[] = [
     href: "/tiktok",
     icon: Video,
     requiredPermissions: ["manage_integrations"],
-    children: [{ labelKey: "nav.tiktokOrders", href: "/tiktok/orders" }],
+    children: [
+      { labelKey: "nav.tiktokOrders", href: "/tiktok/orders" },
+      { labelKey: "nav.tiktokProducts", href: "/tiktok/products" },
+    ],
   },
   {
     key: "shopify",
@@ -144,7 +171,10 @@ const navItems: NavItem[] = [
     href: "/shopify",
     icon: ShoppingBasket,
     requiredPermissions: ["manage_integrations"],
-    children: [{ labelKey: "nav.shopifyOrders", href: "/shopify/orders" }],
+    children: [
+      { labelKey: "nav.shopifyOrders", href: "/shopify/orders" },
+      { labelKey: "nav.shopifyProducts", href: "/shopify/products" },
+    ],
   },
   {
     key: "xentral",
@@ -203,6 +233,7 @@ function isActivePath(pathname: string, href: string) {
 /** Hauptklick Ziel = erster Unterpunkt (ohne separate Übersichtsseite). */
 const NAV_PRIMARY_CHILD_KEYS = new Set<SidebarItemKey>([
   "amazon",
+  "ebay",
   "otto",
   "kaufland",
   "fressnapf",
@@ -241,6 +272,7 @@ function resolveNavLink(
 
 const MARKETPLACE_NAV_KEYS = new Set<SidebarItemKey>([
   "amazon",
+  "ebay",
   "otto",
   "kaufland",
   "fressnapf",

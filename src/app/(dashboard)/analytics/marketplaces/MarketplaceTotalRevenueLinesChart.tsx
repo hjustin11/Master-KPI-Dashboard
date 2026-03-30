@@ -31,6 +31,7 @@ export type MarketplaceRevenueLineSeries = {
 /** Feste Farben pro Marktplatz (Gesamt-Liniendiagramm) */
 export const MARKETPLACE_REVENUE_LINE_COLORS: Record<string, string> = {
   amazon: "#FF9900",
+  ebay: "#2563eb",
   otto: "#c41e3a",
   kaufland: "#b30000",
   fressnapf: "#008c45",

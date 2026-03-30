@@ -37,6 +37,8 @@ type XentralArticleRaw = {
   stock: number;
   stockByLocation: Record<string, number>;
   price: number | null;
+  /** JSON:API `data[].id` — für Join mit GET /api/v1/purchasePrices */
+  xentralProductId: string | null;
   projectId: string | null;
   totalSold: number;
   soldByProjectRaw: Record<string, number>;
@@ -92,10 +94,52 @@ async function resolveXentralConfig() {
 function asNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
-    const n = Number(value);
+    // Xentral liefert Zahlen oft als String (z.B. "3,35 €" oder "1.234,56").
+    // Wir versuchen robuste Normalisierung auf JS-kompatibles Dezimalformat.
+    let s = value.trim();
+    // remove currency symbols / spaces
+    s = s.replace(/[\u00A0\s€$]/g, "");
+    // remove any non-numeric except separators and minus
+    s = s.replace(/[^0-9.,-]/g, "");
+
+    // Both separators: assume "." thousand and "," decimal (e.g. 1.234,56)
+    const hasComma = s.includes(",");
+    const hasDot = s.includes(".");
+    if (hasComma && hasDot) {
+      // remove thousand dots
+      s = s.replace(/\./g, "");
+      // replace decimal comma with dot
+      s = s.replace(",", ".");
+    } else if (hasComma && !hasDot) {
+      // only comma: treat as decimal separator
+      s = s.replace(",", ".");
+    } else if (!hasComma && hasDot) {
+      // only dot: treat as decimal separator (already JS-compatible)
+    }
+
+    // Decimal comma -> dot already normalized above; parseFloat tolerates "1." / trailing separators.
+    const n = Number(s);
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+/**
+ * Xentral liefert Geldwerte häufig als Objekt: { currency: "EUR", amount: "3.3500" }.
+ * Diese Helferfunktion liest sowohl flache Zahlen/Strings als auch amount-basierte Objekte.
+ */
+function asMoneyAmount(value: unknown): number | null {
+  const direct = asNumber(value);
+  if (direct != null) return direct;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const rec = value as Record<string, unknown>;
+  return (
+    asNumber(rec.amount) ??
+    asNumber(rec.value) ??
+    asNumber(rec.net) ??
+    asNumber(rec.gross) ??
+    null
+  );
 }
 
 function isNumericOnly(value: string) {
@@ -250,6 +294,128 @@ function extractTotalSold(a: Record<string, unknown>, soldByProjectRaw: Record<s
   return sum > 0 ? sum : 0;
 }
 
+function parseProductIdFromPurchasePriceItem(obj: Record<string, unknown>): string | null {
+  const rel = obj.relationships as Record<string, unknown> | undefined;
+  const tryProductRel = (node: unknown): string | null => {
+    if (!node || typeof node !== "object") return null;
+    const pr = node as Record<string, unknown>;
+    const data = pr.data;
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      const id = pickFirstString((data as Record<string, unknown>).id);
+      if (id) return id;
+    }
+    if (Array.isArray(data) && data[0] && typeof data[0] === "object") {
+      const id = pickFirstString((data[0] as Record<string, unknown>).id);
+      if (id) return id;
+    }
+    return null;
+  };
+
+  if (rel) {
+    const fromSingular = tryProductRel(rel.product);
+    if (fromSingular) return fromSingular;
+    const fromPlural = tryProductRel(rel.products);
+    if (fromPlural) return fromPlural;
+  }
+  const a = extractAttributes(obj) as Record<string, unknown>;
+  const pref = a.product;
+  if (typeof pref === "string") return pref.trim() || null;
+  if (pref && typeof pref === "object" && !Array.isArray(pref)) {
+    const id = pickFirstString((pref as Record<string, unknown>).id);
+    if (id) return id;
+  }
+  return pickFirstString(a.productId) ?? pickFirstString(a.product_id) ?? null;
+}
+
+function parsePriceFromPurchasePriceItem(obj: Record<string, unknown>): number | null {
+  const a = extractAttributes(obj) as Record<string, unknown>;
+  return (
+    asMoneyAmount(a.price) ??
+    asNumber(a.preis) ??
+    asMoneyAmount(a.netPrice) ??
+    asNumber(a.net_price) ??
+    asMoneyAmount(a.grossPrice) ??
+    asMoneyAmount(a.amount) ??
+    null
+  );
+}
+
+function parseFromQuantityFromPurchasePriceItem(obj: Record<string, unknown>): number | null {
+  const a = extractAttributes(obj) as Record<string, unknown>;
+  return asNumber(a.fromQuantity) ?? asNumber(a.from_quantity) ?? asNumber(a.minQuantity) ?? null;
+}
+
+/**
+ * Einkaufspreise liegen in Xentral oft nicht flach am Produkt, sondern unter
+ * GET /api/v1/purchasePrices (Relationship `product`). Pro Produkt-ID einen Preis wählen
+ * (niedrigste Staffelmenge bevorzugt).
+ */
+async function fetchPurchasePriceByProductIdMap(args: {
+  baseUrl: string;
+  token: string;
+}): Promise<Map<string, number>> {
+  const best = new Map<string, { price: number; fromQ: number }>();
+  const paths = ["api/v1/purchasePrices", "api/v2/purchasePrices"];
+
+  for (const path of paths) {
+    let pathWorked = false;
+    for (let page = 1; page <= 500; page++) {
+      const url = new URL(joinUrl(args.baseUrl, path));
+      url.searchParams.set("page[number]", String(page));
+      url.searchParams.set("page[size]", String(100));
+
+      const res = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${args.token}`,
+        },
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        if (page === 1 && (res.status === 404 || res.status === 405)) break;
+        break;
+      }
+      pathWorked = true;
+
+      let json: unknown;
+      try {
+        json = (await res.json()) as unknown;
+      } catch {
+        break;
+      }
+      const root = json as Record<string, unknown>;
+      const data = Array.isArray(root?.data) ? (root.data as unknown[]) : [];
+      if (!data.length) break;
+
+      for (const item of data) {
+        if (!item || typeof item !== "object") continue;
+        const obj = item as Record<string, unknown>;
+        const productId = parseProductIdFromPurchasePriceItem(obj);
+        const price = parsePriceFromPurchasePriceItem(obj);
+        if (!productId || price == null || !Number.isFinite(price)) continue;
+        const fromQRaw = parseFromQuantityFromPurchasePriceItem(obj);
+        const fromQ = fromQRaw != null && Number.isFinite(fromQRaw) ? fromQRaw : 1e9;
+
+        const prev = best.get(productId);
+        if (!prev || fromQ < prev.fromQ) {
+          best.set(productId, { price, fromQ });
+        }
+      }
+
+      if (data.length < 100) break;
+    }
+    if (pathWorked) break;
+  }
+
+  const out = new Map<string, number>();
+  for (const [id, { price }] of best) {
+    out.set(id, price);
+  }
+  return out;
+}
+
 function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
   const root = payload as Record<string, unknown> | null;
   const candidates: unknown[] =
@@ -261,6 +427,7 @@ function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
     if (!item || typeof item !== "object") continue;
     const obj = item as Record<string, unknown>;
     const a = extractAttributes(obj);
+    const xentralProductId = pickFirstString(obj.id) ?? null;
 
     const sku =
       pickFirstString(a.sku) ??
@@ -299,18 +466,71 @@ function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
     const stock =
       Object.keys(stockByLocation).length > 0 ? sumByLocation : aggregateStock;
 
+    const raw = a as unknown as Record<string, unknown>;
+
+    const readPriceFromMaybeEinkauf = (value: unknown): number | null => {
+      const tryObj = (o: unknown): number | null => {
+        if (!o || typeof o !== "object") return null;
+        const rec = o as Record<string, unknown>;
+        return (
+          asNumber(rec.preis) ??
+          asNumber(rec.Preis) ??
+          asNumber(rec.price) ??
+          asNumber(rec.Price) ??
+          asNumber(rec.einkaufpreis) ??
+          asNumber(rec.einkaufspreis) ??
+          asNumber(rec.einstandspreis) ??
+          asNumber(rec.costPrice) ??
+          asNumber(rec.costprice) ??
+          asNumber(rec.purchasePrice) ??
+          null
+        );
+      };
+
+      if (Array.isArray(value)) {
+        for (const it of value) {
+          const v = tryObj(it);
+          if (v != null) return v;
+        }
+        return null;
+      }
+
+      // Normalfall: Einkauf ist ein Objekt mit Feldern wie „Preis“/„preis“.
+      return tryObj(value);
+    };
+
+    const ekPrice =
+      readPriceFromMaybeEinkauf((raw as Record<string, unknown>).einkauf) ??
+      readPriceFromMaybeEinkauf((raw as Record<string, unknown>).Einkauf) ??
+      // Fallbacks auf flache Felder (falls Xentral keine verschachtelte Struktur liefert)
+      asNumber(raw.einkaufpreis) ??
+      asNumber(raw.einkaufspreis) ??
+      asNumber(raw.einstandspreis) ??
+      asNumber(raw.costPrice) ??
+      asNumber(raw.costprice) ??
+      asMoneyAmount(raw.purchasePrice) ??
+      asMoneyAmount(raw.purchasePriceNet) ??
+      asMoneyAmount(raw.purchasePriceGross) ??
+      asMoneyAmount((raw.calculatedPurchasePrice as Record<string, unknown> | undefined)?.price) ??
+      null;
+
+    // In der UI nutzen wir dieses Feld als EK-Preis.
+    // Falls Xentral kein eindeutiges Einkaufspreis-Feld liefert, fallbacken wir auf bereits vorhandene Preisfelder.
     const price =
-      asNumber(a.verkaufspreis) ??
-      asNumber(a.salesPrice) ??
-      asNumber((a.sales as Record<string, unknown> | undefined)?.price) ??
-      asNumber(a.price) ??
-      asNumber(a.listPrice) ??
-      asNumber(a.listprice) ??
-      asNumber(a.uvp) ??
-      asNumber(a.bruttopreis) ??
-      asNumber(a.nettopreis) ??
-      asNumber(a.unitPrice) ??
-      asNumber((a.pricing as Record<string, unknown> | undefined)?.gross) ??
+      ekPrice ??
+      asNumber((raw as Record<string, unknown>).verkaufspreis) ??
+      asNumber(raw.salesPrice) ??
+      asNumber((raw.sales as Record<string, unknown> | undefined)?.price) ??
+      asNumber(raw.price) ??
+      asNumber(raw.listPrice) ??
+      asNumber(raw.listprice) ??
+      asNumber(raw.uvp) ??
+      asNumber(raw.bruttopreis) ??
+      asNumber(raw.nettopreis) ??
+      asNumber(raw.unitPrice) ??
+      asNumber((raw.pricing as Record<string, unknown> | undefined)?.gross) ??
+      asMoneyAmount(raw.salesPriceNet) ??
+      asMoneyAmount(raw.salesPriceGross) ??
       null;
 
     const projectRef = a.project;
@@ -336,6 +556,7 @@ function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
       stock,
       stockByLocation,
       price,
+      xentralProductId,
       projectId,
       totalSold,
       soldByProjectRaw,
@@ -345,8 +566,22 @@ function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
   return rows;
 }
 
-function enrichArticles(rows: XentralArticleRaw[], projectById: Map<string, string>): XentralArticle[] {
+function enrichArticles(
+  rows: XentralArticleRaw[],
+  projectById: Map<string, string>,
+  purchasePriceByProductId?: Map<string, number>
+): XentralArticle[] {
   return rows.map((r) => {
+    let price = r.price;
+    if (
+      (price == null || !Number.isFinite(price)) &&
+      r.xentralProductId &&
+      purchasePriceByProductId?.size
+    ) {
+      const p = purchasePriceByProductId.get(r.xentralProductId);
+      if (p != null && Number.isFinite(p)) price = p;
+    }
+
     let projectDisplay = "—";
     if (r.projectId) {
       const mapped = projectById.get(r.projectId);
@@ -376,7 +611,7 @@ function enrichArticles(rows: XentralArticleRaw[], projectById: Map<string, stri
       name: r.name,
       stock: r.stock,
       stockByLocation: { ...r.stockByLocation },
-      price: r.price,
+      price,
       projectId: r.projectId,
       projectDisplay,
       totalSold,
@@ -472,9 +707,12 @@ export async function GET(request: Request) {
     );
   }
 
-  const projectById = await fetchXentralProjectByIdLookup({ baseUrl, token });
+  const [projectById, purchasePriceByProductId] = await Promise.all([
+    fetchXentralProjectByIdLookup({ baseUrl, token }),
+    fetchPurchasePriceByProductIdMap({ baseUrl, token }),
+  ]);
   const firstRaw = mapToArticlesRaw(first.json) ?? [];
-  const firstItems = enrichArticles(firstRaw, projectById);
+  const firstItems = enrichArticles(firstRaw, projectById, purchasePriceByProductId);
   const totalCount = parseTotalCount(first.json) ?? firstItems.length;
 
   const qFrom = parseForecastYmdParam(searchParams.get("fromYmd"));
@@ -544,7 +782,7 @@ export async function GET(request: Request) {
     page += 1;
   }
 
-  const enriched = enrichArticles(rawAccum, projectById);
+  const enriched = enrichArticles(rawAccum, projectById, purchasePriceByProductId);
   const { items, meta } = await withOptionalSalesWindow(enriched);
   return NextResponse.json({ items, totalCount, meta });
 }

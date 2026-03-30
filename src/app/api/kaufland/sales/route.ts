@@ -25,10 +25,6 @@ type KauflandSummary = {
   currency: string;
 };
 
-function env(name: string) {
-  return (process.env[name] ?? "").trim();
-}
-
 function isoDate(value: string) {
   return value.slice(0, 10);
 }
@@ -143,8 +139,6 @@ export async function GET(request: Request) {
       );
     }
 
-    const storefront = env("KAUFLAND_STOREFRONT") || "de";
-
     const { searchParams } = new URL(request.url);
     const compare =
       searchParams.get("compare") === "1" ||
@@ -194,10 +188,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const allUnits = await fetchKauflandOrderUnitsAllStatuses({
-      config,
-      storefront,
-    });
+    const allUnits = await fetchKauflandOrderUnitsAllStatuses({ config });
 
     const filterRange = (start: number, end: number) =>
       filterOrderUnitsByCreatedRange(allUnits, start, end);
@@ -223,7 +214,7 @@ export async function GET(request: Request) {
         compare: true as const,
         source: "order_units_v2" as const,
         baseUrl: config.baseUrl,
-        storefront,
+        storefront: config.storefront,
         ...(rangeFromLabel && rangeToLabel ? { from: rangeFromLabel, to: rangeToLabel } : {}),
       };
 
@@ -255,7 +246,7 @@ export async function GET(request: Request) {
       compare: false as const,
       source: "order_units_v2" as const,
       baseUrl: config.baseUrl,
-      storefront,
+      storefront: config.storefront,
       ...(rangeFromLabel && rangeToLabel ? { from: rangeFromLabel, to: rangeToLabel } : {}),
     };
 

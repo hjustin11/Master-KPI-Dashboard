@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
-import { ANALYTICS_MARKETPLACES } from "@/shared/lib/analytics-marketplaces";
+import {
+  ANALYTICS_MARKETPLACES,
+  type AnalyticsMarketplaceSlug,
+} from "@/shared/lib/analytics-marketplaces";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 
 type XentralArticle = {
   sku: string;
   name: string;
   stock: number;
-  price: number | null;
-};
-
-type AmazonItem = {
-  sku: string;
   price: number | null;
 };
 
@@ -39,8 +37,6 @@ export type PriceParityRow = {
   sku: string;
   name: string;
   stock: number;
-  referencePrice: number | null;
-  referenceSource: "xentral" | "amazon" | null;
   amazon: { price: number | null; state: MarketplaceCellState };
   otherMarketplaces: Record<string, { price: number | null; state: MarketplaceCellState }>;
   needsReview: boolean;
@@ -50,12 +46,146 @@ function normSku(value: string) {
   return value.trim().toLowerCase();
 }
 
-function pricesDiffer(a: number, b: number) {
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
-  if (Math.abs(a - b) <= 0.02) return false;
-  const avg = (Math.abs(a) + Math.abs(b)) / 2;
-  if (avg < 1e-9) return false;
-  return Math.abs(a - b) / avg > 0.005;
+/** Produkte-API je Marktplatz (ohne Amazon-Spalte; Otto bleibt über Auftragspreise). */
+const ANALYTICS_PRODUCTS_API: Partial<Record<AnalyticsMarketplaceSlug, string>> = {
+  ebay: "/api/ebay/products",
+  kaufland: "/api/kaufland/products",
+  fressnapf: "/api/fressnapf/products",
+  "mediamarkt-saturn": "/api/mediamarkt-saturn/products",
+  zooplus: "/api/zooplus/products",
+  tiktok: "/api/tiktok/products",
+  shopify: "/api/shopify/products",
+};
+
+/**
+ * SKU → Preis aus der jeweiligen `/api/.../products`-Antwort.
+ * `priceEur` (Mirakl & Co.) bzw. `price` (Amazon-Listings/Reports).
+ */
+function skuPriceMapFromProductItems(
+  items: Array<Record<string, unknown>>,
+  priceKey: "priceEur" | "price"
+): Map<string, number | null> {
+  const map = new Map<string, number | null>();
+  for (const it of items) {
+    const sku = typeof it.sku === "string" ? it.sku : "";
+    const k = normSku(sku);
+    if (!k) continue;
+    const raw = it[priceKey];
+    const p =
+      typeof raw === "number" && Number.isFinite(raw)
+        ? raw
+        : typeof raw === "string" && Number.isFinite(Number(raw))
+          ? Number(raw)
+          : null;
+    map.set(k, p);
+  }
+  return map;
+}
+
+async function fetchSkuPriceMapFromProductsApi(
+  origin: string,
+  path: string
+): Promise<Map<string, number | null> | null> {
+  try {
+    const res = await fetch(`${origin}${path}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { items?: Array<Record<string, unknown>> };
+    return skuPriceMapFromProductItems(json.items ?? [], "priceEur");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Amazon: gleiche Produktquelle wie die Amazon-Produktseite (`/api/amazon/products`),
+ * inkl. 202 „Report wird erstellt“ und Fehlertext aus der API.
+ */
+async function fetchAmazonProductsPriceMap(origin: string): Promise<{
+  map: Map<string, number | null> | null;
+  warning: string | null;
+}> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(`${origin}/api/amazon/products?status=all`, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    if (res.status === 202) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      return {
+        map: null,
+        warning:
+          body.error ??
+          "Amazon-Produktreport wird noch erstellt. Preisabgleich für Amazon ggf. unvollständig.",
+      };
+    }
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { error?: string };
+      return { map: null, warning: err.error ?? `Amazon Produkte (${res.status})` };
+    }
+    const json = (await res.json()) as { items?: Array<Record<string, unknown>> };
+    // Amazon liefert je nach Quelle `price` (Listings/Report) oder `priceEur`.
+    const primary = skuPriceMapFromProductItems(json.items ?? [], "price");
+    if (primary.size > 0) {
+      return { map: primary, warning: null };
+    }
+    const fallback = skuPriceMapFromProductItems(json.items ?? [], "priceEur");
+    return { map: fallback, warning: null };
+  } catch {
+    return {
+      map: null,
+      warning: "Amazon Produkte konnten nicht rechtzeitig geladen werden.",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Gleicher Cent-Bucket wie bei Mehrheitszählung. */
+function priceBucketKey(price: number): string {
+  return (Math.round(price * 100) / 100).toFixed(2);
+}
+
+type MutableCell = { price: number | null; state: MarketplaceCellState };
+
+/**
+ * Unter allen Kanälen mit gültigem Preis (Zustand ok): Mehrheitspreis bestimmen.
+ * Liegt genau ein Preis-Bucket klar vor allen anderen (höchste Häufigkeit, kein Gleichstand an der Spitze),
+ * weichen alle anderen Buckets ab → dort `mismatch`. Sonst kein mismatch unter den Preisen.
+ */
+function applyMajorityDeviation(states: Record<string, MutableCell>): Record<string, MutableCell> {
+  const priced: Array<{ id: string; price: number; key: string }> = [];
+  for (const [id, c] of Object.entries(states)) {
+    if (c.state === "ok" && c.price != null && Number.isFinite(c.price)) {
+      const key = priceBucketKey(c.price);
+      priced.push({ id, price: c.price, key });
+    }
+  }
+  if (priced.length < 2) {
+    return states;
+  }
+
+  const counts = new Map<string, number>();
+  for (const p of priced) {
+    counts.set(p.key, (counts.get(p.key) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const top = ranked[0];
+  const second = ranked[1];
+  if (!top || (second && second[1] === top[1])) {
+    return states;
+  }
+
+  const consensusKey = top[0];
+  const out: Record<string, MutableCell> = { ...states };
+  for (const p of priced) {
+    if (p.key !== consensusKey) {
+      out[p.id] = { price: p.price, state: "mismatch" };
+    }
+  }
+  return out;
 }
 
 function env(name: string) {
@@ -206,84 +336,98 @@ export async function GET(request: Request) {
 
     const articles = xrJson.items ?? [];
 
-    const amzRes = await fetch(`${origin}/api/amazon/products?status=active`, { cache: "no-store" });
-    let amazonItems: AmazonItem[] = [];
-    let amazonWarning: string | null = null;
+    const amazonPromise = fetchAmazonProductsPriceMap(origin);
+    const ottoPromise = fetchOttoLatestSkuPrices();
+    const productMapEntriesPromise = Promise.all(
+      ANALYTICS_MARKETPLACES.map(async (m) => {
+        if (m.slug === "otto") return [m.slug, null] as const;
+        const path = ANALYTICS_PRODUCTS_API[m.slug];
+        if (!path) return [m.slug, null] as const;
+        const map = await fetchSkuPriceMapFromProductsApi(origin, path);
+        return [m.slug, map] as const;
+      })
+    );
 
-    if (amzRes.status === 202) {
-      const body = (await amzRes.json().catch(() => ({}))) as { error?: string };
-      amazonWarning =
-        body.error ??
-        "Amazon-Produktreport wird noch erstellt. Preisabgleich für Amazon ggf. unvollständig.";
-    } else if (amzRes.ok) {
-      const amzJson = (await amzRes.json()) as {
-        items?: Array<{ sku: string; price?: number | null }>;
-        error?: string;
-      };
-      amazonItems = (amzJson.items ?? []).map((i) => ({
-        sku: i.sku,
-        price: typeof i.price === "number" && Number.isFinite(i.price) ? i.price : null,
-      }));
-    } else {
-      const err = (await amzRes.json().catch(() => ({}))) as { error?: string };
-      amazonWarning = err.error ?? `Amazon Produkte (${amzRes.status})`;
-    }
+    const [amazonFetch, otto, productMapEntries] = await Promise.all([
+      amazonPromise,
+      ottoPromise,
+      productMapEntriesPromise,
+    ]);
 
+    const amazonWarning = amazonFetch.warning;
     const amazonBySku = new Map<string, { price: number | null }>();
-    for (const it of amazonItems) {
-      const k = normSku(it.sku);
-      if (k) amazonBySku.set(k, { price: it.price });
+    if (amazonFetch.map) {
+      for (const [k, price] of amazonFetch.map) {
+        amazonBySku.set(k, { price });
+      }
     }
 
-    const otto = await fetchOttoLatestSkuPrices();
     const ottoBySku = otto.bySku;
 
-    const ottoConnected = ottoBySku.size > 0;
+    const productMaps: Partial<Record<AnalyticsMarketplaceSlug, Map<string, number | null> | null>> =
+      {};
+    for (const [slug, map] of productMapEntries) {
+      if (slug === "otto") continue;
+      productMaps[slug] = map;
+    }
+
     const rows: PriceParityRow[] = articles.map((a) => {
       const key = normSku(a.sku);
       const amz = key ? amazonBySku.get(key) : undefined;
       const amazonPrice = amz?.price ?? null;
       const ottoPrice = key ? (ottoBySku.get(key) ?? null) : null;
 
-      const refFromXentral =
-        a.price != null && Number.isFinite(a.price) && a.price >= 0 ? a.price : null;
-      const referencePrice = refFromXentral ?? amazonPrice;
-      const referenceSource: "xentral" | "amazon" | null =
-        refFromXentral != null ? "xentral" : amazonPrice != null ? "amazon" : null;
+      const flat: Record<string, MutableCell> = {};
 
-      let amazonState: MarketplaceCellState = "ok";
-      if (!amz) amazonState = "missing";
-      else if (amazonPrice == null) amazonState = "no_price";
-      else if (refFromXentral != null && pricesDiffer(refFromXentral, amazonPrice)) {
-        amazonState = "mismatch";
-      }
+      let amazonProv: MarketplaceCellState = "ok";
+      if (!amz) amazonProv = "missing";
+      else if (amazonPrice == null) amazonProv = "no_price";
+      flat.amazon = { price: amazonPrice, state: amazonProv };
 
-      const otherMarketplaces: Record<string, { price: number | null; state: MarketplaceCellState }> =
-        {};
       for (const m of ANALYTICS_MARKETPLACES) {
-        otherMarketplaces[m.slug] = { price: null, state: "not_connected" };
+        if (m.slug === "otto") continue;
+        const pmap = productMaps[m.slug];
+        if (pmap == null) {
+          flat[m.slug] = { price: null, state: "not_connected" };
+          continue;
+        }
+        const hasSku = Boolean(key && pmap.has(key));
+        const price = hasSku ? (pmap.get(key) ?? null) : null;
+        let ms: MarketplaceCellState = "ok";
+        if (!key || !hasSku) ms = "missing";
+        else if (price == null) ms = "no_price";
+        flat[m.slug] = { price, state: ms };
       }
+
       if (ottoBySku.size > 0) {
         let ottoState: MarketplaceCellState = "ok";
         if (!key || !ottoBySku.has(key)) ottoState = "missing";
         else if (ottoPrice == null) ottoState = "no_price";
-        else if (refFromXentral != null && pricesDiffer(refFromXentral, ottoPrice)) {
-          ottoState = "mismatch";
-        }
-        otherMarketplaces.otto = { price: ottoPrice, state: ottoState };
+        flat.otto = { price: ottoPrice, state: ottoState };
+      } else {
+        flat.otto = { price: null, state: "not_connected" };
+      }
+
+      const afterDeviation = applyMajorityDeviation(flat);
+      const amazon = afterDeviation.amazon ?? { price: amazonPrice, state: amazonProv };
+      const otherMarketplaces: Record<string, { price: number | null; state: MarketplaceCellState }> =
+        {};
+      for (const m of ANALYTICS_MARKETPLACES) {
+        otherMarketplaces[m.slug] =
+          afterDeviation[m.slug] ?? flat[m.slug] ?? { price: null, state: "not_connected" };
       }
 
       const needsReview =
-        amazonState !== "ok" ||
-        (ottoConnected && otherMarketplaces.otto.state !== "ok");
+        amazon.state !== "ok" ||
+        Object.values(otherMarketplaces).some(
+          (c) => c.state !== "ok" && c.state !== "not_connected"
+        );
 
       return {
         sku: a.sku,
         name: a.name,
         stock: a.stock,
-        referencePrice,
-        referenceSource,
-        amazon: { price: amazonPrice, state: amazonState },
+        amazon,
         otherMarketplaces,
         needsReview,
       };
@@ -298,14 +442,15 @@ export async function GET(request: Request) {
         amazonWarning,
         ottoWarning: otto.warning,
         channels: {
-          reference: "Xentral (Stamm) / Amazon",
           connected: [
             "amazon",
             ...(ottoBySku.size > 0 ? ["otto"] : []),
+            ...ANALYTICS_MARKETPLACES.filter((m) => {
+              if (m.slug === "otto") return false;
+              return productMaps[m.slug] != null;
+            }).map((m) => m.slug),
           ],
-          planned: ANALYTICS_MARKETPLACES
-            .map((m) => m.slug)
-            .filter((slug) => slug !== "otto" || ottoBySku.size === 0),
+          planned: [],
         },
       },
       rows,

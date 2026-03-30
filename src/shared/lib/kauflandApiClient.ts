@@ -68,6 +68,8 @@ export type KauflandIntegrationConfig = {
   userAgent: string;
   partnerClientKey: string;
   partnerSecretKey: string;
+  /** z. B. `de` — für viele Seller-API-Pfade Pflicht (Query `storefront`). */
+  storefront: string;
 };
 
 export async function getKauflandIntegrationConfig(): Promise<KauflandIntegrationConfig> {
@@ -84,6 +86,8 @@ export async function getKauflandIntegrationConfig(): Promise<KauflandIntegratio
     env("KAUFLAND_PARTNER_CLIENT_KEY") || (await getSupabaseSecret("KAUFLAND_PARTNER_CLIENT_KEY"));
   const partnerSecretKey =
     env("KAUFLAND_PARTNER_SECRET_KEY") || (await getSupabaseSecret("KAUFLAND_PARTNER_SECRET_KEY"));
+  const storefront =
+    env("KAUFLAND_STOREFRONT") || (await getSupabaseSecret("KAUFLAND_STOREFRONT")) || "de";
   return {
     baseUrl,
     clientKey,
@@ -91,6 +95,7 @@ export async function getKauflandIntegrationConfig(): Promise<KauflandIntegratio
     userAgent,
     partnerClientKey,
     partnerSecretKey,
+    storefront,
   };
 }
 
@@ -162,7 +167,8 @@ export async function fetchKauflandOrderUnitsAllStatuses(args: {
       params.set("limit", "100");
       params.set("offset", String(offset));
       params.set("status", status);
-      if (args.storefront) params.set("storefront", args.storefront);
+      const storefront = args.storefront ?? args.config.storefront;
+      if (storefront) params.set("storefront", storefront);
       const path = `/v2/order-units?${params.toString()}`;
       const res = await kauflandSignedFetch(args.config, path);
       const text = await res.text();

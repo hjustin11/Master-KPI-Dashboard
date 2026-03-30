@@ -199,6 +199,7 @@ type AmazonSalesCompareResponse = {
 };
 
 type OttoSalesCompareResponse = AmazonSalesCompareResponse;
+type EbaySalesCompareResponse = AmazonSalesCompareResponse;
 type KauflandSalesCompareResponse = AmazonSalesCompareResponse;
 type FressnapfSalesCompareResponse = AmazonSalesCompareResponse;
 type MmsSalesCompareResponse = AmazonSalesCompareResponse;
@@ -605,6 +606,13 @@ function MarketplaceDetailDialog({
   amazonTrend,
   amazonPoints,
   amazonPreviousPoints,
+  ebayLoading,
+  ebayError,
+  ebaySummary,
+  ebayPreviousSummary,
+  ebayTrend,
+  ebayPoints,
+  ebayPreviousPoints,
   ottoLoading,
   ottoError,
   ottoSummary,
@@ -673,6 +681,13 @@ function MarketplaceDetailDialog({
   amazonTrend: { text: string; direction: TrendDirection };
   amazonPoints: AmazonSalesPoint[];
   amazonPreviousPoints: AmazonSalesPoint[] | undefined;
+  ebayLoading: boolean;
+  ebayError: string | null;
+  ebaySummary: EbaySalesCompareResponse["summary"] | undefined;
+  ebayPreviousSummary: EbaySalesCompareResponse["previousSummary"] | undefined;
+  ebayTrend: { text: string; direction: TrendDirection };
+  ebayPoints: AmazonSalesPoint[];
+  ebayPreviousPoints: AmazonSalesPoint[] | undefined;
   ottoLoading: boolean;
   ottoError: string | null;
   ottoSummary: OttoSalesCompareResponse["summary"] | undefined;
@@ -733,10 +748,6 @@ function MarketplaceDetailDialog({
 
   const marketplaceId = MARKETPLACE_DETAIL_ORDER[index] ?? "amazon";
   const orderLen = MARKETPLACE_DETAIL_ORDER.length;
-  const label =
-    marketplaceId === "amazon"
-      ? "Amazon"
-      : (getMarketplaceBySlug(marketplaceId)?.label ?? marketplaceId);
 
   const chartBands = useMemo(
     () => bandsForMarketplaceChart(promotionDeals, marketplaceId),
@@ -755,6 +766,17 @@ function MarketplaceDetailDialog({
           previousPoints: amazonPreviousPoints,
           orderLink: "/amazon/orders",
         }
+      : marketplaceId === "ebay"
+        ? {
+            loading: ebayLoading,
+            error: ebayError,
+            summary: ebaySummary,
+            previousSummary: ebayPreviousSummary,
+            trend: ebayTrend,
+            points: ebayPoints,
+            previousPoints: ebayPreviousPoints,
+            orderLink: "/ebay/orders",
+          }
       : marketplaceId === "otto"
         ? {
             loading: ottoLoading,
@@ -853,7 +875,8 @@ function MarketplaceDetailDialog({
     };
   }, [marketplaceMetrics, periodFrom, periodTo]);
 
-  const chartActive = !!marketplaceMetrics && !marketplaceMetrics.loading && !marketplaceMetrics.error && !!marketplaceMetrics.summary;
+  const chartActive =
+    !!marketplaceMetrics && !marketplaceMetrics.error && !!marketplaceMetrics.summary;
   const chartCurrency = marketplaceMetrics?.summary?.currency ?? "EUR";
 
   useEffect(() => {
@@ -874,11 +897,16 @@ function MarketplaceDetailDialog({
 
   const logoBlock =
     marketplaceId === "amazon" ? (
-      <div className={cn(MARKETPLACE_TILE_LOGO.amazon.slot, "mx-auto justify-center")}>
+      <div
+        className={cn(
+          MARKETPLACE_TILE_LOGO.amazon.slot,
+          "mx-auto justify-center scale-[1.35] origin-center h-auto min-h-[4rem]"
+        )}
+      >
         <MarketplaceBrandImg
           src="/brand/amazon-logo-current.png"
           alt="Amazon"
-          className={cn(MARKETPLACE_TILE_LOGO.amazon.img, "max-h-16")}
+          className={cn(MARKETPLACE_TILE_LOGO.amazon.img, "max-h-28 opacity-100")}
         />
       </div>
     ) : (
@@ -887,15 +915,24 @@ function MarketplaceDetailDialog({
         if (!m) return null;
         const { slot, img } = MARKETPLACE_TILE_LOGO[placeholderTileLogoPreset(marketplaceId)];
         return (
-          <div className={cn(slot, "mx-auto max-w-full justify-center [&_img]:max-h-20")}>
-            <MarketplaceBrandImg src={m.logo} alt={m.label} className={img} />
+          <div
+            className={cn(
+              slot,
+              "mx-auto max-w-full justify-center scale-[1.35] origin-center h-auto min-h-[4rem]"
+            )}
+          >
+            <MarketplaceBrandImg
+              src={m.logo}
+              alt={m.label}
+              className={cn(img, "max-h-22 sm:max-h-26 opacity-100")}
+            />
           </div>
         );
       })()
     );
 
   const detailMarketplaceKpis =
-    marketplaceMetrics?.loading ? (
+    marketplaceMetrics?.loading && !marketplaceMetrics?.summary ? (
       <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 9 }).map((_, i) => (
           <div key={i} className="h-[60px] animate-pulse rounded-lg bg-muted/50" />
@@ -1024,36 +1061,27 @@ function MarketplaceDetailDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[min(94vh,880px)] max-w-[calc(100%-1.25rem)] w-full gap-0 overflow-y-auto p-0 sm:max-w-5xl xl:max-w-6xl"
-        showCloseButton
+        className="max-h-[min(96vh,940px)] max-w-[calc(100%-1.25rem)] w-full gap-0 overflow-y-auto p-0 sm:max-w-6xl xl:max-w-7xl"
       >
-        <div className="flex items-start gap-2 border-b border-border/60 px-3 pb-2 pt-3">
+        <div className="flex items-start gap-2 border-b border-border/60 px-4 pb-3 pt-5">
           <Button
             type="button"
             variant="outline"
             size="icon-sm"
-            className="mt-1 shrink-0"
+            className="mt-2 shrink-0"
             aria-label={t("analyticsMp.dialogPrev")}
             onClick={() => onStep(-1)}
           >
             <ChevronLeft className="size-4" />
           </Button>
           <div className="min-w-0 flex-1 text-center">
-            <DialogTitle className="text-center text-base font-semibold tracking-tight">
-              {label}
-            </DialogTitle>
-            <DialogDescription className="mt-1.5 text-center text-[11px]">
-              {t("analyticsMp.dialogDescription", {
-                span: formatRangeShort(periodFrom, periodTo, dfLocale),
-              })}
-            </DialogDescription>
             <div className="mt-3">{logoBlock}</div>
           </div>
           <Button
             type="button"
             variant="outline"
             size="icon-sm"
-            className="mt-1 shrink-0"
+            className="mt-2 shrink-0"
             aria-label={t("analyticsMp.dialogNext")}
             onClick={() => onStep(1)}
           >
@@ -1074,6 +1102,8 @@ function MarketplaceDetailDialog({
               >
                 {marketplaceId === "otto"
                   ? t("analyticsMp.linkOttoOrders")
+                  : marketplaceId === "ebay"
+                    ? t("analyticsMp.linkEbayOrders")
                   : marketplaceId === "kaufland"
                     ? t("analyticsMp.linkKauflandOrders")
                     : marketplaceId === "fressnapf"
@@ -1172,6 +1202,14 @@ function AnalyticsMarketplacesPage() {
   );
   const [amazonBackgroundSyncing, setAmazonBackgroundSyncing] = useState(false);
   const [amazonError, setAmazonError] = useState<string | null>(null);
+  const [ebayData, setEbayData] = useState<EbaySalesCompareResponse | null>(() =>
+    getSalesCompareInitForDefaultPeriod<EbaySalesCompareResponse>("analytics_ebay_sales_compare_v1").data
+  );
+  const [ebayLoading, setEbayLoading] = useState(
+    () => getSalesCompareInitForDefaultPeriod<EbaySalesCompareResponse>("analytics_ebay_sales_compare_v1").loading
+  );
+  const [ebayBackgroundSyncing, setEbayBackgroundSyncing] = useState(false);
+  const [ebayError, setEbayError] = useState<string | null>(null);
   const [ottoData, setOttoData] = useState<OttoSalesCompareResponse | null>(() =>
     getSalesCompareInitForDefaultPeriod<OttoSalesCompareResponse>("analytics_otto_sales_compare_v1").data
   );
@@ -1290,6 +1328,65 @@ function AnalyticsMarketplacesPage() {
       }
       if (showBackgroundIndicator) {
         setAmazonBackgroundSyncing(false);
+      }
+    }
+  }, [t]);
+
+  const loadEbaySales = useCallback(async (forceRefresh = false, silent = false) => {
+    const { from, to } = periodRef.current;
+    const cacheKey = `analytics_ebay_sales_compare_v1:${from}:${to}`;
+    let hadCache = false;
+
+    if (!forceRefresh && !silent) {
+      const parsed = readLocalJsonCache<{ savedAt: number } & EbaySalesCompareResponse>(cacheKey);
+      if (parsed?.summary && !parsed.error) {
+        const { savedAt: _s, ...data } = parsed;
+        setEbayData(data);
+        hadCache = true;
+        setEbayLoading(false);
+      }
+    }
+
+    if (forceRefresh && !silent) {
+      setEbayLoading(true);
+    } else if (!hadCache && !silent) {
+      setEbayLoading(true);
+    }
+
+    const showBackgroundIndicator = silent || (!forceRefresh && hadCache);
+    if (showBackgroundIndicator) {
+      setEbayBackgroundSyncing(true);
+    }
+
+    if (!silent) {
+      setEbayError(null);
+    }
+
+    try {
+      const params = new URLSearchParams({
+        compare: "true",
+        from,
+        to,
+      });
+      const res = await fetch(`/api/ebay/sales?${params}`, { cache: "no-store" });
+      const payload = (await res.json()) as EbaySalesCompareResponse;
+      if (!res.ok) {
+        throw new Error(payload.error ?? t("analyticsMp.ebayMetricsError"));
+      }
+      setEbayData(payload);
+      writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
+    } catch (e) {
+      if (silent) {
+        console.warn("[Analytics eBay] Hintergrund-Abgleich fehlgeschlagen:", e);
+      } else {
+        setEbayError(e instanceof Error ? e.message : t("commonUi.unknownError"));
+      }
+    } finally {
+      if (!silent) {
+        setEbayLoading(false);
+      }
+      if (showBackgroundIndicator) {
+        setEbayBackgroundSyncing(false);
       }
     }
   }, [t]);
@@ -1709,6 +1806,7 @@ function AnalyticsMarketplacesPage() {
 
   useEffect(() => {
     void loadAmazonSales(false, false);
+    void loadEbaySales(false, false);
     void loadOttoSales(false, false);
     void loadKauflandSales(false, false);
     void loadFressnapfSales(false, false);
@@ -1720,6 +1818,7 @@ function AnalyticsMarketplacesPage() {
     period.from,
     period.to,
     loadAmazonSales,
+    loadEbaySales,
     loadOttoSales,
     loadKauflandSales,
     loadFressnapfSales,
@@ -1737,6 +1836,7 @@ function AnalyticsMarketplacesPage() {
     if (!analyticsHasMounted) return;
     const id = window.setInterval(() => {
       void loadAmazonSales(false, true);
+      void loadEbaySales(false, true);
       void loadOttoSales(false, true);
       void loadKauflandSales(false, true);
       void loadFressnapfSales(false, true);
@@ -1749,6 +1849,7 @@ function AnalyticsMarketplacesPage() {
   }, [
     analyticsHasMounted,
     loadAmazonSales,
+    loadEbaySales,
     loadOttoSales,
     loadKauflandSales,
     loadFressnapfSales,
@@ -1765,6 +1866,18 @@ function AnalyticsMarketplacesPage() {
         amazonData?.revenueDeltaPct,
         prev?.salesAmount ?? 0,
         summary.salesAmount,
+        intlTag,
+        (key) => t(key)
+      )
+    : { text: PLACEHOLDER, direction: "unknown" as TrendDirection };
+
+  const ebaySummary = ebayData?.summary;
+  const ebayPrev = ebayData?.previousSummary;
+  const ebayTrend = ebaySummary
+    ? formatTrendPct(
+        ebayData?.revenueDeltaPct,
+        ebayPrev?.salesAmount ?? 0,
+        ebaySummary.salesAmount,
         intlTag,
         (key) => t(key)
       )
@@ -1863,6 +1976,11 @@ function AnalyticsMarketplacesPage() {
           revenueDeltaPct: amazonData?.revenueDeltaPct,
         },
         {
+          summary: ebayData?.summary,
+          previousSummary: ebayData?.previousSummary,
+          revenueDeltaPct: ebayData?.revenueDeltaPct,
+        },
+        {
           summary: ottoData?.summary,
           previousSummary: ottoData?.previousSummary,
           revenueDeltaPct: ottoData?.revenueDeltaPct,
@@ -1898,14 +2016,80 @@ function AnalyticsMarketplacesPage() {
           revenueDeltaPct: shopifyData?.revenueDeltaPct,
         },
       ]),
-    [amazonData, ottoData, kauflandData, fressnapfData, mmsData, zooplusData, tiktokData, shopifyData]
+    [amazonData, ebayData, ottoData, kauflandData, fressnapfData, mmsData, zooplusData, tiktokData, shopifyData]
   );
+
+  const anySalesLoading = useMemo(
+    () =>
+      amazonLoading ||
+      ebayLoading ||
+      ottoLoading ||
+      kauflandLoading ||
+      fressnapfLoading ||
+      mmsLoading ||
+      zooplusLoading ||
+      tiktokLoading ||
+      shopifyLoading,
+    [
+      amazonLoading,
+      ebayLoading,
+      ottoLoading,
+      kauflandLoading,
+      fressnapfLoading,
+      mmsLoading,
+      zooplusLoading,
+      tiktokLoading,
+      shopifyLoading,
+    ]
+  );
+
+  const hasAnyMarketplaceSummary = useMemo(
+    () =>
+      !!(
+        amazonData?.summary ||
+        ebayData?.summary ||
+        ottoData?.summary ||
+        kauflandData?.summary ||
+        fressnapfData?.summary ||
+        mmsData?.summary ||
+        zooplusData?.summary ||
+        tiktokData?.summary ||
+        shopifyData?.summary
+      ),
+    [
+      amazonData,
+      ebayData,
+      ottoData,
+      kauflandData,
+      fressnapfData,
+      mmsData,
+      zooplusData,
+      tiktokData,
+      shopifyData,
+    ]
+  );
+
+  /** Skeleton nur beim allerersten Laden ohne irgendeine Kanal-Summary; sonst alte Werte bis zum Replace. */
+  const totalStripBlocking = anySalesLoading && !hasAnyMarketplaceSummary;
+
+  const stripBackgroundSyncing =
+    amazonBackgroundSyncing ||
+    ebayBackgroundSyncing ||
+    ottoBackgroundSyncing ||
+    kauflandBackgroundSyncing ||
+    fressnapfBackgroundSyncing ||
+    mmsBackgroundSyncing ||
+    zooplusBackgroundSyncing ||
+    tiktokBackgroundSyncing ||
+    shopifyBackgroundSyncing ||
+    (anySalesLoading && hasAnyMarketplaceSummary);
 
   const revenueChartCurrency = useMemo(
     () =>
       pickRevenueChartCurrency(
         totals,
         amazonData,
+        ebayData,
         ottoData,
         kauflandData,
         fressnapfData,
@@ -1917,6 +2101,7 @@ function AnalyticsMarketplacesPage() {
     [
       totals,
       amazonData,
+      ebayData,
       ottoData,
       kauflandData,
       fressnapfData,
@@ -1941,6 +2126,7 @@ function AnalyticsMarketplacesPage() {
       },
     ];
     const slugList = [
+      "ebay",
       "otto",
       "kaufland",
       "fressnapf",
@@ -1952,7 +2138,9 @@ function AnalyticsMarketplacesPage() {
     for (const slug of slugList) {
       const mp = getMarketplaceBySlug(slug);
       const data =
-        slug === "otto"
+        slug === "ebay"
+          ? ebayData
+          : slug === "otto"
           ? ottoData
           : slug === "kaufland"
             ? kauflandData
@@ -1977,6 +2165,7 @@ function AnalyticsMarketplacesPage() {
   }, [
     revenueChartCurrency,
     amazonData,
+    ebayData,
     ottoData,
     kauflandData,
     fressnapfData,
@@ -1991,6 +2180,7 @@ function AnalyticsMarketplacesPage() {
     const ref = revenueChartCurrency;
     const channels: (AmazonSalesCompareResponse | null | undefined)[] = [
       amazonData,
+      ebayData,
       ottoData,
       kauflandData,
       fressnapfData,
@@ -2020,6 +2210,7 @@ function AnalyticsMarketplacesPage() {
     period.to,
     revenueChartCurrency,
     amazonData,
+    ebayData,
     ottoData,
     kauflandData,
     fressnapfData,
@@ -2058,16 +2249,7 @@ function AnalyticsMarketplacesPage() {
   return (
     <div className="space-y-4 text-sm leading-snug">
       <TotalMarketplacesKpiStrip
-        loading={
-          amazonLoading ||
-          ottoLoading ||
-          kauflandLoading ||
-          fressnapfLoading ||
-          mmsLoading ||
-          zooplusLoading ||
-          tiktokLoading ||
-          shopifyLoading
-        }
+        loading={totalStripBlocking}
         totals={totals}
         revenueLineSeries={revenueLineSeries}
         revenueChartCurrency={revenueChartCurrency}
@@ -2078,16 +2260,7 @@ function AnalyticsMarketplacesPage() {
         periodTo={period.to}
         onPeriodChange={(from, to) => setPeriod({ from, to })}
         onOpenPromotionDeals={() => setPromotionsOpen(true)}
-        backgroundSyncing={
-          amazonBackgroundSyncing ||
-          ottoBackgroundSyncing ||
-          kauflandBackgroundSyncing ||
-          fressnapfBackgroundSyncing ||
-          mmsBackgroundSyncing ||
-          zooplusBackgroundSyncing ||
-          tiktokBackgroundSyncing ||
-          shopifyBackgroundSyncing
-        }
+        backgroundSyncing={stripBackgroundSyncing}
         dfLocale={dfLocale}
         intlTag={intlTag}
         t={t}
@@ -2107,6 +2280,13 @@ function AnalyticsMarketplacesPage() {
         amazonTrend={trend}
         amazonPoints={amazonData?.points ?? []}
         amazonPreviousPoints={amazonData?.previousPoints}
+        ebayLoading={ebayLoading}
+        ebayError={ebayError}
+        ebaySummary={ebaySummary}
+        ebayPreviousSummary={ebayPrev}
+        ebayTrend={ebayTrend}
+        ebayPoints={ebayData?.points ?? []}
+        ebayPreviousPoints={ebayData?.previousPoints}
         ottoLoading={ottoLoading}
         ottoError={ottoError}
         ottoSummary={ottoSummary}
@@ -2198,7 +2378,7 @@ function AnalyticsMarketplacesPage() {
             </p>
           ) : null}
 
-          {amazonLoading ? (
+          {amazonLoading && !summary ? (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
@@ -2218,6 +2398,65 @@ function AnalyticsMarketplacesPage() {
                 label={periodKpis.trend}
                 value={trend.text}
                 trendDirection={trend.direction}
+              />
+            </div>
+          ) : (
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
+              <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
+              <MiniKpi compact label={periodKpis.orders} value={PLACEHOLDER} />
+              <MiniKpi compact label={periodKpis.units} value={PLACEHOLDER} />
+              <MiniKpi compact label={periodKpis.trend} value={PLACEHOLDER} />
+            </div>
+          )}
+
+        </button>
+
+        <button
+          type="button"
+          onClick={() => openDetailAt("ebay")}
+          className={MARKETPLACE_TILE_BTN_CLASS}
+        >
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0 flex-1">
+              <div className={MARKETPLACE_TILE_LOGO.default.slot}>
+                <MarketplaceBrandImg
+                  src="/brand/marketplaces/ebay.svg"
+                  alt="eBay"
+                  className={MARKETPLACE_TILE_LOGO.default.img}
+                />
+              </div>
+            </div>
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
+              <ArrowRight className="h-3 w-3" aria-hidden />
+            </span>
+          </div>
+
+          {ebayError ? (
+            <p className="mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-900">
+              {ebayError}
+            </p>
+          ) : null}
+
+          {ebayLoading && !ebaySummary ? (
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
+              ))}
+            </div>
+          ) : ebaySummary ? (
+            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
+              <MiniKpi
+                compact
+                label={periodKpis.revenue}
+                value={formatCurrency(ebaySummary.salesAmount, ebaySummary.currency, intlTag)}
+              />
+              <MiniKpi compact label={periodKpis.orders} value={formatInt(ebaySummary.orderCount, intlTag)} />
+              <MiniKpi compact label={periodKpis.units} value={formatInt(ebaySummary.units, intlTag)} />
+              <MiniKpi
+                compact
+                label={periodKpis.trend}
+                value={ebayTrend.text}
+                trendDirection={ebayTrend.direction}
               />
             </div>
           ) : (
@@ -2257,7 +2496,7 @@ function AnalyticsMarketplacesPage() {
             </p>
           ) : null}
 
-          {ottoLoading ? (
+          {ottoLoading && !ottoSummary ? (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
@@ -2316,7 +2555,7 @@ function AnalyticsMarketplacesPage() {
             </p>
           ) : null}
 
-          {kauflandLoading ? (
+          {kauflandLoading && !kauflandSummary ? (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
@@ -2379,7 +2618,7 @@ function AnalyticsMarketplacesPage() {
             </p>
           ) : null}
 
-          {fressnapfLoading ? (
+          {fressnapfLoading && !fressnapfSummary ? (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
@@ -2442,7 +2681,7 @@ function AnalyticsMarketplacesPage() {
             </p>
           ) : null}
 
-          {mmsLoading ? (
+          {mmsLoading && !mmsSummary ? (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
@@ -2501,7 +2740,7 @@ function AnalyticsMarketplacesPage() {
             </p>
           ) : null}
 
-          {zooplusLoading ? (
+          {zooplusLoading && !zooplusSummary ? (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
@@ -2564,7 +2803,7 @@ function AnalyticsMarketplacesPage() {
             </p>
           ) : null}
 
-          {tiktokLoading ? (
+          {tiktokLoading && !tiktokSummary ? (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
@@ -2627,7 +2866,7 @@ function AnalyticsMarketplacesPage() {
             </p>
           ) : null}
 
-          {shopifyLoading ? (
+          {shopifyLoading && !shopifySummary ? (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-[48px] animate-pulse rounded-md bg-muted/50" />
@@ -2666,6 +2905,7 @@ function AnalyticsMarketplacesPage() {
 
         {ANALYTICS_MARKETPLACES.filter(
           (m) =>
+            m.slug !== "ebay" &&
             m.slug !== "otto" &&
             m.slug !== "kaufland" &&
             m.slug !== "fressnapf" &&

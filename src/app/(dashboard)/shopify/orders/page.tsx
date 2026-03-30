@@ -316,16 +316,39 @@ export default function ShopifyOrdersPage() {
           </span>
           <span className={cn(DASHBOARD_PAGE_TITLE, "text-muted-foreground")}>{t("nav.shopifyOrders")}</span>
         </div>
-        <p className="text-sm text-muted-foreground">{t("shopifyOrders.subtitle")}</p>
       </div>
 
-      <div className={cn(DASHBOARD_COMPACT_CARD, "flex flex-wrap items-end justify-between gap-3")}>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
+      <div
+        className={cn(DASHBOARD_COMPACT_CARD, "flex-row flex-wrap items-center justify-between gap-3")}
+      >
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="rounded-md border border-border/60 bg-background/80 px-2.5 py-1">
+            {t("shopifyOrders.totalUnits", { count: summary.units })}
+          </span>
+          <span className="rounded-md border border-border/60 bg-background/80 px-2.5 py-1">
+            {t("shopifyOrders.sumLabel", { amount: formatAmount(summary.amount, summary.currency) })}
+          </span>
+          <span className="rounded-md border border-border/60 bg-background/80 px-2.5 py-1">
+            {t("shopifyOrders.ordersCount", { count: summary.orders })}
+          </span>
+          {isBackgroundSyncing ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              {t("shopifyOrders.syncing")}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <div className="flex items-center gap-2">
             <p className="text-xs font-medium text-muted-foreground">{t("shopifyOrders.period")}</p>
             <Select value={mode} onValueChange={handleModeChange}>
               <SelectTrigger className="w-[220px]">
-                <SelectValue />
+                <SelectValue>
+                  {mode === "today-yesterday"
+                    ? t("shopifyOrders.todayYesterday")
+                    : t("shopifyOrders.customRange")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="today-yesterday">{t("shopifyOrders.todayYesterday")}</SelectItem>
@@ -352,24 +375,6 @@ export default function ShopifyOrdersPage() {
                 {t("shopifyOrders.apply")}
               </button>
             </>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <span className="rounded-md border border-border/60 bg-background/80 px-2.5 py-1">
-            {t("shopifyOrders.totalUnits", { count: summary.units })}
-          </span>
-          <span className="rounded-md border border-border/60 bg-background/80 px-2.5 py-1">
-            {t("shopifyOrders.sumLabel", { amount: formatAmount(summary.amount, summary.currency) })}
-          </span>
-          <span className="rounded-md border border-border/60 bg-background/80 px-2.5 py-1">
-            {t("shopifyOrders.ordersCount", { count: summary.orders })}
-          </span>
-          {isBackgroundSyncing ? (
-            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-              {t("shopifyOrders.syncing")}
-            </span>
           ) : null}
         </div>
       </div>

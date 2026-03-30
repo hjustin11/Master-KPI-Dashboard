@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ArrowUpDown, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -36,12 +37,47 @@ type ParityRow = {
   sku: string;
   name: string;
   stock: number;
-  referencePrice: number | null;
-  referenceSource: "xentral" | "amazon" | null;
   amazon: { price: number | null; state: CellState };
   otherMarketplaces: Record<string, { price: number | null; state: CellState }>;
   needsReview: boolean;
 };
+
+type SortColumnId =
+  | "sku"
+  | "stock"
+  | "name"
+  | "amazon"
+  | `mp:${string}`;
+
+function compareNullableNumber(a: number | null, b: number | null): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return a - b;
+}
+
+function sortParityRows(
+  list: ParityRow[],
+  column: SortColumnId,
+  dir: "asc" | "desc"
+): ParityRow[] {
+  const mul = dir === "asc" ? 1 : -1;
+  const copy = [...list];
+  copy.sort((a, b) => {
+    if (column === "sku") return mul * a.sku.localeCompare(b.sku, undefined, { sensitivity: "base" });
+    if (column === "stock") return mul * (a.stock - b.stock);
+    if (column === "name") return mul * a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    if (column === "amazon") return mul * compareNullableNumber(a.amazon.price, b.amazon.price);
+    if (column.startsWith("mp:")) {
+      const slug = column.slice(3);
+      const pa = a.otherMarketplaces[slug]?.price ?? null;
+      const pb = b.otherMarketplaces[slug]?.price ?? null;
+      return mul * compareNullableNumber(pa, pb);
+    }
+    return 0;
+  });
+  return copy;
+}
 
 type ParityResponse = {
   error?: string;
@@ -55,15 +91,17 @@ type ParityResponse = {
   issueCount?: number;
 };
 
-const PRICE_PARITY_CACHE_KEY = "marketplace_price_parity_v1";
+const PRICE_PARITY_CACHE_KEY = "marketplace_price_parity_v3";
+const PRICE_PARITY_PAGE_SIZE = 25;
+
+/** Einheitliche Breite für Amazon- und Marktplatz-Preisspalten */
+const MARKETPLACE_PRICE_COL =
+  "w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] shrink-0 align-top px-1.5";
 
 type CachedParityPayload = { savedAt: number } & ParityResponse;
 
-/**
- * Gleiche Fläche auf **allen** Zellen der Zeile — nicht nur SKU/Amazon,
- * sonst wirken mittlere Spalten heller (nur Zeilen-Ton `/[0.06]`).
- */
-function amazonParityRowBg(state: CellState) {
+/** Zeilenhintergrund je Zelle nach Marktplatz-Zustand. */
+function parityCellBg(state: CellState) {
   if (state === "mismatch") return "bg-rose-500/10";
   if (state === "missing" || state === "no_price") return "bg-amber-500/10";
   return "";
@@ -141,15 +179,6 @@ function PriceCell({
 export function MarketplacePriceParitySection() {
   const { t, locale } = useTranslation();
   const intlTag = intlLocaleTag(locale);
-  const formatRefPrice = (value: number | null) => {
-    if (value == null || !Number.isFinite(value)) return "—";
-    return new Intl.NumberFormat(intlTag, {
-      style: "currency",
-      currency: "EUR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
-  };
   const formatStock = (value: number) => {
     if (!Number.isFinite(value)) return "—";
     return new Intl.NumberFormat(intlTag, { maximumFractionDigits: 0 }).format(value);
@@ -159,6 +188,11 @@ export function MarketplacePriceParitySection() {
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<ParityResponse | null>(null);
   const [query, setQuery] = useState("");
+  const [parityPage, setParityPage] = useState(0);
+  const [sort, setSort] = useState<{ col: SortColumnId; dir: "asc" | "desc" }>({
+    col: "sku",
+    dir: "asc",
+  });
   const [hasMounted, setHasMounted] = useState(false);
   const payloadRef = useRef<ParityResponse | null>(null);
 
@@ -247,6 +281,44 @@ export function MarketplacePriceParitySection() {
     });
   }, [rows, query]);
 
+  const sortedFiltered = useMemo(
+    () => sortParityRows(filtered, sort.col, sort.dir),
+    [filtered, sort]
+  );
+
+  useEffect(() => {
+    setParityPage(0);
+  }, [query, rows.length, sort.col, sort.dir]);
+
+  const parityPageCount = Math.max(1, Math.ceil(sortedFiltered.length / PRICE_PARITY_PAGE_SIZE));
+  const pagedRows = useMemo(() => {
+    const start = parityPage * PRICE_PARITY_PAGE_SIZE;
+    return sortedFiltered.slice(start, start + PRICE_PARITY_PAGE_SIZE);
+  }, [sortedFiltered, parityPage]);
+
+  const toggleSort = useCallback((col: SortColumnId) => {
+    setSort((prev) => {
+      if (prev.col === col) {
+        return { col, dir: prev.dir === "asc" ? "desc" : "asc" };
+      }
+      return { col, dir: "asc" };
+    });
+  }, []);
+
+  const sortIcon = useCallback(
+    (col: SortColumnId) => {
+      if (sort.col !== col) {
+        return <ArrowUpDown className="h-3 w-3 shrink-0 opacity-50" aria-hidden />;
+      }
+      return sort.dir === "asc" ? (
+        <ChevronUp className="h-3 w-3 shrink-0" aria-hidden />
+      ) : (
+        <ChevronDown className="h-3 w-3 shrink-0" aria-hidden />
+      );
+    },
+    [sort]
+  );
+
   const issueCount = payload?.issueCount ?? 0;
 
   return (
@@ -311,39 +383,112 @@ export function MarketplacePriceParitySection() {
           <Table className={DASHBOARD_COMPACT_TABLE_TEXT}>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead className="sticky left-0 z-10 min-w-[18ch] w-[18ch] max-w-[18ch] bg-muted/40 px-2 backdrop-blur-sm">
-                  {t("priceParity.sku")}
+                <TableHead
+                  aria-sort={
+                    sort.col === "sku" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"
+                  }
+                  className={cn(
+                    "sticky left-0 z-10 min-w-[18ch] w-[18ch] max-w-[18ch] overflow-hidden border-r border-border bg-muted/30 pl-2 pr-3"
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("sku")}
+                    title={t("dataTable.sort")}
+                    className="inline-flex w-full min-w-0 max-w-full items-center justify-start gap-1 text-left font-medium"
+                  >
+                    <span className="min-w-0 truncate">{t("priceParity.sku")}</span>
+                    {sortIcon("sku")}
+                  </button>
                 </TableHead>
-                <TableHead className="w-[3.25rem] min-w-[3rem] max-w-[3.5rem] whitespace-nowrap text-right">
-                  {t("priceParity.stock")}
+                <TableHead
+                  aria-sort={
+                    sort.col === "stock" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"
+                  }
+                  className="w-[4.25rem] min-w-[4.25rem] max-w-[5rem] whitespace-nowrap bg-muted/30 pl-4 text-right"
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("stock")}
+                    title={t("dataTable.sort")}
+                    className="inline-flex w-full items-center justify-end gap-1 font-medium"
+                  >
+                    {t("priceParity.stock")}
+                    {sortIcon("stock")}
+                  </button>
                 </TableHead>
-                <TableHead className="min-w-[9rem]">{t("priceParity.article")}</TableHead>
-                <TableHead className="whitespace-nowrap text-right">{t("priceParity.reference")}</TableHead>
-                <TableHead className="whitespace-nowrap">{t("priceParity.amazon")}</TableHead>
-                {ANALYTICS_MARKETPLACES.map((m) => (
-                  <TableHead key={m.slug} className="whitespace-nowrap text-muted-foreground">
-                    {m.label}
-                  </TableHead>
-                ))}
+                <TableHead
+                  aria-sort={
+                    sort.col === "name" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"
+                  }
+                  className="min-w-[9rem] bg-muted/30"
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("name")}
+                    title={t("dataTable.sort")}
+                    className="inline-flex w-full min-w-0 items-center justify-start gap-1 font-medium"
+                  >
+                    <span className="truncate">{t("priceParity.article")}</span>
+                    {sortIcon("name")}
+                  </button>
+                </TableHead>
+                <TableHead
+                  aria-sort={
+                    sort.col === "amazon" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"
+                  }
+                  className={cn(MARKETPLACE_PRICE_COL, "bg-muted/30")}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("amazon")}
+                    title={t("dataTable.sort")}
+                    className="inline-flex w-full min-w-0 max-w-full items-center justify-start gap-1 font-medium"
+                  >
+                    <span className="min-w-0 truncate">{t("priceParity.amazon")}</span>
+                    {sortIcon("amazon")}
+                  </button>
+                </TableHead>
+                {ANALYTICS_MARKETPLACES.map((m) => {
+                  const sid = `mp:${m.slug}` as SortColumnId;
+                  return (
+                    <TableHead
+                      key={m.slug}
+                      aria-sort={
+                        sort.col === sid ? (sort.dir === "asc" ? "ascending" : "descending") : "none"
+                      }
+                      className={cn(MARKETPLACE_PRICE_COL, "bg-muted/30 text-muted-foreground")}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(sid)}
+                        title={t("dataTable.sort")}
+                        className="inline-flex w-full min-w-0 max-w-full items-center justify-start gap-1 font-medium"
+                      >
+                        <span className="min-w-0 truncate">{m.label}</span>
+                        {sortIcon(sid)}
+                      </button>
+                    </TableHead>
+                  );
+                })}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {sortedFiltered.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5 + ANALYTICS_MARKETPLACES.length}
+                    colSpan={4 + ANALYTICS_MARKETPLACES.length}
                     className="text-center text-xs text-muted-foreground"
                   >
                     {t("priceParity.noArticles")}
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((row) => (
+                pagedRows.map((row) => (
                   <TableRow key={row.sku}>
                     <TableCell
                       className={cn(
-                        "sticky left-0 z-10 min-w-[18ch] w-[18ch] max-w-[18ch] px-2 font-mono text-xs",
-                        amazonParityRowBg(row.amazon.state) || "bg-card"
+                        "sticky left-0 z-10 min-w-[18ch] w-[18ch] max-w-[18ch] overflow-hidden border-r border-border bg-card px-2 font-mono text-xs"
                       )}
                       title={row.sku}
                     >
@@ -351,13 +496,12 @@ export function MarketplacePriceParitySection() {
                     </TableCell>
                     <TableCell
                       className={cn(
-                        "w-[3.25rem] min-w-[3rem] max-w-[3.5rem] text-right tabular-nums text-xs",
-                        amazonParityRowBg(row.amazon.state)
+                        "w-[4.25rem] min-w-[4.25rem] max-w-[5rem] bg-card pl-4 text-right tabular-nums text-xs"
                       )}
                     >
                       {formatStock(row.stock)}
                     </TableCell>
-                    <TableCell className={cn("max-w-[11rem]", amazonParityRowBg(row.amazon.state))}>
+                    <TableCell className={cn("max-w-[11rem] bg-card")}>
                       <Tooltip>
                         <TooltipTrigger
                           render={
@@ -371,21 +515,7 @@ export function MarketplacePriceParitySection() {
                         </TooltipContent>
                       </Tooltip>
                     </TableCell>
-                    <TableCell className={cn("text-right", amazonParityRowBg(row.amazon.state))}>
-                      <div className="flex flex-col items-end gap-0.5">
-                        <span className="tabular-nums text-xs font-medium leading-tight">
-                          {formatRefPrice(row.referencePrice)}
-                        </span>
-                        {row.referenceSource ? (
-                          <span className="text-[10px] leading-tight text-muted-foreground">
-                            {row.referenceSource === "xentral" ? "Xentral" : "Amazon"}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground">—</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className={amazonParityRowBg(row.amazon.state)}>
+                    <TableCell className={cn(MARKETPLACE_PRICE_COL, parityCellBg(row.amazon.state))}>
                       <PriceCell
                         price={row.amazon.price}
                         state={row.amazon.state}
@@ -398,7 +528,7 @@ export function MarketplacePriceParitySection() {
                         state: "not_connected" as const,
                       };
                       return (
-                        <TableCell key={m.slug} className={amazonParityRowBg(row.amazon.state)}>
+                        <TableCell key={m.slug} className={cn(MARKETPLACE_PRICE_COL, parityCellBg(cell.state))}>
                           <PriceCell price={cell.price} state={cell.state} label={m.label} />
                         </TableCell>
                       );
@@ -408,6 +538,36 @@ export function MarketplacePriceParitySection() {
               )}
             </TableBody>
           </Table>
+          {sortedFiltered.length > PRICE_PARITY_PAGE_SIZE ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 px-1 py-2">
+              <p className="text-xs text-muted-foreground">
+                {t("dataTable.pageOf", {
+                  current: String(parityPage + 1),
+                  total: String(parityPageCount),
+                })}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={parityPage <= 0}
+                  onClick={() => setParityPage((p) => Math.max(0, p - 1))}
+                >
+                  {t("dataTable.prev")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={parityPage + 1 >= parityPageCount}
+                  onClick={() => setParityPage((p) => p + 1)}
+                >
+                  {t("dataTable.next")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </section>

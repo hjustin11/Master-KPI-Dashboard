@@ -187,3 +187,195 @@ export async function fetchOttoOrdersRange(args: {
   }
   return out;
 }
+
+/** Scope `products` für GET /v4/products — wird ergänzt, falls nur `orders` gesetzt ist. */
+export function ensureOttoProductsScope(scopes: string): string {
+  const parts = scopes
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!parts.includes("products")) parts.push("products");
+  return parts.join(" ");
+}
+
+type OttoProductsPayload = {
+  resources?: unknown[];
+  productVariations?: unknown[];
+  variations?: unknown[];
+  links?: Array<{ href?: string; rel?: string }>;
+};
+
+async function fetchProductsSlice(args: {
+  baseUrl: string;
+  token: string;
+  productsPath: string;
+  page: number;
+  limit: number;
+  nextHref?: string;
+}): Promise<{ resources: unknown[]; nextHref?: string }> {
+  const url = args.nextHref
+    ? new URL(args.nextHref, args.baseUrl)
+    : new URL(args.productsPath, args.baseUrl);
+  if (!args.nextHref) {
+    url.searchParams.set("page", String(args.page));
+    url.searchParams.set("limit", String(args.limit));
+  }
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${args.token}`,
+      "X-Request-Timestamp": new Date().toISOString(),
+    },
+    cache: "no-store",
+  });
+  const text = await res.text();
+  let json: OttoProductsPayload | null = null;
+  try {
+    json = text ? (JSON.parse(text) as OttoProductsPayload) : null;
+  } catch {
+    json = null;
+  }
+  if (!res.ok || !json) {
+    const preview = text.replace(/\s+/g, " ").trim().slice(0, 400);
+    throw new Error(`OTTO products request failed (${res.status}). ${preview}`);
+  }
+  const links = Array.isArray(json.links) ? json.links : [];
+  const nextHref = links.find((l) => l?.rel === "next")?.href;
+  const resources = Array.isArray(json.resources)
+    ? json.resources
+    : Array.isArray(json.productVariations)
+      ? json.productVariations
+      : Array.isArray(json.variations)
+        ? json.variations
+        : [];
+  return { resources, nextHref };
+}
+
+export type OttoProductListRow = {
+  sku: string;
+  secondaryId: string;
+  title: string;
+  statusLabel: string;
+  isActive: boolean;
+};
+
+function str(v: unknown): string {
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return "";
+}
+
+function mapOttoProductResourceToRows(resource: Record<string, unknown>): OttoProductListRow[] {
+  const variations = resource.variations;
+  const productTitle = str(resource.productTitle ?? resource.title ?? resource.name ?? resource.productName);
+  const productRef = str(resource.productReference ?? resource.id ?? resource.productId);
+
+  if (Array.isArray(variations) && variations.length > 0) {
+    const rows: OttoProductListRow[] = [];
+    for (const v of variations) {
+      if (!v || typeof v !== "object") continue;
+      const vr = v as Record<string, unknown>;
+      const sku = str(vr.sku ?? vr.articleNumber ?? vr.skuSupplier ?? vr.supplierSku);
+      const vid = str(vr.id ?? vr.sku ?? sku);
+      const title = str(vr.title ?? vr.productTitle ?? productTitle);
+      const statusRaw = str(
+        vr.activeStatus ?? vr.status ?? vr.marketplaceStatus ?? vr.lifecycleStatus ?? ""
+      );
+      const active =
+        vr.active !== false &&
+        !/inactive|deactivated|deleted/i.test(statusRaw) &&
+        String(vr.activeStatus ?? "").toUpperCase() !== "INACTIVE";
+      rows.push({
+        sku: sku || vid || "—",
+        secondaryId: productRef || vid || sku || "—",
+        title: title || productTitle || "—",
+        statusLabel: statusRaw || (active ? "ACTIVE" : "INACTIVE"),
+        isActive: active,
+      });
+    }
+    return rows;
+  }
+
+  const sku = str(resource.sku ?? resource.articleNumber ?? resource.supplierSku);
+  const statusRaw = str(resource.activeStatus ?? resource.status ?? "");
+  const active =
+    resource.active !== false &&
+    !/inactive|deactivated/i.test(statusRaw) &&
+    String(resource.activeStatus ?? "").toUpperCase() !== "INACTIVE";
+
+  return [
+    {
+      sku: sku || productRef || "—",
+      secondaryId: productRef || sku || "—",
+      title: productTitle || "—",
+      statusLabel: statusRaw || (active ? "ACTIVE" : "INACTIVE"),
+      isActive: active,
+    },
+  ];
+}
+
+export function mapOttoProductResourcesToRows(resources: unknown[]): OttoProductListRow[] {
+  const out: OttoProductListRow[] = [];
+  for (const r of resources) {
+    if (!r || typeof r !== "object") continue;
+    out.push(...mapOttoProductResourceToRows(r as Record<string, unknown>));
+  }
+  return out;
+}
+
+/**
+ * Lädt alle Produktseiten (präferiert /v5/products, Fallback auf ältere Pfade).
+ * Erfordert OAuth-Scope `products` (Token mit ensureOttoProductsScope).
+ */
+export async function fetchOttoProductsAll(args: {
+  baseUrl: string;
+  token: string;
+  limit?: number;
+  productsPath?: string;
+}): Promise<OttoProductListRow[]> {
+  const limit = Math.min(200, Math.max(10, args.limit ?? 100));
+  const preferredPath = (args.productsPath || "").trim();
+  const pathCandidates = [
+    preferredPath.startsWith("/") ? preferredPath : preferredPath ? `/${preferredPath}` : "/v4/products",
+    "/v5/products",
+    "/v4/products",
+    "/v3/products",
+  ].filter((v, i, arr) => Boolean(v) && arr.indexOf(v) === i);
+  const rows: OttoProductListRow[] = [];
+  let nextHref: string | undefined;
+  let page = 0;
+  let pathIndex = 0;
+  for (let guard = 0; guard < 80; guard += 1) {
+    let slice: { resources: unknown[]; nextHref?: string };
+    try {
+      slice = await fetchProductsSlice({
+        baseUrl: args.baseUrl,
+        token: args.token,
+        productsPath: pathCandidates[pathIndex] ?? "/v4/products",
+        page,
+        limit,
+        nextHref,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err ?? "");
+      const isRoute404 = /failed\s*\(404\)/i.test(msg) || /no route matched/i.test(msg);
+      const canFallback = rows.length === 0 && !nextHref && page === 0 && pathIndex < pathCandidates.length - 1;
+      if (isRoute404 && canFallback) {
+        pathIndex += 1;
+        continue;
+      }
+      throw err;
+    }
+    rows.push(...mapOttoProductResourcesToRows(slice.resources));
+    if (slice.nextHref) {
+      nextHref = slice.nextHref;
+      continue;
+    }
+    nextHref = undefined;
+    if (slice.resources.length === 0) break;
+    if (slice.resources.length < limit) break;
+    page += 1;
+  }
+  return rows;
+}

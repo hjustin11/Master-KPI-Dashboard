@@ -48,6 +48,8 @@ type DataTableProps<TData, TValue> = {
   /** Zusätzliche Klassen auf dem Suchfeld (z. B. einheitliche `text-sm`). */
   filterInputClassName?: string;
   paginate?: boolean;
+  /** Standard-Zeilenzahl pro Seite (nur wenn `paginate`). */
+  defaultPageSize?: number;
   onDisplayedRowsChange?: (rows: TData[]) => void;
   /**
    * Zeilenstil u. a. für Beschaffung: `data` = aktuell gefilterte/sichtbare Zeilen in Reihenfolge.
@@ -56,6 +58,8 @@ type DataTableProps<TData, TValue> = {
     row: Row<TData>,
     context: { index: number; data: TData[] }
   ) => string | undefined;
+  /** Stabile Zeilen-IDs (z. B. SKU), damit Zellen bei externem State korrekt aktualisieren. */
+  getRowId?: (originalRow: TData, index: number) => string;
 };
 
 type ColumnMeta = {
@@ -82,8 +86,10 @@ export function DataTable<TData, TValue>({
   tableClassName,
   filterInputClassName,
   paginate = true,
+  defaultPageSize = 10,
   onDisplayedRowsChange,
   getRowClassName,
+  getRowId,
 }: DataTableProps<TData, TValue>) {
   const { t } = useTranslation();
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -95,9 +101,13 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
+    ...(getRowId ? { getRowId } : {}),
     state: { sorting, globalFilter },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
+    initialState: {
+      pagination: { pageSize: defaultPageSize, pageIndex: 0 },
+    },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),

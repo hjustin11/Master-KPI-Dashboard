@@ -10,6 +10,7 @@ export type PermissionKey =
 export type SidebarItemKey =
   | "overview"
   | "amazon"
+  | "ebay"
   | "otto"
   | "kaufland"
   | "fressnapf"
@@ -50,6 +51,7 @@ export const PERMISSION_CONFIG: Array<{ key: PermissionKey }> = [
 export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey }> = [
   { key: "overview" },
   { key: "amazon" },
+  { key: "ebay" },
   { key: "otto" },
   { key: "kaufland" },
   { key: "fressnapf" },
@@ -90,6 +92,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   owner: {
     overview: true,
     amazon: true,
+    ebay: true,
     otto: true,
     kaufland: true,
     fressnapf: true,
@@ -106,6 +109,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   admin: {
     overview: true,
     amazon: true,
+    ebay: true,
     otto: true,
     kaufland: true,
     fressnapf: true,
@@ -122,6 +126,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   manager: {
     overview: true,
     amazon: true,
+    ebay: true,
     otto: true,
     kaufland: true,
     fressnapf: true,
@@ -138,6 +143,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   analyst: {
     overview: true,
     amazon: false,
+    ebay: false,
     otto: false,
     kaufland: false,
     fressnapf: false,
@@ -154,6 +160,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   viewer: {
     overview: true,
     amazon: false,
+    ebay: false,
     otto: false,
     kaufland: false,
     fressnapf: false,

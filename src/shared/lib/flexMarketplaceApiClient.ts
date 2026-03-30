@@ -100,6 +100,29 @@ export const FLEX_MARKETPLACE_SHOPIFY_SPEC: FlexMarketplaceSpec = {
   baseUrlHintKey: "SHOPIFY_API_BASE_URL",
 };
 
+/**
+ * eBay (Basis-Integration): Client/Secret-Schema wie angefordert.
+ * Die konkrete API-Variante kann über ENV gesteuert werden:
+ * - EBAY_API_BASE_URL
+ * - EBAY_AUTH_MODE (basic|bearer|x-api-key)
+ * - EBAY_ORDERS_PATH
+ */
+export const FLEX_MARKETPLACE_EBAY_SPEC: FlexMarketplaceSpec = {
+  id: "ebay",
+  marketplaceLabel: "eBay",
+  envPrefix: "EBAY",
+  authKind: "client_secret",
+  defaultOrdersPath: "/sell/fulfillment/v1/order",
+  defaultAuthMode: "bearer",
+  baseUrlHintKey: "EBAY_API_BASE_URL",
+};
+
+type EbayTokenCacheEntry = {
+  token: string;
+  expiresAtMs: number;
+};
+const ebayTokenCache = new Map<string, EbayTokenCacheEntry>();
+
 export type FlexIntegrationConfig = {
   spec: FlexMarketplaceSpec;
   marketplaceLabel: string;
@@ -121,12 +144,19 @@ export type FlexIntegrationConfig = {
 export async function getFlexIntegrationConfig(spec: FlexMarketplaceSpec): Promise<FlexIntegrationConfig> {
   const p = spec.envPrefix;
   const baseUrl = resolveFlexBaseUrl(await readEnv(p, "API_BASE_URL"));
+  const accessToken = await readEnv(p, "ACCESS_TOKEN");
+  const apiKeyRaw = await readEnv(p, "API_KEY");
+  const clientKeyRaw = await readEnv(p, "CLIENT_KEY");
+  const secretKeyRaw = await readEnv(p, "SECRET_KEY");
+
+  // Für single_key-Marktplätze akzeptieren wir zusätzlich CLIENT_KEY als Alias
+  // (z. B. wenn Integrationen ein client/secret-Schema liefern, aber faktisch nur 1 Token nutzen).
   const apiKey =
     spec.authKind === "single_key"
-      ? await readEnv(p, "API_KEY")
-      : (await readEnv(p, "ACCESS_TOKEN")) || "";
-  const clientKey = spec.authKind === "client_secret" ? await readEnv(p, "CLIENT_KEY") : "";
-  const secretKey = spec.authKind === "client_secret" ? await readEnv(p, "SECRET_KEY") : "";
+      ? (apiKeyRaw || accessToken || clientKeyRaw || "").trim()
+      : (accessToken || "").trim();
+  const clientKey = spec.authKind === "client_secret" ? clientKeyRaw.trim() : "";
+  const secretKey = spec.authKind === "client_secret" ? secretKeyRaw.trim() : "";
 
   const ordersPathRaw =
     (await readEnv(p, "ORDERS_PATH")) || spec.defaultOrdersPath || "/orders";
@@ -216,6 +246,68 @@ function flexAuthHeaders(config: FlexIntegrationConfig): Record<string, string> 
   return h;
 }
 
+async function resolveEbayBearerToken(config: FlexIntegrationConfig): Promise<string> {
+  const cacheKey = `${config.baseUrl}::${config.clientKey}`;
+  const cached = ebayTokenCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && cached.expiresAtMs - 20_000 > now) {
+    return cached.token;
+  }
+
+  const tokenUrl = `${config.baseUrl.replace(/\/+$/, "")}/identity/v1/oauth2/token`;
+  const basic = Buffer.from(`${config.clientKey}:${config.secretKey}`, "utf8").toString("base64");
+  const scopeRaw = ((await readEnv("EBAY", "OAUTH_SCOPE")) || "").trim();
+  const scope = scopeRaw || "https://api.ebay.com/oauth/api_scope";
+
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+    scope,
+  });
+
+  let res: Response;
+  let text = "";
+  try {
+    res = await fetch(tokenUrl, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${basic}`,
+        "User-Agent": "MasterDashboard/1.0",
+      },
+      body: body.toString(),
+      cache: "no-store",
+    });
+    text = await res.text();
+  } catch (err) {
+    throw new Error(formatFetchError(err, "EBAY_API_BASE_URL"));
+  }
+
+  let json: unknown = null;
+  try {
+    json = text ? (JSON.parse(text) as unknown) : null;
+  } catch {
+    json = null;
+  }
+
+  if (!res.ok || !json || typeof json !== "object") {
+    const preview = text.replace(/\s+/g, " ").slice(0, 260);
+    throw new Error(`eBay OAuth fehlgeschlagen (HTTP ${res.status}). ${preview}`);
+  }
+
+  const token = String((json as Record<string, unknown>).access_token ?? "").trim();
+  const expiresIn = Number((json as Record<string, unknown>).expires_in ?? 7200);
+  if (!token) {
+    throw new Error("eBay OAuth lieferte kein access_token.");
+  }
+
+  ebayTokenCache.set(cacheKey, {
+    token,
+    expiresAtMs: now + Math.max(60_000, (Number.isFinite(expiresIn) ? expiresIn : 7200) * 1000),
+  });
+  return token;
+}
+
 function formatFetchError(err: unknown, baseUrlHintKey: string): string {
   if (!(err instanceof Error)) return "Netzwerkfehler (unbekannt).";
   const parts: string[] = [];
@@ -288,7 +380,19 @@ export async function flexGet(
   const path = pathAndQuery.startsWith("/") ? pathAndQuery : `/${pathAndQuery}`;
   const url = `${config.baseUrl.replace(/\/+$/, "")}${path}`;
   try {
-    return await fetch(url, { method: "GET", headers: flexAuthHeaders(config), cache: "no-store" });
+    const headers = flexAuthHeaders(config);
+    if (
+      config.spec.id === "ebay" &&
+      config.authMode === "bearer" &&
+      !config.apiKey &&
+      config.clientKey &&
+      config.secretKey
+    ) {
+      delete headers["X-Client-Key"];
+      delete headers["X-Secret-Key"];
+      headers.Authorization = `Bearer ${await resolveEbayBearerToken(config)}`;
+    }
+    return await fetch(url, { method: "GET", headers, cache: "no-store" });
   } catch (err) {
     throw new Error(formatFetchError(err, `${config.envPrefix}_API_BASE_URL`));
   }
