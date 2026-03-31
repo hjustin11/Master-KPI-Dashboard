@@ -99,13 +99,45 @@ export async function DELETE(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { error } = await admin.auth.admin.deleteUser(body.userId);
-  if (error) {
+  const { data: targetUserData, error: targetUserError } = await admin.auth.admin.getUserById(
+    body.userId
+  );
+  if (targetUserError || !targetUserData?.user) {
     return NextResponse.json(
-      { error: "Benutzer konnte nicht entfernt werden." },
+      { error: "Benutzer wurde nicht gefunden." },
+      { status: 404 }
+    );
+  }
+
+  const targetUser = targetUserData.user;
+  const targetRole =
+    (typeof targetUser.app_metadata?.role === "string" ? targetUser.app_metadata.role : null) ??
+    (typeof targetUser.user_metadata?.role === "string" ? targetUser.user_metadata.role : null);
+  if (targetRole === "owner") {
+    return NextResponse.json(
+      { error: "Owner-Benutzer koennen nicht entfernt werden." },
+      { status: 400 }
+    );
+  }
+
+  const targetEmail = (targetUser.email ?? "").toLowerCase().trim();
+
+  // Best-effort Cleanup: in manchen Setups sind diese Tabellen nicht vorhanden.
+  // Fehler werden toleriert, solange die eigentliche User-Löschung funktioniert.
+  await admin.from("tutorial_user_progress").delete().eq("user_id", body.userId);
+  await admin.from("profiles").delete().eq("id", body.userId);
+  if (targetEmail) {
+    await admin.from("invitations").delete().eq("email", targetEmail);
+  }
+  await admin.from("invitations").delete().eq("invited_by", body.userId);
+
+  const { error: deleteUserError } = await admin.auth.admin.deleteUser(body.userId);
+  if (deleteUserError) {
+    return NextResponse.json(
+      { error: "Benutzer konnte nicht vollstaendig entfernt werden." },
       { status: 500 }
     );
   }
 
-  return NextResponse.json({ message: "Benutzer wurde entfernt." });
+  return NextResponse.json({ message: "Benutzer wurde vollstaendig entfernt." });
 }
