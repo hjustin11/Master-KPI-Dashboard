@@ -21,7 +21,7 @@ export async function GET() {
 
   const { supabase, user, role } = context;
 
-  const { data: onboardingTourData, error: onboardingTourError } = await supabase
+  const { data: onboardingTourDataPublished, error: onboardingTourPublishedError } = await supabase
     .from("tutorial_tours")
     .select(
       "id,tutorial_type,role,release_key,version,title,summary,enabled,required,status,updated_at,scenes:tutorial_scenes(*)"
@@ -34,8 +34,30 @@ export async function GET() {
     .limit(1)
     .maybeSingle();
 
-  if (onboardingTourError) {
-    return NextResponse.json({ error: onboardingTourError.message }, { status: 500 });
+  if (onboardingTourPublishedError) {
+    return NextResponse.json({ error: onboardingTourPublishedError.message }, { status: 500 });
+  }
+
+  let onboardingTourData = onboardingTourDataPublished;
+  if (!onboardingTourData) {
+    // Fallback: Falls (noch) keine veröffentlichte Onboarding-Tour existiert,
+    // nutze die neueste aktive Tour für diese Rolle.
+    const { data: onboardingFallbackData, error: onboardingFallbackError } = await supabase
+      .from("tutorial_tours")
+      .select(
+        "id,tutorial_type,role,release_key,version,title,summary,enabled,required,status,updated_at,scenes:tutorial_scenes(*)"
+      )
+      .eq("tutorial_type", "onboarding")
+      .eq("role", role)
+      .eq("enabled", true)
+      .order("updated_at", { ascending: false })
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (onboardingFallbackError) {
+      return NextResponse.json({ error: onboardingFallbackError.message }, { status: 500 });
+    }
+    onboardingTourData = onboardingFallbackData;
   }
 
   const { data: updateToursData, error: updateToursError } = await supabase

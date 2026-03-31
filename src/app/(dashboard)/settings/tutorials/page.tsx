@@ -226,7 +226,7 @@ export default function SettingsTutorialsPage() {
                 summary: "Kurze Zusammenfassung",
                 enabled: true,
                 required: true,
-                status: "draft",
+                status: "published",
                 scenes: [{ ...EMPTY_SCENE }],
               };
               setDraft(created);
