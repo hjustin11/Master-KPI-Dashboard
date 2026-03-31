@@ -66,6 +66,29 @@ export function isTutorialAdvanceMode(value: unknown): value is TutorialAdvanceM
   return typeof value === "string" && TUTORIAL_ADVANCE_MODES.includes(value as TutorialAdvanceMode);
 }
 
+function normalizeRoleKey(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const lower = trimmed.toLowerCase();
+  if (
+    lower === "owner" ||
+    lower === "admin" ||
+    lower === "manager" ||
+    lower === "analyst" ||
+    lower === "viewer"
+  ) {
+    return lower;
+  }
+  // Defensive alias mapping: verhindert Mismatch bei lokalisierten/proxy Rollenwerten.
+  if (lower === "entwickler") return "owner";
+  if (lower === "team lead" || lower === "teamlead") return "admin";
+  if (lower === "operations") return "manager";
+  if (lower === "insights") return "analyst";
+  if (lower === "mitglied" || lower === "member") return "viewer";
+  return trimmed;
+}
+
 export async function getCurrentUserContext(): Promise<AuthUserContext | null> {
   const supabase = await createServerSupabase();
   const {
@@ -75,11 +98,10 @@ export async function getCurrentUserContext(): Promise<AuthUserContext | null> {
   if (error || !user) return null;
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  const role =
-    (profile?.role as string | undefined) ??
-    (typeof user.app_metadata?.role === "string" ? user.app_metadata.role : undefined) ??
-    (typeof user.user_metadata?.role === "string" ? user.user_metadata.role : undefined) ??
-    "viewer";
+  const profileRole = normalizeRoleKey(profile?.role);
+  const appRole = normalizeRoleKey(user.app_metadata?.role);
+  const userMetaRole = normalizeRoleKey(user.user_metadata?.role);
+  const role = profileRole || appRole || userMetaRole || "viewer";
 
   return {
     user,

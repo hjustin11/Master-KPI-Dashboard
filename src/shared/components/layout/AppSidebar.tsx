@@ -280,21 +280,34 @@ const NAV_PRIMARY_CHILD_KEYS = new Set<SidebarItemKey>([
 
 function visibleNavChildren(
   item: NavItem,
-  hasPermission: (permission: PermissionKey) => boolean
+  hasPermission: (permission: PermissionKey) => boolean,
+  canAccessPageByPath: (pathname: string) => boolean
 ) {
   return (
     item.children?.filter(
-      (child) => child.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true
+      (child) =>
+        (child.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true) &&
+        canAccessPageByPath(child.href)
     ) ?? []
   );
 }
 
+function navItemHasAnyAccessibleRoute(
+  item: NavItem,
+  hasPermission: (permission: PermissionKey) => boolean,
+  canAccessPageByPath: (pathname: string) => boolean
+) {
+  if (canAccessPageByPath(item.href)) return true;
+  return visibleNavChildren(item, hasPermission, canAccessPageByPath).length > 0;
+}
+
 function resolveNavLink(
   item: NavItem,
-  hasPermission: (permission: PermissionKey) => boolean
+  hasPermission: (permission: PermissionKey) => boolean,
+  canAccessPageByPath: (pathname: string) => boolean
 ): { primaryHref: string; activePrefix: string } {
   if (NAV_PRIMARY_CHILD_KEYS.has(item.key)) {
-    const visible = visibleNavChildren(item, hasPermission);
+    const visible = visibleNavChildren(item, hasPermission, canAccessPageByPath);
     const primary = visible[0]?.href ?? item.href;
     const prefix = primary.replace(/\/[^/]+$/, "") || item.href;
     return { primaryHref: primary, activePrefix: prefix };
@@ -327,11 +340,14 @@ function partitionNavItems(items: NavItem[]): { marketplaces: NavItem[]; rest: N
 function isMarketplaceItemActive(
   pathname: string,
   item: NavItem,
-  hasPermission: (permission: PermissionKey) => boolean
+  hasPermission: (permission: PermissionKey) => boolean,
+  canAccessPageByPath: (pathname: string) => boolean
 ): boolean {
-  const { activePrefix } = resolveNavLink(item, hasPermission);
+  const { activePrefix } = resolveNavLink(item, hasPermission, canAccessPageByPath);
   if (isActivePath(pathname, activePrefix)) return true;
-  return visibleNavChildren(item, hasPermission).some((child) => isActivePath(pathname, child.href));
+  return visibleNavChildren(item, hasPermission, canAccessPageByPath).some((child) =>
+    isActivePath(pathname, child.href)
+  );
 }
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
@@ -340,6 +356,7 @@ function SingleNavItem({
   item,
   pathname,
   hasPermission,
+  canAccessPageByPath,
   collapsed,
   compact,
   t,
@@ -350,6 +367,7 @@ function SingleNavItem({
   item: NavItem;
   pathname: string;
   hasPermission: (permission: PermissionKey) => boolean;
+  canAccessPageByPath: (pathname: string) => boolean;
   collapsed: boolean;
   compact?: boolean;
   t: Translate;
@@ -357,10 +375,10 @@ function SingleNavItem({
   isAdvertisingDeveloper: boolean;
   accessEdit?: NavAccessEditConfig;
 }) {
-  const { primaryHref, activePrefix } = resolveNavLink(item, hasPermission);
+  const { primaryHref, activePrefix } = resolveNavLink(item, hasPermission, canAccessPageByPath);
   const active = isActivePath(pathname, activePrefix);
   const Icon = item.icon;
-  const visibleChildren = visibleNavChildren(item, hasPermission);
+  const visibleChildren = visibleNavChildren(item, hasPermission, canAccessPageByPath);
   const hasSubnav = visibleChildren.length > 0;
   const advertisingLocked =
     item.key === "advertising" && !userIsLoading && !isAdvertisingDeveloper;
@@ -567,6 +585,7 @@ function MarketplaceExpandedGroup({
   items,
   pathname,
   hasPermission,
+  canAccessPageByPath,
   userIsLoading,
   isAdvertisingDeveloper,
   accessEdit,
@@ -575,14 +594,16 @@ function MarketplaceExpandedGroup({
   items: NavItem[];
   pathname: string;
   hasPermission: (permission: PermissionKey) => boolean;
+  canAccessPageByPath: (pathname: string) => boolean;
   userIsLoading: boolean;
   isAdvertisingDeveloper: boolean;
   accessEdit?: NavAccessEditConfig;
   t: Translate;
 }) {
   const anyActive = useMemo(
-    () => items.some((item) => isMarketplaceItemActive(pathname, item, hasPermission)),
-    [items, pathname, hasPermission]
+    () =>
+      items.some((item) => isMarketplaceItemActive(pathname, item, hasPermission, canAccessPageByPath)),
+    [items, pathname, hasPermission, canAccessPageByPath]
   );
   const [open, setOpen] = useState(false);
 
@@ -621,6 +642,7 @@ function MarketplaceExpandedGroup({
               item={item}
               pathname={pathname}
               hasPermission={hasPermission}
+              canAccessPageByPath={canAccessPageByPath}
               collapsed={false}
               compact
               userIsLoading={userIsLoading}
@@ -639,18 +661,21 @@ function CollapsedMarketplacePopover({
   items,
   pathname,
   hasPermission,
+  canAccessPageByPath,
   accessEdit,
   t,
 }: {
   items: NavItem[];
   pathname: string;
   hasPermission: (permission: PermissionKey) => boolean;
+  canAccessPageByPath: (pathname: string) => boolean;
   accessEdit?: NavAccessEditConfig;
   t: Translate;
 }) {
   const anyActive = useMemo(
-    () => items.some((item) => isMarketplaceItemActive(pathname, item, hasPermission)),
-    [items, pathname, hasPermission]
+    () =>
+      items.some((item) => isMarketplaceItemActive(pathname, item, hasPermission, canAccessPageByPath)),
+    [items, pathname, hasPermission, canAccessPageByPath]
   );
 
   if (items.length === 0) return null;
@@ -680,7 +705,7 @@ function CollapsedMarketplacePopover({
           <div className="space-y-2">
             {items.map((item) => {
               const Icon = item.icon;
-              const visibleChildren = visibleNavChildren(item, hasPermission);
+              const visibleChildren = visibleNavChildren(item, hasPermission, canAccessPageByPath);
               return (
                 <div
                   key={item.key}
@@ -725,8 +750,13 @@ export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const { visibleSidebarKeys } = useTutorialNavGate();
   const user = useUser();
-  const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole, isAdvertisingDeveloper } =
-    usePermissions();
+  const {
+    hasPermission,
+    canAccessSidebarItem,
+    canAccessPageByPath,
+    activeRole: effectiveRole,
+    isAdvertisingDeveloper,
+  } = usePermissions();
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
   const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
   const roleTestAccessEditMode = useAppStore((stateFromStore) => stateFromStore.roleTestAccessEditMode);
@@ -774,9 +804,10 @@ export function AppSidebar() {
       navItems.filter(
         (item) =>
           effectiveCanAccessSidebarItem(item.key) &&
+          navItemHasAnyAccessibleRoute(item, effectiveHasPermission, canAccessPageByPath) &&
           (item.requiredPermissions?.every((permission) => effectiveHasPermission(permission)) ?? true)
       ),
-    [effectiveCanAccessSidebarItem, effectiveHasPermission]
+    [effectiveCanAccessSidebarItem, effectiveHasPermission, canAccessPageByPath]
   );
   const tutorialGatedNavItems = useMemo(() => {
     if (visibleSidebarKeys === null) return filteredNavItems;
@@ -891,6 +922,7 @@ export function AppSidebar() {
                 items={marketplaces}
                 pathname={pathname}
                 hasPermission={effectiveHasPermission}
+                canAccessPageByPath={canAccessPageByPath}
                 accessEdit={navAccessEdit}
                 t={t}
               />
@@ -899,6 +931,7 @@ export function AppSidebar() {
                 items={marketplaces}
                 pathname={pathname}
                 hasPermission={effectiveHasPermission}
+                canAccessPageByPath={canAccessPageByPath}
                 userIsLoading={user.isLoading}
                 isAdvertisingDeveloper={isAdvertisingDeveloper}
                 accessEdit={navAccessEdit}
@@ -912,6 +945,7 @@ export function AppSidebar() {
               item={item}
               pathname={pathname}
               hasPermission={effectiveHasPermission}
+              canAccessPageByPath={canAccessPageByPath}
               collapsed={collapsed}
               userIsLoading={user.isLoading}
               isAdvertisingDeveloper={isAdvertisingDeveloper}
@@ -1031,8 +1065,13 @@ export function MobileSidebarTrigger() {
   const { t, locale } = useTranslation();
   const { visibleSidebarKeys } = useTutorialNavGate();
   const user = useUser();
-  const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole, isAdvertisingDeveloper } =
-    usePermissions();
+  const {
+    hasPermission,
+    canAccessSidebarItem,
+    canAccessPageByPath,
+    activeRole: effectiveRole,
+    isAdvertisingDeveloper,
+  } = usePermissions();
   const effectiveHasPermission: (permission: PermissionKey) => boolean = user.isLoading
     ? () => true
     : hasPermission;
@@ -1045,9 +1084,10 @@ export function MobileSidebarTrigger() {
       navItems.filter(
         (item) =>
           effectiveCanAccessSidebarItem(item.key) &&
+          navItemHasAnyAccessibleRoute(item, effectiveHasPermission, canAccessPageByPath) &&
           (item.requiredPermissions?.every((permission) => effectiveHasPermission(permission)) ?? true)
       ),
-    [effectiveCanAccessSidebarItem, effectiveHasPermission]
+    [effectiveCanAccessSidebarItem, effectiveHasPermission, canAccessPageByPath]
   );
   const tutorialGatedNavItems = useMemo(() => {
     if (visibleSidebarKeys === null) return filteredNavItems;
@@ -1141,6 +1181,7 @@ export function MobileSidebarTrigger() {
               items={marketplaces}
               pathname={pathname}
               hasPermission={effectiveHasPermission}
+              canAccessPageByPath={canAccessPageByPath}
               userIsLoading={user.isLoading}
               isAdvertisingDeveloper={isAdvertisingDeveloper}
               accessEdit={navAccessEdit}
@@ -1153,6 +1194,7 @@ export function MobileSidebarTrigger() {
               item={item}
               pathname={pathname}
               hasPermission={effectiveHasPermission}
+              canAccessPageByPath={canAccessPageByPath}
               collapsed={false}
               userIsLoading={user.isLoading}
               isAdvertisingDeveloper={isAdvertisingDeveloper}

@@ -6,6 +6,7 @@ import { AppSidebar } from "@/shared/components/layout/AppSidebar";
 import { Header } from "@/shared/components/layout/Header";
 import { RoleTestAccessToolbar } from "@/shared/components/layout/RoleTestAccessToolbar";
 import { RoleTestAccessPersistOnExit } from "@/shared/components/layout/RoleTestAccessPersistOnExit";
+import { DashboardRouteAccessGuard } from "@/shared/components/layout/DashboardRouteAccessGuard";
 import { MobileNav } from "@/shared/components/layout/MobileNav";
 import { Toaster } from "@/components/ui/sonner";
 import { DashboardAccessConfigSync } from "@/shared/components/DashboardAccessConfigSync";
@@ -48,6 +49,7 @@ export default function DashboardLayout({
     >
       <DashboardAccessConfigSync />
       <RoleTestAccessPersistOnExit />
+      <DashboardRouteAccessGuard />
       <div className="relative flex min-h-screen w-full overflow-hidden bg-gradient-to-br from-white via-white to-white">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-blue-50/45 blur-3xl" />

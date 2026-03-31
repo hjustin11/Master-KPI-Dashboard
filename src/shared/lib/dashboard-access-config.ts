@@ -9,6 +9,10 @@ import {
   type DashboardWidgetKey,
   widgetVisibilityForRole,
 } from "@/shared/lib/role-surface-access";
+import {
+  pageAccessForRole,
+  type DashboardPageAccessKey,
+} from "@/shared/lib/role-page-access";
 
 export const DASHBOARD_ACCESS_CONFIG_VERSION = 1 as const;
 
@@ -17,6 +21,7 @@ export type DashboardAccessConfigV1 = {
   rolePermissions: Record<string, PermissionKey[]>;
   roleSidebarItems: Record<string, Record<SidebarItemKey, boolean>>;
   roleSectionVisibility: Record<string, Record<DashboardSectionKey, boolean>>;
+  rolePageAccess: Record<string, Record<DashboardPageAccessKey, boolean>>;
   roleWidgetVisibility: Record<string, Record<DashboardWidgetKey, boolean>>;
   roleActionAccess: Record<string, Record<DashboardActionKey, boolean>>;
   roleLabels: Record<string, string>;
@@ -35,6 +40,7 @@ export function parseDashboardAccessConfig(raw: unknown): DashboardAccessConfigV
   if (!isPlainObject(raw.rolePermissions)) return null;
   if (!isPlainObject(raw.roleSidebarItems)) return null;
   if (!isPlainObject(raw.roleSectionVisibility)) return null;
+  if (raw.rolePageAccess !== undefined && !isPlainObject(raw.rolePageAccess)) return null;
   if (raw.roleWidgetVisibility !== undefined && !isPlainObject(raw.roleWidgetVisibility)) return null;
   if (raw.roleActionAccess !== undefined && !isPlainObject(raw.roleActionAccess)) return null;
   if (!isPlainObject(raw.roleLabels)) return null;
@@ -57,10 +63,23 @@ export function parseDashboardAccessConfig(raw: unknown): DashboardAccessConfigV
     string,
     Record<DashboardWidgetKey, boolean>
   >;
+  const rolePageAccessRaw = (raw.rolePageAccess ?? {}) as Record<
+    string,
+    Record<DashboardPageAccessKey, boolean>
+  >;
   const roleActionAccessRaw = (raw.roleActionAccess ?? {}) as Record<
     string,
     Record<DashboardActionKey, boolean>
   >;
+  const rolePageAccess = Object.fromEntries(
+    allRoleKeys.map((roleKey) => [
+      roleKey,
+      {
+        ...pageAccessForRole(roleKey),
+        ...(rolePageAccessRaw[roleKey] ?? {}),
+      },
+    ])
+  ) as Record<string, Record<DashboardPageAccessKey, boolean>>;
   const roleWidgetVisibility = Object.fromEntries(
     allRoleKeys.map((roleKey) => [
       roleKey,
@@ -88,6 +107,7 @@ export function parseDashboardAccessConfig(raw: unknown): DashboardAccessConfigV
       string,
       Record<DashboardSectionKey, boolean>
     >,
+    rolePageAccess,
     roleWidgetVisibility,
     roleActionAccess,
     roleLabels: raw.roleLabels as Record<string, string>,
@@ -101,6 +121,7 @@ export type DashboardAccessStoreSlice = {
   rolePermissions: Record<string, PermissionKey[]>;
   roleSidebarItems: Record<string, Record<SidebarItemKey, boolean>>;
   roleSectionVisibility: Record<string, Record<DashboardSectionKey, boolean>>;
+  rolePageAccess: Record<string, Record<DashboardPageAccessKey, boolean>>;
   roleWidgetVisibility: Record<string, Record<DashboardWidgetKey, boolean>>;
   roleActionAccess: Record<string, Record<DashboardActionKey, boolean>>;
   roleLabels: Record<string, string>;
@@ -117,6 +138,7 @@ export function buildDashboardAccessPayloadFromSlice(
     rolePermissions: slice.rolePermissions,
     roleSidebarItems: slice.roleSidebarItems,
     roleSectionVisibility: slice.roleSectionVisibility,
+    rolePageAccess: slice.rolePageAccess,
     roleWidgetVisibility: slice.roleWidgetVisibility,
     roleActionAccess: slice.roleActionAccess,
     roleLabels: slice.roleLabels,

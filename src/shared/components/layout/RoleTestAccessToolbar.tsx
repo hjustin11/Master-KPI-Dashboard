@@ -17,6 +17,7 @@ import {
   DASHBOARD_ACTION_CONFIG,
   DASHBOARD_WIDGET_CONFIG,
 } from "@/shared/lib/role-surface-access";
+import { DASHBOARD_PAGE_ACCESS_CONFIG } from "@/shared/lib/role-page-access";
 import {
   DASHBOARD_SECTION_CONFIG,
   PERMISSION_CONFIG,
@@ -37,11 +38,13 @@ export function RoleTestAccessToolbar() {
   const customRoleKeys = useAppStore((s) => s.customRoleKeys);
   const rolePermissions = useAppStore((s) => s.rolePermissions);
   const roleSectionVisibility = useAppStore((s) => s.roleSectionVisibility);
+  const rolePageAccess = useAppStore((s) => s.rolePageAccess);
   const roleSidebarItems = useAppStore((s) => s.roleSidebarItems);
   const roleWidgetVisibility = useAppStore((s) => s.roleWidgetVisibility);
   const roleActionAccess = useAppStore((s) => s.roleActionAccess);
   const toggleRolePermission = useAppStore((s) => s.toggleRolePermission);
   const toggleRoleSectionVisibility = useAppStore((s) => s.toggleRoleSectionVisibility);
+  const toggleRolePageAccess = useAppStore((s) => s.toggleRolePageAccess);
   const toggleRoleSidebarItem = useAppStore((s) => s.toggleRoleSidebarItem);
   const toggleRoleWidgetVisibility = useAppStore((s) => s.toggleRoleWidgetVisibility);
   const toggleRoleActionAccess = useAppStore((s) => s.toggleRoleActionAccess);
@@ -186,6 +189,31 @@ export function RoleTestAccessToolbar() {
                               onChange={() => toggleRoleSectionVisibility(activeRole, s.key)}
                             />
                             <span>{t(`dashboardSections.${s.key}`)}</span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+                <section className="mt-6 space-y-2 border-t border-border/40 pt-4">
+                  <h3 className="text-sm font-semibold">Unterseiten (Routen)</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Direkter Seitenzugriff pro Rolle (auch bei direktem Link).
+                  </p>
+                  <ul className="space-y-2">
+                    {DASHBOARD_PAGE_ACCESS_CONFIG.map((p) => {
+                      const checked = Boolean(rolePageAccess[activeRole]?.[p.key]);
+                      return (
+                        <li key={p.key}>
+                          <label className="flex cursor-pointer items-start gap-2 text-xs leading-snug">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 h-3.5 w-3.5 accent-primary"
+                              checked={checked}
+                              disabled={ownerLocked}
+                              onChange={() => toggleRolePageAccess(activeRole, p.key)}
+                            />
+                            <span>{p.label}</span>
                           </label>
                         </li>
                       );

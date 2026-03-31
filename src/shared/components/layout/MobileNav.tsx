@@ -133,7 +133,8 @@ export function MobileNav() {
   const { t } = useTranslation();
   const user = useUser();
   const { visibleSidebarKeys } = useTutorialNavGate();
-  const { canAccessSidebarItem, hasPermission, isAdvertisingDeveloper } = usePermissions();
+  const { canAccessSidebarItem, canAccessPageByPath, hasPermission, isAdvertisingDeveloper } =
+    usePermissions();
   const activeRole = useAppStore((s) => s.activeRole);
   const roleTestingEnabled = useAppStore((s) => s.roleTestingEnabled);
   const roleTestAccessEditMode = useAppStore((s) => s.roleTestAccessEditMode);
@@ -162,11 +163,13 @@ export function MobileNav() {
   const visibleMainItems = mainItems.filter(
     (item) =>
       canAccessSidebarItem(item.key) &&
+      canAccessPageByPath(item.href) &&
       (item.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true)
   );
   const visibleMoreItems = moreItems.filter(
     (item) =>
       canAccessSidebarItem(item.key) &&
+      canAccessPageByPath(item.href) &&
       (item.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true)
   );
   const gateAllow = visibleSidebarKeys === null ? null : new Set(visibleSidebarKeys);

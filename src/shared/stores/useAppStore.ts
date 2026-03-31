@@ -22,6 +22,7 @@ import {
   actionAccessForRole,
   widgetVisibilityForRole,
 } from "@/shared/lib/role-surface-access";
+import { pageAccessForRole, type DashboardPageAccessKey } from "@/shared/lib/role-page-access";
 
 function emptySectionVisibility(): Record<DashboardSectionKey, boolean> {
   return DASHBOARD_SECTION_CONFIG.reduce(
@@ -57,6 +58,7 @@ type AppState = {
   rolePermissions: Record<string, PermissionKey[]>;
   roleSidebarItems: Record<string, Record<SidebarItemKey, boolean>>;
   roleSectionVisibility: Record<string, Record<DashboardSectionKey, boolean>>;
+  rolePageAccess: Record<string, Record<DashboardPageAccessKey, boolean>>;
   roleWidgetVisibility: Record<string, Record<DashboardWidgetKey, boolean>>;
   roleActionAccess: Record<string, Record<DashboardActionKey, boolean>>;
   roleLabels: Record<string, string>;
@@ -72,6 +74,7 @@ type AppState = {
   toggleRolePermission: (roleKey: string, permission: PermissionKey) => void;
   toggleRoleSidebarItem: (roleKey: string, itemKey: SidebarItemKey) => void;
   toggleRoleSectionVisibility: (roleKey: string, sectionKey: DashboardSectionKey) => void;
+  toggleRolePageAccess: (roleKey: string, pageKey: DashboardPageAccessKey) => void;
   toggleRoleWidgetVisibility: (roleKey: string, widgetKey: DashboardWidgetKey) => void;
   toggleRoleActionAccess: (roleKey: string, actionKey: DashboardActionKey) => void;
   addCustomRole: (label: string, templateRoleKey: string) => string;
@@ -95,6 +98,13 @@ export const useAppStore = create<AppState>()(
         INITIAL_ROLE_SIDEBAR_ITEMS as Record<string, Record<SidebarItemKey, boolean>>,
       roleSectionVisibility:
         INITIAL_ROLE_SECTION_VISIBILITY as Record<string, Record<DashboardSectionKey, boolean>>,
+      rolePageAccess: {
+        owner: pageAccessForRole("owner"),
+        admin: pageAccessForRole("admin"),
+        manager: pageAccessForRole("manager"),
+        analyst: pageAccessForRole("analyst"),
+        viewer: pageAccessForRole("viewer"),
+      },
       roleWidgetVisibility: {
         owner: widgetVisibilityForRole("owner"),
         admin: widgetVisibilityForRole("admin"),
@@ -177,6 +187,16 @@ export const useAppStore = create<AppState>()(
             },
           },
         })),
+      toggleRolePageAccess: (roleKey, pageKey) =>
+        set((state) => ({
+          rolePageAccess: {
+            ...state.rolePageAccess,
+            [roleKey]: {
+              ...(state.rolePageAccess[roleKey] ?? pageAccessForRole(roleKey)),
+              [pageKey]: !Boolean(state.rolePageAccess[roleKey]?.[pageKey]),
+            },
+          },
+        })),
       toggleRoleWidgetVisibility: (roleKey, widgetKey) =>
         set((state) => ({
           roleWidgetVisibility: {
@@ -204,6 +224,8 @@ export const useAppStore = create<AppState>()(
           const templatePermissions = state.rolePermissions[templateRoleKey] ?? [];
           const templateSidebarItems = state.roleSidebarItems[templateRoleKey] ?? {};
           const templateSectionVisibility = sectionVisibilityForTemplate(state, templateRoleKey);
+          const templatePageAccess =
+            state.rolePageAccess[templateRoleKey] ?? pageAccessForRole(templateRoleKey);
           const templateWidgetVisibility =
             state.roleWidgetVisibility[templateRoleKey] ?? widgetVisibilityForRole(templateRoleKey);
           const templateActionAccess =
@@ -226,6 +248,10 @@ export const useAppStore = create<AppState>()(
             roleSectionVisibility: {
               ...state.roleSectionVisibility,
               [roleKey]: { ...templateSectionVisibility },
+            },
+            rolePageAccess: {
+              ...state.rolePageAccess,
+              [roleKey]: { ...templatePageAccess },
             },
             roleWidgetVisibility: {
               ...state.roleWidgetVisibility,
@@ -250,6 +276,7 @@ export const useAppStore = create<AppState>()(
           const nextRolePermissions = { ...state.rolePermissions };
           const nextRoleSidebarItems = { ...state.roleSidebarItems };
           const nextRoleSectionVisibility = { ...state.roleSectionVisibility };
+          const nextRolePageAccess = { ...state.rolePageAccess };
           const nextRoleWidgetVisibility = { ...state.roleWidgetVisibility };
           const nextRoleActionAccess = { ...state.roleActionAccess };
           const nextRoleLabels = { ...state.roleLabels };
@@ -257,6 +284,7 @@ export const useAppStore = create<AppState>()(
           delete nextRolePermissions[roleKey];
           delete nextRoleSidebarItems[roleKey];
           delete nextRoleSectionVisibility[roleKey];
+          delete nextRolePageAccess[roleKey];
           delete nextRoleWidgetVisibility[roleKey];
           delete nextRoleActionAccess[roleKey];
           delete nextRoleLabels[roleKey];
@@ -269,6 +297,7 @@ export const useAppStore = create<AppState>()(
             rolePermissions: nextRolePermissions,
             roleSidebarItems: nextRoleSidebarItems,
             roleSectionVisibility: nextRoleSectionVisibility,
+            rolePageAccess: nextRolePageAccess,
             roleWidgetVisibility: nextRoleWidgetVisibility,
             roleActionAccess: nextRoleActionAccess,
             roleLabels: nextRoleLabels,
@@ -293,6 +322,7 @@ export const useAppStore = create<AppState>()(
           rolePermissions: config.rolePermissions,
           roleSidebarItems: config.roleSidebarItems,
           roleSectionVisibility: config.roleSectionVisibility,
+          rolePageAccess: config.rolePageAccess,
           roleWidgetVisibility: config.roleWidgetVisibility,
           roleActionAccess: config.roleActionAccess,
           roleLabels: config.roleLabels,

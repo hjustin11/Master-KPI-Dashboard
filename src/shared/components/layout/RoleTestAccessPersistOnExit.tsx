@@ -19,6 +19,7 @@ export function RoleTestAccessPersistOnExit() {
   const rolePermissions = useAppStore((s) => s.rolePermissions);
   const roleSidebarItems = useAppStore((s) => s.roleSidebarItems);
   const roleSectionVisibility = useAppStore((s) => s.roleSectionVisibility);
+  const rolePageAccess = useAppStore((s) => s.rolePageAccess);
   const roleWidgetVisibility = useAppStore((s) => s.roleWidgetVisibility);
   const roleActionAccess = useAppStore((s) => s.roleActionAccess);
   const roleLabels = useAppStore((s) => s.roleLabels);
@@ -36,6 +37,7 @@ export function RoleTestAccessPersistOnExit() {
       rolePermissions: s.rolePermissions,
       roleSidebarItems: s.roleSidebarItems,
       roleSectionVisibility: s.roleSectionVisibility,
+      rolePageAccess: s.rolePageAccess,
       roleWidgetVisibility: s.roleWidgetVisibility,
       roleActionAccess: s.roleActionAccess,
       roleLabels: s.roleLabels,
@@ -89,6 +91,7 @@ export function RoleTestAccessPersistOnExit() {
     rolePermissions,
     roleSidebarItems,
     roleSectionVisibility,
+    rolePageAccess,
     roleWidgetVisibility,
     roleActionAccess,
     roleLabels,

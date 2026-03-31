@@ -18,6 +18,20 @@ type UserAuthOverlayProps = {
   inviteToken?: string;
 };
 
+function deriveFirstNameFromEmail(email: string): string {
+  const localPart = (email.split("@")[0] ?? "").trim().toLowerCase();
+  if (!localPart) return "";
+  const token = localPart.split(/[._-]+/)[0] ?? "";
+  if (!token) return "";
+  return token.charAt(0).toUpperCase() + token.slice(1);
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 export function UserAuthOverlay({
   initialMode,
   initialEmail = "",
@@ -28,6 +42,7 @@ export function UserAuthOverlay({
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [inviteCta, setInviteCta] = useState<{ role: string; url: string } | null>(null);
+  const suggestedName = useMemo(() => deriveFirstNameFromEmail(initialEmail), [initialEmail]);
 
   type FormValues = { email: string; password?: string; fullName?: string };
 
@@ -77,7 +92,7 @@ export function UserAuthOverlay({
       mode === "login"
         ? { email: initialEmail, password: "" }
         : inviteToken
-          ? { email: initialEmail, fullName: "", password: "" }
+          ? { email: initialEmail, fullName: suggestedName, password: "" }
           : { email: initialEmail },
   });
 
@@ -207,14 +222,30 @@ export function UserAuthOverlay({
         return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email: initialEmail,
-        password: values.password ?? "",
-      });
-      if (error) {
-        setServerMessage("Registrierung abgeschlossen. Bitte jetzt anmelden.");
-        router.push(`/login?email=${encodeURIComponent(initialEmail)}`);
+      const existingSession = await supabase.auth.getSession();
+      if (existingSession.data.session) {
+        router.push("/");
         router.refresh();
+        return;
+      }
+
+      let signedIn = false;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: initialEmail,
+          password: values.password ?? "",
+        });
+        if (!error) {
+          signedIn = true;
+          break;
+        }
+        await wait(350);
+      }
+
+      if (!signedIn) {
+        setServerMessage(
+          "Registrierung abgeschlossen. Die automatische Anmeldung dauert gerade laenger als erwartet - bitte Seite kurz neu laden."
+        );
         return;
       }
 
@@ -243,7 +274,7 @@ export function UserAuthOverlay({
         ) : null}
       </div>
       {invitedRole ? (
-        <p className="mb-4 rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-300">
+        <p className="mb-4 rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-black">
           Du wurdest als <strong>{invitedRole.toUpperCase()}</strong> eingeladen.
         </p>
       ) : null}

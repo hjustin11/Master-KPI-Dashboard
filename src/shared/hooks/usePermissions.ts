@@ -11,6 +11,11 @@ import {
 import type { Role } from "@/shared/lib/invitations";
 import type { DashboardActionKey, DashboardWidgetKey } from "@/shared/lib/role-surface-access";
 import { actionAccessForRole, widgetVisibilityForRole } from "@/shared/lib/role-surface-access";
+import {
+  type DashboardPageAccessKey,
+  PAGE_ACCESS_BY_PATH,
+  pageAccessForRole,
+} from "@/shared/lib/role-page-access";
 
 /**
  * Persistenz (localStorage) kann ältere Einträge ohne neuere Sidebar-Keys enthalten.
@@ -47,6 +52,7 @@ export function usePermissions() {
   const rolePermissions = useAppStore((state) => state.rolePermissions);
   const roleSidebarItems = useAppStore((state) => state.roleSidebarItems);
   const roleSectionVisibility = useAppStore((state) => state.roleSectionVisibility);
+  const rolePageAccess = useAppStore((state) => state.rolePageAccess);
   const roleWidgetVisibility = useAppStore((state) => state.roleWidgetVisibility);
   const roleActionAccess = useAppStore((state) => state.roleActionAccess);
 
@@ -67,6 +73,10 @@ export function usePermissions() {
       roleSidebarItems[effectiveRoleKey]
     );
     const sectionVisibility = roleSectionVisibility[effectiveRoleKey];
+    const pageAccess = {
+      ...pageAccessForRole(effectiveRoleKey),
+      ...(rolePageAccess[effectiveRoleKey] ?? {}),
+    };
     const widgetVisibility = {
       ...widgetVisibilityForRole(effectiveRoleKey),
       ...(roleWidgetVisibility[effectiveRoleKey] ?? {}),
@@ -92,6 +102,17 @@ export function usePermissions() {
       if (editingAccessInRoleTest) return true;
       return Boolean(sectionVisibility?.[sectionKey]);
     };
+    const canAccessPage = (pageKey: DashboardPageAccessKey) => {
+      if (editingAccessInRoleTest) return true;
+      return Boolean(pageAccess[pageKey]);
+    };
+    const canAccessPageByPath = (pathname: string) => {
+      if (editingAccessInRoleTest) return true;
+      const knownEntries = Object.entries(PAGE_ACCESS_BY_PATH).sort((a, b) => b[0].length - a[0].length);
+      const hit = knownEntries.find(([path]) => pathname === path || pathname.startsWith(`${path}/`));
+      if (!hit) return true;
+      return Boolean(pageAccess[hit[1]]);
+    };
     const canViewWidget = (widgetKey: DashboardWidgetKey) => {
       if (editingAccessInRoleTest) return true;
       return Boolean(widgetVisibility[widgetKey]);
@@ -112,6 +133,8 @@ export function usePermissions() {
       hasPermission,
       canAccessSidebarItem,
       canViewSection,
+      canAccessPage,
+      canAccessPageByPath,
       canViewWidget,
       canUseAction,
       canViewAnalytics: hasPermission("export_data") && canAccessSidebarItem("analytics"),
@@ -126,6 +149,7 @@ export function usePermissions() {
     rolePermissions,
     roleSidebarItems,
     roleSectionVisibility,
+    rolePageAccess,
     roleWidgetVisibility,
     roleActionAccess,
     user.roleKey,

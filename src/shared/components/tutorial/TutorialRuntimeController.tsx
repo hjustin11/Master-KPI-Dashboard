@@ -71,7 +71,7 @@ export function TutorialRuntimeController({ onStateChange }: TutorialRuntimeCont
     void loadRuntime().catch((error) => {
       console.warn("[Tutorial] Runtime-Load fehlgeschlagen", error);
     });
-  }, [user.id, user.isLoading, loadRuntime]);
+  }, [user.id, user.roleKey, user.isLoading, loadRuntime]);
 
   const persistProgress = useCallback(
     async (action: "start" | "next" | "complete" | "dismiss" | "restart", tourId: string, sceneIndex: number) => {
