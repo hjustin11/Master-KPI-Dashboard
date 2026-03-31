@@ -39,49 +39,49 @@ const HOME_TILES: HomeTile[] = [
     key: "analyticsMarketplaces",
     href: "/analytics/marketplaces",
     icon: BarChart3,
-    bar: "from-sky-500/35 via-sky-400/22 to-transparent",
+    bar: "from-sky-500/18 via-sky-400/10 to-transparent",
     iconSurface:
-      "border-sky-200/60 bg-gradient-to-br from-sky-400/14 to-sky-600/8 text-sky-800/90 dark:border-sky-800/40 dark:text-sky-300/90",
+      "border-sky-200/45 bg-gradient-to-br from-sky-400/8 to-sky-600/4 text-sky-800/72 dark:border-sky-800/30 dark:text-sky-300/80",
   },
   {
     key: "analyticsForecast",
     href: "/analytics/article-forecast",
     icon: LineChart,
-    bar: "from-violet-500/35 via-violet-400/22 to-transparent",
+    bar: "from-violet-500/18 via-violet-400/10 to-transparent",
     iconSurface:
-      "border-violet-200/60 bg-gradient-to-br from-violet-400/14 to-violet-600/8 text-violet-900/85 dark:border-violet-800/40 dark:text-violet-300/90",
+      "border-violet-200/45 bg-gradient-to-br from-violet-400/8 to-violet-600/4 text-violet-900/70 dark:border-violet-800/30 dark:text-violet-300/80",
   },
   {
     key: "updates",
     href: "/updates",
     icon: Megaphone,
-    bar: "from-amber-500/35 via-amber-400/22 to-transparent",
+    bar: "from-amber-500/18 via-amber-400/10 to-transparent",
     iconSurface:
-      "border-amber-200/60 bg-gradient-to-br from-amber-400/14 to-amber-600/8 text-amber-950/85 dark:border-amber-800/40 dark:text-amber-300/90",
+      "border-amber-200/45 bg-gradient-to-br from-amber-400/8 to-amber-600/4 text-amber-950/70 dark:border-amber-800/30 dark:text-amber-300/80",
   },
   {
     key: "profile",
     href: "/settings/profile",
     icon: UserRound,
-    bar: "from-emerald-500/35 via-emerald-400/22 to-transparent",
+    bar: "from-emerald-500/18 via-emerald-400/10 to-transparent",
     iconSurface:
-      "border-emerald-200/60 bg-gradient-to-br from-emerald-400/14 to-emerald-600/8 text-emerald-950/85 dark:border-emerald-800/40 dark:text-emerald-300/90",
+      "border-emerald-200/45 bg-gradient-to-br from-emerald-400/8 to-emerald-600/4 text-emerald-950/70 dark:border-emerald-800/30 dark:text-emerald-300/80",
   },
   {
     key: "xentralOrders",
     href: "/xentral/orders",
     icon: PackageSearch,
-    bar: "from-rose-500/35 via-rose-400/22 to-transparent",
+    bar: "from-rose-500/18 via-rose-400/10 to-transparent",
     iconSurface:
-      "border-rose-200/60 bg-gradient-to-br from-rose-400/14 to-rose-600/8 text-rose-950/85 dark:border-rose-800/40 dark:text-rose-300/90",
+      "border-rose-200/45 bg-gradient-to-br from-rose-400/8 to-rose-600/4 text-rose-950/70 dark:border-rose-800/30 dark:text-rose-300/80",
   },
   {
     key: "amazonOrders",
     href: "/amazon/orders",
     icon: ShoppingBag,
-    bar: "from-orange-500/35 via-orange-400/22 to-transparent",
+    bar: "from-orange-500/18 via-orange-400/10 to-transparent",
     iconSurface:
-      "border-orange-200/60 bg-gradient-to-br from-orange-400/14 to-orange-600/8 text-orange-950/85 dark:border-orange-800/40 dark:text-orange-300/90",
+      "border-orange-200/45 bg-gradient-to-br from-orange-400/8 to-orange-600/4 text-orange-950/70 dark:border-orange-800/30 dark:text-orange-300/80",
   },
 ];
 
@@ -123,12 +123,12 @@ export default function DashboardHome() {
               className={cn(
                 "group overflow-hidden border-border/50 bg-card/85",
                 "transition-all duration-300",
-                "motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:hover:shadow-primary/5",
+                "motion-safe:hover:shadow-sm motion-safe:hover:shadow-primary/3",
               )}
             >
               <div
                 className={cn(
-                  "h-1 w-full bg-gradient-to-r opacity-80 transition-opacity group-hover:opacity-100",
+                    "h-1 w-full bg-gradient-to-r opacity-70 transition-opacity group-hover:opacity-85",
                   tile.bar,
                 )}
               />
@@ -136,7 +136,7 @@ export default function DashboardHome() {
                 <div
                   className={cn(
                     "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
-                    "motion-safe:transition-transform motion-safe:duration-300 motion-safe:group-hover:scale-[1.04] motion-safe:group-hover:rotate-2",
+                    "motion-safe:transition-transform motion-safe:duration-300 motion-safe:group-hover:scale-[1.01]",
                     tile.iconSurface,
                   )}
                 >
@@ -156,7 +156,7 @@ export default function DashboardHome() {
                   className={cn(
                     buttonVariants({ size: "sm", variant: "ghost" }),
                     "w-full font-medium text-muted-foreground",
-                    "hover:bg-primary/6 hover:text-primary/90",
+                    "hover:bg-primary/5 hover:text-primary/80",
                   )}
                   href={tile.href}
                 >
