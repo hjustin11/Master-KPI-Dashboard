@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/shared/lib/supabase/env";
 import { type Role } from "@/shared/lib/invitations";
 
 function resolveRole(value: unknown): Role | null {
@@ -109,6 +111,7 @@ export async function POST(request: Request) {
 
   const { error: updateUserError } = await admin.auth.admin.updateUserById(userId, {
     password,
+    email_confirm: true,
     user_metadata: {
       full_name: fullName,
       role,
@@ -146,6 +149,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Einladung konnte nicht aktualisiert werden." }, { status: 500 });
   }
 
-  return NextResponse.json({ message: "Registrierung abgeschlossen.", role });
+  // Sitzung serverseitig mit Anon-Key erzeugen und an den Client übergeben — zuverlässiger als
+  // nur clientseitiges signInWithPassword direkt nach dem Passwort-Update (Timing/Confirm).
+  const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: signInData, error: signInError } = await authClient.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (signInError || !signInData.session) {
+    return NextResponse.json(
+      {
+        error: "Registrierung gespeichert, Anmeldung konnte nicht gestartet werden. Bitte auf der Anmeldeseite erneut versuchen.",
+        details: signInError?.message,
+      },
+      { status: 500 }
+    );
+  }
+
+  const session = signInData.session;
+  return NextResponse.json({
+    message: "Registrierung abgeschlossen.",
+    role,
+    session: {
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      expires_in: session.expires_in,
+      expires_at: session.expires_at,
+      token_type: session.token_type,
+    },
+  });
 }
 

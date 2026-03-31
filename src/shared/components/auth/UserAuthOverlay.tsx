@@ -216,10 +216,30 @@ export function UserAuthOverlay({
           password: values.password,
         }),
       });
-      const payload = (await res.json()) as { message?: string; role?: string; error?: string };
+      const payload = (await res.json()) as {
+        message?: string;
+        role?: string;
+        error?: string;
+        session?: {
+          access_token: string;
+          refresh_token: string;
+        };
+      };
       if (!res.ok) {
         setServerMessage(payload.error ?? "Registrierung konnte nicht abgeschlossen werden.");
         return;
+      }
+
+      if (payload.session?.access_token && payload.session?.refresh_token) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: payload.session.access_token,
+          refresh_token: payload.session.refresh_token,
+        });
+        if (!sessionError) {
+          router.push("/");
+          router.refresh();
+          return;
+        }
       }
 
       const existingSession = await supabase.auth.getSession();
@@ -230,7 +250,7 @@ export function UserAuthOverlay({
       }
 
       let signedIn = false;
-      for (let attempt = 0; attempt < 4; attempt += 1) {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
         const { error } = await supabase.auth.signInWithPassword({
           email: initialEmail,
           password: values.password ?? "",
@@ -239,13 +259,16 @@ export function UserAuthOverlay({
           signedIn = true;
           break;
         }
-        await wait(350);
+        await wait(400 + attempt * 150);
       }
 
       if (!signedIn) {
         setServerMessage(
-          "Registrierung abgeschlossen. Die automatische Anmeldung dauert gerade laenger als erwartet - bitte Seite kurz neu laden."
+          payload.message ??
+            "Registrierung abgeschlossen. Bitte melde dich jetzt mit E-Mail und Passwort an."
         );
+        router.push(`/login?email=${encodeURIComponent(initialEmail)}`);
+        router.refresh();
         return;
       }
 
