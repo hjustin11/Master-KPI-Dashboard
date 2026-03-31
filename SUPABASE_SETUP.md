@@ -48,6 +48,12 @@ In Supabase Dashboard:
 
 Falls du mit einer Domain arbeitest, diese URLs analog mit deiner Domain eintragen.
 
+### E-Mail-Bestaetigung bei Einladungen
+
+Eingeladene Nutzer werden serverseitig als bestaetigt markiert (`email_confirm` ueber die Admin-API), damit **keine zusaetzliche Bestaetigungs-Mail** noetig ist — die Einladung durch eine berechtigte Person gilt als Verifizierung.
+
+Optional im Dashboard: **Authentication → Providers → Email → „Confirm email“** deaktivieren, falls du trotzdem noch eine Blockade durch globale Einstellungen siehst.
+
 ## 4) Einladungs-Mail testen
 
 1. Als Owner einloggen

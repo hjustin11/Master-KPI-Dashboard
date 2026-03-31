@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { confirmAuthUserEmail } from "@/shared/lib/supabase/confirm-invited-email";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/shared/lib/supabase/env";
 import { type Role } from "@/shared/lib/invitations";
 
@@ -111,7 +112,6 @@ export async function POST(request: Request) {
 
   const { error: updateUserError } = await admin.auth.admin.updateUserById(userId, {
     password,
-    email_confirm: true,
     user_metadata: {
       full_name: fullName,
       role,
@@ -123,6 +123,11 @@ export async function POST(request: Request) {
 
   if (updateUserError) {
     return NextResponse.json({ error: "Benutzer konnte nicht aktualisiert werden." }, { status: 500 });
+  }
+
+  const { error: confirmError } = await confirmAuthUserEmail(admin, userId);
+  if (confirmError) {
+    return NextResponse.json({ error: "E-Mail-Bestaetigung konnte nicht gesetzt werden." }, { status: 500 });
   }
 
   // Profiles: zentrale, sichtbare Rolle + Name (Option B)

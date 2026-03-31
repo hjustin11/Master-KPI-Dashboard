@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { confirmAuthUserEmail } from "@/shared/lib/supabase/confirm-invited-email";
 import { type Role } from "@/shared/lib/invitations";
 
 function resolveRole(value: string): Role | null {
@@ -100,6 +101,14 @@ export async function POST(request: Request) {
   if (updateUserError) {
     return NextResponse.json(
       { error: "Benutzerrolle konnte nicht gesetzt werden." },
+      { status: 500 }
+    );
+  }
+
+  const { error: confirmError } = await confirmAuthUserEmail(admin, user.id);
+  if (confirmError) {
+    return NextResponse.json(
+      { error: "E-Mail-Bestaetigung konnte nicht gesetzt werden." },
       { status: 500 }
     );
   }

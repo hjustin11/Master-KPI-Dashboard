@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { confirmAuthUserEmail } from "@/shared/lib/supabase/confirm-invited-email";
 import { type Role } from "@/shared/lib/invitations";
 
 type InvitationInsert = {
@@ -185,7 +186,7 @@ export async function POST(request: Request) {
   }
 
   // Legt einen echten Benutzer in auth.users an und versendet eine echte Supabase-Einladung.
-  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
+  const { data: inviteAuth, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
     redirectTo: inviteUrl,
     data: {
       role,
@@ -193,6 +194,10 @@ export async function POST(request: Request) {
       invite_token: token,
     },
   });
+
+  if (!inviteError && inviteAuth?.user?.id) {
+    await confirmAuthUserEmail(admin, inviteAuth.user.id);
+  }
 
   if (inviteError) {
     const alreadyRegistered =
