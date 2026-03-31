@@ -4,18 +4,10 @@ import { createAdminClient } from "@/shared/lib/supabase/admin";
 import { confirmAuthUserEmail } from "@/shared/lib/supabase/confirm-invited-email";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/shared/lib/supabase/env";
 import { type Role } from "@/shared/lib/invitations";
+import { normalizeRoleKey } from "@/shared/lib/roles";
 
 function resolveRole(value: unknown): Role | null {
-  if (
-    value === "owner" ||
-    value === "admin" ||
-    value === "manager" ||
-    value === "analyst" ||
-    value === "viewer"
-  ) {
-    return value;
-  }
-  return null;
+  return normalizeRoleKey(value);
 }
 
 async function findAuthUserIdByEmail(email: string) {

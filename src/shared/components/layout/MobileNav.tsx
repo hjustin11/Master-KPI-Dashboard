@@ -13,6 +13,7 @@ import {
   ShoppingBag,
   ShoppingCart,
   Store,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -82,6 +83,14 @@ const mainItems: Array<{
     requiredPermissions: ["manage_integrations"],
   },
   {
+    key: "myArea",
+    label: "Mein Bereich",
+    href: "/mein-bereich",
+    activeGroup: "/mein-bereich",
+    icon: User,
+    requiredPermissions: ["manage_integrations"],
+  },
+  {
     key: "advertising",
     label: "Werbung",
     href: "/advertising/campaigns",
@@ -140,7 +149,7 @@ export function MobileNav() {
   const roleTestAccessEditMode = useAppStore((s) => s.roleTestAccessEditMode);
   const roleSidebarItems = useAppStore((s) => s.roleSidebarItems);
   const toggleRoleSidebarItem = useAppStore((s) => s.toggleRoleSidebarItem);
-  const advertisingLocked = !user.isLoading && !isAdvertisingDeveloper;
+  const isWipLocked = !user.isLoading && !isAdvertisingDeveloper;
 
   const navAccessEdit = useMemo((): NavAccessEditConfig | undefined => {
     if (user.isLoading || user.roleKey !== "owner" || !roleTestingEnabled || !roleTestAccessEditMode) {
@@ -193,12 +202,12 @@ export function MobileNav() {
             const Icon = item.icon;
             const active = isActive(pathname, item.activeGroup ?? item.href);
 
-            if (item.key === "advertising" && advertisingLocked) {
+            if ((item.key === "advertising" || item.key === "myArea") && isWipLocked) {
               return (
                 <span
                   key={item.key}
                   data-tutorial-nav={item.key}
-                  title={t("nav.advertisingLockedHint")}
+                  title={item.key === "myArea" ? t("nav.myAreaLockedHint") : t("nav.advertisingLockedHint")}
                   className={cn(
                     "flex min-w-[72px] shrink-0 cursor-not-allowed flex-col items-center justify-center gap-1 px-0.5 text-[10px] opacity-60 transition-colors duration-150 sm:text-[11px]",
                     "text-muted-foreground"
@@ -250,7 +259,7 @@ export function MobileNav() {
                     active ? "text-primary" : "text-muted-foreground"
                   )}
                 >
-                  {item.key === "advertising" && !user.isLoading && isAdvertisingDeveloper ? (
+                  {(item.key === "advertising" || item.key === "myArea") && !user.isLoading && isAdvertisingDeveloper ? (
                     <span className="relative inline-flex">
                       <Icon className="h-4 w-4" />
                       <Construction

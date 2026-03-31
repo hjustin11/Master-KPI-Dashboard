@@ -39,6 +39,7 @@
   },
   "nav": {
     "start": "Start",
+    "myArea": "Mein Bereich",
     "amazon": "Amazon",
     "amazonOrders": "Bestellungen",
     "amazonProducts": "Produkte",
@@ -63,6 +64,8 @@
     "advertisingWipBadge": "In Arbeit",
     "advertisingLockedHint": "Bereich in Arbeit. Nur Entwickler haben Zugriff.",
     "advertisingWipTooltip": "Werbung – in Arbeit (voller Zugriff nur für Entwickler)",
+    "myAreaLockedHint": "Bereich in Arbeit. Nur Entwickler haben Zugriff.",
+    "myAreaWipTooltip": "Mein Bereich – in Arbeit (voller Zugriff nur für Entwickler)",
     "adCampaigns": "Kampagnen",
     "adPerformance": "Performance",
     "analytics": "Analytics",
@@ -131,6 +134,7 @@
   },
   "sidebarItems": {
     "overview": "Mein Bereich",
+    "myArea": "Mein Bereich",
     "amazon": "Amazon",
     "otto": "Otto",
     "kaufland": "Kaufland",
@@ -226,7 +230,7 @@
   },
   "settingsUsers": {
     "accessDeniedTitle": "Zugriff eingeschränkt",
-    "accessDeniedBody": "Nur die Rolle „Entwickler“ kann Einladungen, Rollen und Rechte verwalten.",
+    "accessDeniedBody": "Nur Entwickler oder Team Lead können Einladungen, Rollen und Rechte verwalten.",
     "standardRoles": "Standardrollen",
     "customRoles": "Eigene Rollen",
     "newRolePlaceholder": "Name der neuen Rolle",
@@ -492,6 +496,9 @@
     "fulfillment": "FBA / FBM",
     "status": "Status",
     "unknown": "Unbekannt",
+    "statusShipped": "Versendet",
+    "statusPending": "Ausstehend",
+    "statusCancelled": "Storniert",
     "loadFailed": "Amazon-Bestellungen konnten nicht geladen werden."
   },
   "ottoOrders": {

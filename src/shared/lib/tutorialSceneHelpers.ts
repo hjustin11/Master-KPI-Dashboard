@@ -3,6 +3,7 @@ import { SIDEBAR_ITEM_CONFIG, type SidebarItemKey } from "@/shared/lib/access-co
 /** i18n-Schlüssel für Sidebar-Hauptpunkte (Tutorial-Editor / Hinweise). */
 export const TUTORIAL_SIDEBAR_I18N_KEY: Record<SidebarItemKey, string> = {
   overview: "sidebarItems.overview",
+  myArea: "sidebarItems.myArea",
   amazon: "nav.amazon",
   ebay: "nav.ebay",
   otto: "nav.otto",

@@ -31,11 +31,14 @@ type AmazonOrderRow = {
   currency: string;
   fulfillment: string;
   status: string;
+  statusRaw?: string;
 };
 
 type OrdersResponse = {
   items?: AmazonOrderRow[];
   error?: string;
+  status?: number;
+  preview?: string;
   missingKeys?: string[];
   hint?: string;
 };
@@ -51,10 +54,19 @@ function toDateInputValue(date: Date) {
     .slice(0, 10);
 }
 
+function normalizeStatus(status: string) {
+  const normalized = status.trim().toLowerCase();
+  if (normalized === "shipped") return "shipped";
+  if (normalized === "unshipped" || normalized === "pending" || normalized === "partiallyshipped") return "pending";
+  if (normalized === "canceled" || normalized === "cancelled") return "cancelled";
+  return "unknown";
+}
+
 function statusVariant(status: string): "default" | "secondary" | "outline" | "destructive" {
-  if (status === "Versendet") return "default";
-  if (status === "Ausstehend") return "secondary";
-  if (status === "Storniert") return "destructive";
+  const normalized = normalizeStatus(status);
+  if (normalized === "shipped") return "default";
+  if (normalized === "pending") return "secondary";
+  if (normalized === "cancelled") return "destructive";
   return "outline";
 }
 
@@ -140,7 +152,13 @@ export default function AmazonOrdersPage() {
         header: t("amazonOrders.status"),
         cell: ({ row }) => (
           <Badge variant={statusVariant(row.original.status)}>
-            {row.original.status || t("amazonOrders.unknown")}
+            {(() => {
+            const key = normalizeStatus(row.original.statusRaw || row.original.status);
+            if (key === "shipped") return t("amazonOrders.statusShipped");
+            if (key === "pending") return t("amazonOrders.statusPending");
+            if (key === "cancelled") return t("amazonOrders.statusCancelled");
+            return t("amazonOrders.unknown");
+          })()}
           </Badge>
         ),
       },
@@ -196,11 +214,18 @@ export default function AmazonOrdersPage() {
         const res = await fetch(`/api/amazon/orders?${search.toString()}`, { cache: "no-store" });
         const payload = (await res.json()) as OrdersResponse;
         if (!res.ok) {
-          const message = payload.error ?? t("amazonOrders.loadFailed");
+          const message = t("amazonOrders.loadFailed");
+          const serverHint = [
+            payload.hint,
+            typeof payload.status === "number" ? `HTTP ${payload.status}` : null,
+            payload.preview ? String(payload.preview).slice(0, 160) : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
           setError({
             message,
             missingKeys: payload.missingKeys,
-            hint: payload.hint,
+            hint: serverHint || undefined,
           });
           setRows([]);
           return;

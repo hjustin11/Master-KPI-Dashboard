@@ -1,18 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 import { type Role } from "@/shared/lib/invitations";
+import { normalizeRoleKey } from "@/shared/lib/roles";
 
 function resolveRole(value: unknown): Role | null {
-  if (
-    value === "owner" ||
-    value === "admin" ||
-    value === "manager" ||
-    value === "analyst" ||
-    value === "viewer"
-  ) {
-    return value;
-  }
-  return null;
+  return normalizeRoleKey(value);
 }
 
 export async function POST(request: Request) {

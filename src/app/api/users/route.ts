@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { isOwnerRole, isOwnerOrAdminRole } from "@/shared/lib/roles";
 
 async function getCurrentUser() {
   const supabase = await createServerSupabase();
@@ -12,7 +13,7 @@ async function getCurrentUser() {
   return { user, supabase };
 }
 
-async function isOwnerUser(args: {
+async function isOwnerOrTeamLeadUser(args: {
   user: { id: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> };
   supabase: Awaited<ReturnType<typeof createServerSupabase>>;
 }) {
@@ -22,10 +23,8 @@ async function isOwnerUser(args: {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  if (profile?.role === "owner") return true;
-  const appRole = user.app_metadata?.role;
-  const userRole = user.user_metadata?.role;
-  return appRole === "owner" || userRole === "owner";
+  if (isOwnerOrAdminRole(profile?.role)) return true;
+  return isOwnerOrAdminRole(user.app_metadata?.role) || isOwnerOrAdminRole(user.user_metadata?.role);
 }
 
 export async function GET() {
@@ -33,9 +32,9 @@ export async function GET() {
   if (!currentUser) {
     return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
   }
-  if (!(await isOwnerUser(currentUser))) {
+  if (!(await isOwnerOrTeamLeadUser(currentUser))) {
     return NextResponse.json(
-      { error: "Nur Owner dürfen Benutzer verwalten." },
+      { error: "Nur Owner oder Team-Lead dürfen Teammitglieder sehen." },
       { status: 403 }
     );
   }
@@ -77,7 +76,17 @@ export async function DELETE(request: Request) {
   if (!currentUser) {
     return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
   }
-  if (!(await isOwnerUser(currentUser))) {
+  const isOwner = await (async () => {
+    const { user, supabase } = currentUser;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (isOwnerRole(profile?.role)) return true;
+    return isOwnerRole(user.app_metadata?.role) || isOwnerRole(user.user_metadata?.role);
+  })();
+  if (!isOwner) {
     return NextResponse.json(
       { error: "Nur Owner dürfen Benutzer entfernen." },
       { status: 403 }

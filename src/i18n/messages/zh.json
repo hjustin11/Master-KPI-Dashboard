@@ -39,6 +39,7 @@
   },
   "nav": {
     "start": "首页",
+    "myArea": "我的区域",
     "amazon": "亚马逊",
     "amazonOrders": "订单",
     "amazonProducts": "商品",
@@ -63,6 +64,8 @@
     "advertisingWipBadge": "施工中",
     "advertisingLockedHint": "该区域施工中，仅开发者可访问。",
     "advertisingWipTooltip": "广告 – 施工中（仅开发者可完整访问）",
+    "myAreaLockedHint": "该区域开发中。当前仅开发者可访问。",
+    "myAreaWipTooltip": "我的区域开发中（仅开发者可完整访问）",
     "adCampaigns": "广告活动",
     "adPerformance": "成效",
     "analytics": "分析",
@@ -131,6 +134,7 @@
   },
   "sidebarItems": {
     "overview": "我的工作区",
+    "myArea": "我的区域",
     "amazon": "亚马逊",
     "otto": "Otto",
     "kaufland": "Kaufland",
@@ -227,7 +231,7 @@
   },
   "settingsUsers": {
     "accessDeniedTitle": "访问受限",
-    "accessDeniedBody": "仅「开发者」角色可管理邀请、角色与权限。",
+    "accessDeniedBody": "仅「开发者」或「团队负责人」可管理邀请、角色与权限。",
     "standardRoles": "内置角色",
     "customRoles": "自定义角色",
     "newRolePlaceholder": "新角色名称",
@@ -493,6 +497,9 @@
     "fulfillment": "FBA / FBM",
     "status": "状态",
     "unknown": "未知",
+    "statusShipped": "已发货",
+    "statusPending": "待处理",
+    "statusCancelled": "已取消",
     "loadFailed": "无法加载亚马逊订单。"
   },
   "ottoOrders": {

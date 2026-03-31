@@ -46,9 +46,15 @@ function percentEncodeRfc3986(value: string) {
   );
 }
 
+function asciiCompare(a: string, b: string) {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
 function canonicalQuery(query: Record<string, string>) {
   const pairs = Object.entries(query).filter(([, v]) => v !== "");
-  pairs.sort(([a], [b]) => a.localeCompare(b));
+  pairs.sort(([a], [b]) => asciiCompare(a, b));
   return pairs
     .map(([k, v]) => `${percentEncodeRfc3986(k)}=${percentEncodeRfc3986(v)}`)
     .join("&");
@@ -181,7 +187,7 @@ async function spApiGet(args: {
   if (args.awsSessionToken) {
     canonicalHeadersList.push(["x-amz-security-token", args.awsSessionToken]);
   }
-  canonicalHeadersList.sort(([a], [b]) => a.localeCompare(b));
+  canonicalHeadersList.sort(([a], [b]) => asciiCompare(a, b));
 
   const canonicalHeaders = canonicalHeadersList.map(([k, v]) => `${k}:${v.trim()}\n`).join("");
   const signedHeaders = canonicalHeadersList.map(([k]) => k).join(";");
@@ -255,12 +261,12 @@ function mapFulfillment(channel: string) {
 
 function mapStatus(status: string) {
   const normalized = status.trim().toLowerCase();
-  if (normalized === "shipped") return "Versendet";
+  if (normalized === "shipped") return "shipped";
   if (normalized === "unshipped" || normalized === "pending" || normalized === "partiallyshipped") {
-    return "Ausstehend";
+    return "pending";
   }
-  if (normalized === "canceled") return "Storniert";
-  return status || "Unbekannt";
+  if (normalized === "canceled") return "cancelled";
+  return normalized || "unknown";
 }
 
 export async function GET(request: Request) {
@@ -322,7 +328,7 @@ export async function GET(request: Request) {
       if (!ordersResult.res.ok || !ordersResult.json) {
         return NextResponse.json(
           {
-            error: "Amazon Bestellungen konnten nicht geladen werden.",
+            error: "Amazon orders could not be loaded.",
             status: ordersResult.res.status,
             preview: (ordersResult.text ?? "").slice(0, 320),
           },

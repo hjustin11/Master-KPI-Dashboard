@@ -113,6 +113,13 @@ const navItems: NavItem[] = [
     icon: Home,
   },
   {
+    key: "myArea",
+    labelKey: "nav.myArea",
+    href: "/mein-bereich",
+    icon: User,
+    requiredPermissions: ["manage_integrations"],
+  },
+  {
     key: "amazon",
     labelKey: "nav.amazon",
     href: "/amazon",
@@ -334,7 +341,7 @@ const MARKETPLACE_NAV_KEYS = new Set<SidebarItemKey>([
   "shopify",
 ]);
 
-const START_NAV_KEYS = new Set<SidebarItemKey>(["overview"]);
+const START_NAV_KEYS = new Set<SidebarItemKey>(["overview", "myArea"]);
 
 function partitionNavItems(items: NavItem[]): {
   start: NavItem[];
@@ -395,10 +402,11 @@ function SingleNavItem({
   const Icon = item.icon;
   const visibleChildren = visibleNavChildren(item, hasPermission, canAccessPageByPath);
   const hasSubnav = visibleChildren.length > 0;
-  const advertisingLocked =
-    item.key === "advertising" && !userIsLoading && !isAdvertisingDeveloper;
-  const advertisingWipOwner =
-    item.key === "advertising" && !userIsLoading && isAdvertisingDeveloper;
+  const isWipSection = item.key === "advertising" || item.key === "myArea";
+  const wipLocked = isWipSection && !userIsLoading && !isAdvertisingDeveloper;
+  const wipOwner = isWipSection && !userIsLoading && isAdvertisingDeveloper;
+  const wipLockedHint = item.key === "myArea" ? t("nav.myAreaLockedHint") : t("nav.advertisingLockedHint");
+  const wipTooltip = item.key === "myArea" ? t("nav.myAreaWipTooltip") : t("nav.advertisingWipTooltip");
   /** Eingeklappte Sidebar (Icons): nur Hauptlink. Sonst: Unterpunkte per Zeile ein-/ausklappbar. */
   const subnavCollapsible = !collapsed && hasSubnav;
 
@@ -426,7 +434,7 @@ function SingleNavItem({
   );
 
   const mainLabel =
-    advertisingWipOwner && !collapsed ? (
+    wipOwner && !collapsed ? (
       <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left">
         <span className="truncate">{t(item.labelKey)}</span>
         <span title={t("nav.advertisingWipBadge")} className="inline-flex shrink-0">
@@ -442,11 +450,11 @@ function SingleNavItem({
       <span
         className={cn(
           "inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4",
-          advertisingWipOwner && "relative"
+          wipOwner && "relative"
         )}
       >
         <Icon aria-hidden />
-        {advertisingWipOwner && collapsed ? (
+        {wipOwner && collapsed ? (
           <Construction
             className="pointer-events-none absolute -right-1 -top-0.5 h-3 w-3 text-amber-600"
             aria-hidden
@@ -472,7 +480,7 @@ function SingleNavItem({
       <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4">
         <Icon aria-hidden />
       </span>
-      {advertisingWipOwner ? (
+      {wipOwner ? (
         <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left">
           <span className="truncate">{t(item.labelKey)}</span>
           <Construction className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />
@@ -504,14 +512,14 @@ function SingleNavItem({
     compact ? "py-1 text-[11px] leading-snug" : "py-1.5 text-xs"
   );
 
-  const showSubnav = !collapsed && hasSubnav && subOpen && !advertisingLocked;
+  const showSubnav = !collapsed && hasSubnav && subOpen && !wipLocked;
 
-  if (advertisingLocked) {
+  if (wipLocked) {
     const lockedRow = (
       <div
         className={cn(linkClass, "cursor-not-allowed opacity-[0.65]")}
         aria-disabled
-        title={t("nav.advertisingLockedHint")}
+        title={wipLockedHint}
       >
         <span
           className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/[0.12] px-1.5 py-1 dark:border-amber-500/30 dark:bg-amber-500/10"
@@ -530,7 +538,7 @@ function SingleNavItem({
         {collapsed ? (
           <Tooltip>
             <TooltipTrigger render={<div />}>{lockedRow}</TooltipTrigger>
-            <TooltipContent side="right">{t("nav.advertisingLockedHint")}</TooltipContent>
+            <TooltipContent side="right">{wipLockedHint}</TooltipContent>
           </Tooltip>
         ) : (
           lockedRow
@@ -561,7 +569,7 @@ function SingleNavItem({
         <Tooltip>
           <TooltipTrigger render={<div />}>{baseLinkWrapped}</TooltipTrigger>
           <TooltipContent side="right">
-            {advertisingWipOwner ? t("nav.advertisingWipTooltip") : t(item.labelKey)}
+            {wipOwner ? wipTooltip : t(item.labelKey)}
           </TooltipContent>
         </Tooltip>
       ) : subnavCollapsible ? (

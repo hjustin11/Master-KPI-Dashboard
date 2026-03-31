@@ -8,6 +8,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/shared/lib/supabase/client";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { resolveRoleLabel } from "@/i18n/resolve-role-label";
+import { normalizeRoleKey } from "@/shared/lib/roles";
 
 type AuthMode = "login" | "register";
 
@@ -39,10 +42,18 @@ export function UserAuthOverlay({
   inviteToken,
 }: UserAuthOverlayProps) {
   const router = useRouter();
+  const { locale } = useTranslation();
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [inviteCta, setInviteCta] = useState<{ role: string; url: string } | null>(null);
   const suggestedName = useMemo(() => deriveFirstNameFromEmail(initialEmail), [initialEmail]);
+
+  const roleLabel = (raw: string | undefined | null) => {
+    const normalized = normalizeRoleKey(raw);
+    if (!normalized) return (raw ?? "").trim();
+    return resolveRoleLabel(normalized, undefined, locale);
+  };
+
 
   type FormValues = { email: string; password?: string; fullName?: string };
 
@@ -125,7 +136,7 @@ export function UserAuthOverlay({
             if ("invited" in data && data.invited) {
               setInviteCta({ role: data.role, url: data.inviteUrl });
               setServerMessage(
-                `Du hast eine Einladung als ${data.role.toUpperCase()}. Bitte Registrierung abschließen.`
+                `Du hast eine Einladung als ${roleLabel(data.role)}. Bitte Registrierung abschließen.`
               );
               return;
             }
@@ -298,7 +309,7 @@ export function UserAuthOverlay({
       </div>
       {invitedRole ? (
         <p className="mb-4 rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-black">
-          Du wurdest als <strong>{invitedRole.toUpperCase()}</strong> eingeladen.
+          Du wurdest als <strong>{roleLabel(invitedRole)}</strong> eingeladen.
         </p>
       ) : null}
 
@@ -432,7 +443,7 @@ export function UserAuthOverlay({
             href={inviteCta.url}
             className="inline-flex w-full items-center justify-center rounded-md border border-border/60 bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent/40"
           >
-            Registrierung abschließen (Rolle: {inviteCta.role.toUpperCase()})
+            Registrierung abschließen (Rolle: {roleLabel(inviteCta.role)})
           </Link>
         ) : null}
 

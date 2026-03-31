@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { toast } from "sonner";
 import { type Role } from "@/shared/lib/invitations";
 import {
   DASHBOARD_SECTION_CONFIG,
@@ -17,7 +16,6 @@ import { useAppStore } from "@/shared/stores/useAppStore";
 import { usePermissions } from "@/shared/hooks/usePermissions";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { resolveRoleLabel } from "@/i18n/resolve-role-label";
-import { saveDashboardAccessConfigToServer } from "@/shared/lib/dashboard-access-config";
 import type { SettingsUsersSectionId } from "@/shared/lib/settings-users-section-order";
 import { cn } from "@/lib/utils";
 import {
@@ -69,9 +67,7 @@ export default function SettingsUsersPage() {
   const roleSectionVisibility = useAppStore((state) => state.roleSectionVisibility);
   const roleLabels = useAppStore((state) => state.roleLabels);
   const customRoleKeys = useAppStore((state) => state.customRoleKeys);
-  const dashboardEditMode = useAppStore((state) => state.dashboardEditMode);
   const textOverrides = useAppStore((state) => state.textOverrides);
-  const setDashboardEditMode = useAppStore((state) => state.setDashboardEditMode);
   const toggleRolePermission = useAppStore((state) => state.toggleRolePermission);
   const toggleRoleSidebarItem = useAppStore((state) => state.toggleRoleSidebarItem);
   const toggleRoleSectionVisibility = useAppStore(
@@ -112,7 +108,7 @@ export default function SettingsUsersPage() {
       : fallback;
 
   const TextEditor = ({ textKey }: { textKey: string }) =>
-    dashboardEditMode ? (
+    canManageRoles ? (
       <div className="mt-2 flex items-center gap-2">
         <input
           value={textOverrides[textKey] ?? ""}
@@ -260,7 +256,7 @@ export default function SettingsUsersPage() {
   };
 
   const togglePermission = (roleKey: string, permission: PermissionKey) => {
-    if (roleKey === "owner" || !dashboardEditMode) return;
+    if (roleKey === "owner" || !canManageRoles) return;
     toggleRolePermission(roleKey, permission);
   };
 
@@ -268,17 +264,17 @@ export default function SettingsUsersPage() {
     roleKey: string,
     itemKey: SidebarItemKey
   ) => {
-    if (roleKey === "owner" || !dashboardEditMode) return;
+    if (roleKey === "owner" || !canManageRoles) return;
     toggleRoleSidebarItem(roleKey, itemKey);
   };
 
   const toggleSectionVisibility = (roleKey: string, sectionKey: DashboardSectionKey) => {
-    if (roleKey === "owner" || !dashboardEditMode) return;
+    if (roleKey === "owner" || !canManageRoles) return;
     toggleRoleSectionVisibility(roleKey, sectionKey);
   };
 
   const moveSection = (sectionId: SectionId, direction: "up" | "down") => {
-    if (!dashboardEditMode) return;
+    if (!canManageRoles) return;
     const prev = useAppStore.getState().settingsUsersSectionOrder;
     const index = prev.indexOf(sectionId);
     if (index < 0) return;
@@ -287,31 +283,6 @@ export default function SettingsUsersPage() {
     const next = [...prev];
     [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
     setSettingsUsersSectionOrder(next);
-  };
-
-  const handleToggleDashboardEdit = async () => {
-    if (dashboardEditMode) {
-      const s = useAppStore.getState();
-      const result = await saveDashboardAccessConfigToServer({
-        rolePermissions: s.rolePermissions,
-        roleSidebarItems: s.roleSidebarItems,
-        roleSectionVisibility: s.roleSectionVisibility,
-        rolePageAccess: s.rolePageAccess,
-        roleWidgetVisibility: s.roleWidgetVisibility,
-        roleActionAccess: s.roleActionAccess,
-        roleLabels: s.roleLabels,
-        customRoleKeys: s.customRoleKeys,
-        textOverrides: s.textOverrides,
-        settingsUsersSectionOrder: s.settingsUsersSectionOrder,
-      });
-      if (!result.ok) {
-        toast.error(t("settingsUsers.dashboardConfigSaveFailed", { message: result.error }));
-      } else {
-        toast.success(t("settingsUsers.dashboardConfigSaved"));
-      }
-      setIsPermissionEditMode(false);
-    }
-    setDashboardEditMode(!dashboardEditMode);
   };
 
   const getSectionOrderClass = (sectionId: SectionId) => {
@@ -338,13 +309,6 @@ export default function SettingsUsersPage() {
           <h1 className={DASHBOARD_PAGE_TITLE}>
             {text("users.page.title", t("settingsUsers.pageTitle"))}
           </h1>
-          <button
-            type="button"
-            onClick={() => void handleToggleDashboardEdit()}
-            className="rounded-md border border-border/70 bg-background px-3 py-2 text-sm transition-colors hover:bg-accent/40"
-          >
-            {dashboardEditMode ? t("settingsUsers.dashboardEditOn") : t("settingsUsers.dashboardEditOff")}
-          </button>
         </div>
         {text("users.page.description", t("settingsUsers.pageDescription")) ? (
           <p className="text-sm text-muted-foreground">
@@ -365,7 +329,7 @@ export default function SettingsUsersPage() {
             <button
               type="button"
               onClick={() => moveSection("roles-manage", "up")}
-              disabled={!dashboardEditMode || isFirstSection("roles-manage")}
+              disabled={!canManageRoles || isFirstSection("roles-manage")}
               className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
             >
               <ArrowUp className="h-3.5 w-3.5" />
@@ -373,7 +337,7 @@ export default function SettingsUsersPage() {
             <button
               type="button"
               onClick={() => moveSection("roles-manage", "down")}
-              disabled={!dashboardEditMode || isLastSection("roles-manage")}
+              disabled={!canManageRoles || isLastSection("roles-manage")}
               className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
             >
               <ArrowDown className="h-3.5 w-3.5" />
@@ -400,7 +364,7 @@ export default function SettingsUsersPage() {
                     value={roleLabels[role.value] ?? ""}
                     placeholder={resolveRoleLabel(role.value, "", locale)}
                     onChange={(event) => setRoleLabel(role.value, event.target.value)}
-                    disabled={!dashboardEditMode || !canManageRoles}
+                    disabled={!canManageRoles}
                     className="w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                   />
                 </label>
@@ -416,7 +380,7 @@ export default function SettingsUsersPage() {
               onSubmit={(event) => {
                 event.preventDefault();
                 const label = newCustomRoleLabel.trim();
-                if (!label || !dashboardEditMode || !canManageRoles) return;
+                if (!label || !canManageRoles) return;
                 addCustomRole(label, newCustomRoleTemplate);
                 setNewCustomRoleLabel("");
               }}
@@ -432,7 +396,7 @@ export default function SettingsUsersPage() {
                 onChange={(event) =>
                   setNewCustomRoleTemplate(event.target.value as Role)
                 }
-                disabled={!dashboardEditMode || !canManageRoles}
+                disabled={!canManageRoles}
                 className="rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
               >
                 {ROLE_OPTIONS.map((role) => (
@@ -444,7 +408,7 @@ export default function SettingsUsersPage() {
               </select>
               <button
                 type="submit"
-                disabled={!dashboardEditMode || !canManageRoles || !newCustomRoleLabel.trim()}
+                disabled={!canManageRoles || !newCustomRoleLabel.trim()}
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t("settingsUsers.createRole")}
@@ -468,7 +432,7 @@ export default function SettingsUsersPage() {
                             value={roleLabels[roleKey] ?? ""}
                             placeholder={resolveRoleLabel(roleKey, "", locale)}
                             onChange={(event) => setRoleLabel(roleKey, event.target.value)}
-                            disabled={!dashboardEditMode || !canManageRoles}
+                            disabled={!canManageRoles}
                             className="w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                           />
                         </td>
@@ -476,7 +440,7 @@ export default function SettingsUsersPage() {
                           <button
                             type="button"
                             onClick={() => removeRole(roleKey)}
-                            disabled={!dashboardEditMode || !canManageRoles}
+                            disabled={!canManageRoles}
                             className="rounded-md border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 transition-all duration-200 hover:bg-red-500/10"
                           >
                             {t("settingsUsers.deleteRole")}
@@ -503,7 +467,7 @@ export default function SettingsUsersPage() {
             <button
               type="button"
               onClick={() => moveSection("invite", "up")}
-              disabled={!dashboardEditMode || isFirstSection("invite")}
+              disabled={!canManageRoles || isFirstSection("invite")}
               className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
             >
               <ArrowUp className="h-3.5 w-3.5" />
@@ -511,7 +475,7 @@ export default function SettingsUsersPage() {
             <button
               type="button"
               onClick={() => moveSection("invite", "down")}
-              disabled={!dashboardEditMode || isLastSection("invite")}
+              disabled={!canManageRoles || isLastSection("invite")}
               className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
             >
               <ArrowDown className="h-3.5 w-3.5" />
@@ -571,7 +535,7 @@ export default function SettingsUsersPage() {
             <button
               type="button"
               onClick={() => moveSection("members", "up")}
-              disabled={!dashboardEditMode || isFirstSection("members")}
+              disabled={!canManageRoles || isFirstSection("members")}
               className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
             >
               <ArrowUp className="h-3.5 w-3.5" />
@@ -579,7 +543,7 @@ export default function SettingsUsersPage() {
             <button
               type="button"
               onClick={() => moveSection("members", "down")}
-              disabled={!dashboardEditMode || isLastSection("members")}
+              disabled={!canManageRoles || isLastSection("members")}
               className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
             >
               <ArrowDown className="h-3.5 w-3.5" />
@@ -650,7 +614,7 @@ export default function SettingsUsersPage() {
             <button
               type="button"
               onClick={() => moveSection("permissions", "up")}
-              disabled={!dashboardEditMode || isFirstSection("permissions")}
+              disabled={!canManageRoles || isFirstSection("permissions")}
               className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
             >
               <ArrowUp className="h-3.5 w-3.5" />
@@ -658,7 +622,7 @@ export default function SettingsUsersPage() {
             <button
               type="button"
               onClick={() => moveSection("permissions", "down")}
-              disabled={!dashboardEditMode || isLastSection("permissions")}
+              disabled={!canManageRoles || isLastSection("permissions")}
               className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
             >
               <ArrowDown className="h-3.5 w-3.5" />
@@ -670,7 +634,7 @@ export default function SettingsUsersPage() {
           <button
             type="button"
             onClick={() => setIsPermissionEditMode((prev) => !prev)}
-            disabled={!dashboardEditMode}
+            disabled={!canManageRoles}
             className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs transition-colors hover:bg-accent/40"
           >
             {isPermissionEditMode ? t("settingsUsers.permissionEditOn") : t("settingsUsers.permissionEditOff")}
@@ -697,7 +661,7 @@ export default function SettingsUsersPage() {
                     const checked =
                       rolePermissions[role.value]?.includes(permission.key) ?? false;
                     const disabled =
-                      role.value === "owner" || !isPermissionEditMode || !dashboardEditMode;
+                      role.value === "owner" || !isPermissionEditMode || !canManageRoles;
                     return (
                       <td key={role.value} className="px-3 py-2 text-center">
                         <input
@@ -728,7 +692,7 @@ export default function SettingsUsersPage() {
             <button
               type="button"
               onClick={() => moveSection("sidebar-visibility", "up")}
-              disabled={!dashboardEditMode || isFirstSection("sidebar-visibility")}
+              disabled={!canManageRoles || isFirstSection("sidebar-visibility")}
               className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
             >
               <ArrowUp className="h-3.5 w-3.5" />
@@ -736,7 +700,7 @@ export default function SettingsUsersPage() {
             <button
               type="button"
               onClick={() => moveSection("sidebar-visibility", "down")}
-              disabled={!dashboardEditMode || isLastSection("sidebar-visibility")}
+              disabled={!canManageRoles || isLastSection("sidebar-visibility")}
               className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
             >
               <ArrowDown className="h-3.5 w-3.5" />
@@ -763,7 +727,7 @@ export default function SettingsUsersPage() {
                   {testRoleOptions.map((role) => {
                     const checked = Boolean(roleSidebarItems[role.value]?.[item.key]);
                     const disabled =
-                      role.value === "owner" || !isPermissionEditMode || !dashboardEditMode;
+                      role.value === "owner" || !isPermissionEditMode || !canManageRoles;
                     return (
                       <td key={role.value} className="px-3 py-2 text-center">
                         <input
@@ -805,7 +769,7 @@ export default function SettingsUsersPage() {
                     <td className="px-3 py-2">{t(`dashboardSections.${section.key}`)}</td>
                     {testRoleOptions.map((role) => {
                       const checked = Boolean(roleSectionVisibility[role.value]?.[section.key]);
-                      const disabled = role.value === "owner" || !dashboardEditMode;
+                      const disabled = role.value === "owner" || !canManageRoles;
                       return (
                         <td key={role.value} className="px-3 py-2 text-center">
                           <input

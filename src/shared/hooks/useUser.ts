@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createClient } from "@/shared/lib/supabase/client";
+import { normalizeRoleKey } from "@/shared/lib/roles";
 
 type DashboardUser = {
   id: string;
@@ -70,8 +71,8 @@ export function useUser() {
         authUser.email?.split("@")[0] ||
         "Benutzer";
       const fallbackRoleKey =
-        (authUser.user_metadata?.role as string | undefined) ??
-        (authUser.app_metadata?.role as string | undefined) ??
+        normalizeRoleKey(authUser.user_metadata?.role) ??
+        normalizeRoleKey(authUser.app_metadata?.role) ??
         "viewer";
 
       const { data: profile } = await supabase
@@ -84,7 +85,7 @@ export function useUser() {
 
       const fullName =
         (profile?.full_name as string | undefined) || fallbackFullName;
-      let roleKey = (profile?.role as string | undefined) || fallbackRoleKey;
+      let roleKey = normalizeRoleKey(profile?.role) || fallbackRoleKey;
 
       try {
         const hostname = typeof window !== "undefined" ? window.location.hostname : "";

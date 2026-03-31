@@ -81,9 +81,15 @@ function percentEncodeRfc3986(value: string) {
   );
 }
 
+function asciiCompare(a: string, b: string) {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
 function canonicalQuery(query: Record<string, string>) {
   const pairs = Object.entries(query).filter(([, v]) => v !== "");
-  pairs.sort(([a], [b]) => a.localeCompare(b));
+  pairs.sort(([a], [b]) => asciiCompare(a, b));
   return pairs
     .map(([k, v]) => `${percentEncodeRfc3986(k)}=${percentEncodeRfc3986(v)}`)
     .join("&");
@@ -183,7 +189,7 @@ async function spApiGet(args: {
     canonicalHeadersList.push(["x-amz-security-token", args.awsSessionToken]);
   }
 
-  canonicalHeadersList.sort(([a], [b]) => a.localeCompare(b));
+  canonicalHeadersList.sort(([a], [b]) => asciiCompare(a, b));
   const canonicalHeaders = canonicalHeadersList.map(([k, v]) => `${k}:${v.trim()}\n`).join("");
   const signedHeaders = canonicalHeadersList.map(([k]) => k).join(";");
   const payloadHash = hashHex("");

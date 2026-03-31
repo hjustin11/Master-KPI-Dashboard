@@ -88,11 +88,17 @@ const HOME_TILES: HomeTile[] = [
 export default function DashboardHome() {
   const { t } = useTranslation();
   const user = useUser();
-  const firstName = user.fullName.split(" ")[0] || user.fullName;
+  const firstName = user.isLoading ? null : (user.fullName.split(" ")[0] || user.fullName);
 
   return (
     <div className={cn(DASHBOARD_PAGE_SHELL, "gap-8")}>
-      <WelcomeHero firstName={firstName} />
+      {firstName ? (
+        <WelcomeHero firstName={firstName} />
+      ) : (
+        <section className="rounded-2xl border border-border/70 bg-card/60 px-5 py-7 text-sm text-muted-foreground">
+          {t("common.loading")}
+        </section>
+      )}
 
       <section className="space-y-4" aria-labelledby="home-tiles-heading">
         <div className="flex items-center gap-2.5">

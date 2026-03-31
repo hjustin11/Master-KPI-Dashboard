@@ -2,6 +2,7 @@ import type { Role } from "@/shared/lib/invitations";
 
 export type DashboardPageAccessKey =
   | "overview.home"
+  | "myArea.page"
   | "updates.page"
   | "settings.users"
   | "settings.profile"
@@ -38,6 +39,7 @@ export const DASHBOARD_PAGE_ACCESS_CONFIG: Array<{
   path: string;
 }> = [
   { key: "overview.home", label: "Mein Bereich", path: "/" },
+  { key: "myArea.page", label: "Mein Bereich · Privat", path: "/mein-bereich" },
   { key: "updates.page", label: "Update & Feedback", path: "/updates" },
   { key: "settings.users", label: "Administration · Benutzerverwaltung", path: "/settings/users" },
   { key: "settings.profile", label: "Administration · Profil", path: "/settings/profile" },

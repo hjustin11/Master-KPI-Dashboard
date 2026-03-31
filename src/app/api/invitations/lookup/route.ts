@@ -1,22 +1,14 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 import { type Role } from "@/shared/lib/invitations";
+import { normalizeRoleKey } from "@/shared/lib/roles";
 import { getClientIpFromHeaders, isRateLimited } from "@/shared/lib/serverRateLimit";
 
 const LOOKUP_RATE_LIMIT = 30;
 const LOOKUP_RATE_WINDOW_MS = 60_000;
 
 function resolveRole(value: unknown): Role | null {
-  if (
-    value === "owner" ||
-    value === "admin" ||
-    value === "manager" ||
-    value === "analyst" ||
-    value === "viewer"
-  ) {
-    return value;
-  }
-  return null;
+  return normalizeRoleKey(value);
 }
 
 export async function POST(request: Request) {

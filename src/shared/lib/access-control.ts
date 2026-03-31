@@ -9,6 +9,7 @@ export type PermissionKey =
 
 export type SidebarItemKey =
   | "overview"
+  | "myArea"
   | "amazon"
   | "ebay"
   | "otto"
@@ -50,6 +51,7 @@ export const PERMISSION_CONFIG: Array<{ key: PermissionKey }> = [
 
 export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey }> = [
   { key: "overview" },
+  { key: "myArea" },
   { key: "amazon" },
   { key: "ebay" },
   { key: "otto" },
@@ -67,6 +69,7 @@ export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey }> = [
 ];
 
 export const SIDEBAR_REQUIRED_PERMISSIONS: Partial<Record<SidebarItemKey, PermissionKey[]>> = {
+  myArea: ["manage_integrations"],
   amazon: ["manage_integrations"],
   ebay: ["manage_integrations"],
   otto: ["manage_integrations"],
@@ -106,6 +109,7 @@ export const INITIAL_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
 export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boolean>> = {
   owner: {
     overview: true,
+    myArea: true,
     amazon: true,
     ebay: true,
     otto: true,
@@ -123,6 +127,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   },
   admin: {
     overview: true,
+    myArea: true,
     amazon: true,
     ebay: true,
     otto: true,
@@ -140,6 +145,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   },
   manager: {
     overview: true,
+    myArea: true,
     amazon: true,
     ebay: true,
     otto: true,
@@ -157,6 +163,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   },
   analyst: {
     overview: true,
+    myArea: false,
     amazon: false,
     ebay: false,
     otto: false,
@@ -174,6 +181,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
   },
   viewer: {
     overview: true,
+    myArea: false,
     amazon: false,
     ebay: false,
     otto: false,

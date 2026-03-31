@@ -39,6 +39,7 @@
   },
   "nav": {
     "start": "Home",
+    "myArea": "My area",
     "amazon": "Amazon",
     "amazonOrders": "Orders",
     "amazonProducts": "Products",
@@ -63,6 +64,8 @@
     "advertisingWipBadge": "Work in progress",
     "advertisingLockedHint": "This area is under construction. Only developers have access.",
     "advertisingWipTooltip": "Advertising – work in progress (full access for developers only)",
+    "myAreaLockedHint": "Section in progress. Developers only for now.",
+    "myAreaWipTooltip": "My area – work in progress (full access for developers only)",
     "adCampaigns": "Campaigns",
     "adPerformance": "Performance",
     "analytics": "Analytics",
@@ -131,6 +134,7 @@
   },
   "sidebarItems": {
     "overview": "My workspace",
+    "myArea": "My area",
     "amazon": "Amazon",
     "otto": "Otto",
     "kaufland": "Kaufland",
@@ -227,7 +231,7 @@
   },
   "settingsUsers": {
     "accessDeniedTitle": "Access restricted",
-    "accessDeniedBody": "Only the Developer role can manage invitations, roles, and permissions.",
+    "accessDeniedBody": "Only Developer or Team Lead can manage invitations, roles, and permissions.",
     "standardRoles": "Built-in roles",
     "customRoles": "Custom roles",
     "newRolePlaceholder": "Name for the new role",
@@ -493,6 +497,9 @@
     "fulfillment": "FBA / FBM",
     "status": "Status",
     "unknown": "Unknown",
+    "statusShipped": "Shipped",
+    "statusPending": "Pending",
+    "statusCancelled": "Cancelled",
     "loadFailed": "Could not load Amazon orders."
   },
   "ottoOrders": {
