@@ -254,7 +254,9 @@ export default function OttoOrdersPage() {
 
   useEffect(() => {
     if (!from || !to || from > to) return;
-    void loadOrders(from, to, true, false);
+    // Cache-first beim Einstieg: vorhandene Daten sofort anzeigen,
+    // danach im Hintergrund mit API/DB-Cache abgleichen.
+    void loadOrders(from, to, false, false);
   }, [from, to, loadOrders]);
 
   useEffect(() => {

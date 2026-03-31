@@ -269,7 +269,7 @@ export default function ShopifyOrdersPage() {
 
   useEffect(() => {
     if (!from || !to || from > to) return;
-    void loadOrders(from, to, true, false);
+    void loadOrders(from, to, false, false);
   }, [from, to, loadOrders]);
 
   useEffect(() => {
