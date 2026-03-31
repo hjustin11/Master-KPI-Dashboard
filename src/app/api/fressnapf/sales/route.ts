@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 import {
+  MAX_ANALYTICS_RANGE_DAYS,
+  buildPartialNetBreakdown,
+  resolveComparisonPreviousRange,
+  type CompareMode,
+} from "@/shared/lib/analytics-date-range";
+import {
   FRESSNAPF_DAY_MS,
   fetchFressnapfOrdersPaginated,
   filterOrdersByCreatedRange,
@@ -69,6 +75,7 @@ export async function GET(request: Request) {
       searchParams.get("compare") === "1" ||
       searchParams.get("compare") === "true" ||
       searchParams.get("compare") === "yes";
+    const compareMode: CompareMode = searchParams.get("compareMode") === "previous" ? "previous" : "yoy";
     const fromYmd = parseYmdParam(searchParams.get("from"));
     const toYmd = parseYmdParam(searchParams.get("to"));
 
@@ -92,19 +99,25 @@ export async function GET(request: Request) {
       currentStartMs = r.startMs;
       currentEndMs = r.endMs;
       const spanDays = Math.round((currentEndMs - currentStartMs) / FRESSNAPF_DAY_MS);
-      if (spanDays < 1 || spanDays > 60) {
-        return NextResponse.json({ error: "Zeitraum muss 1–60 Tage umfassen." }, { status: 400 });
+      if (spanDays < 1 || spanDays > MAX_ANALYTICS_RANGE_DAYS) {
+        return NextResponse.json(
+          { error: `Zeitraum muss 1–${String(MAX_ANALYTICS_RANGE_DAYS)} Tage umfassen.` },
+          { status: 400 }
+        );
       }
       days = spanDays;
       rangeFromLabel = fromYmd;
       rangeToLabel = toYmd;
       if (compare) {
-        const len = currentEndMs - currentStartMs;
-        prevEndMs = currentStartMs;
-        prevStartMs = currentStartMs - len;
+        const previous = resolveComparisonPreviousRange(currentStartMs, currentEndMs, compareMode);
+        prevStartMs = previous.prevStartMs;
+        prevEndMs = previous.prevEndMs;
       }
     } else {
-      days = Math.min(Math.max(Number(searchParams.get("days") ?? "7") || 7, 1), 60);
+      days = Math.min(
+        Math.max(Number(searchParams.get("days") ?? "7") || 7, 1),
+        MAX_ANALYTICS_RANGE_DAYS
+      );
       currentStartMs = now - days * FRESSNAPF_DAY_MS;
       currentEndMs = now;
       if (compare) {
@@ -160,6 +173,8 @@ export async function GET(request: Request) {
         meta,
         summary: current.summary,
         previousSummary: previous.summary,
+        netBreakdown: buildPartialNetBreakdown(current.summary.salesAmount),
+        previousNetBreakdown: buildPartialNetBreakdown(previous.summary.salesAmount),
         revenueDeltaPct,
         points: current.points,
         previousPoints: previous.points,
@@ -189,6 +204,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       meta,
       summary: current.summary,
+      netBreakdown: buildPartialNetBreakdown(current.summary.salesAmount),
       points: current.points,
     });
   } catch (error) {

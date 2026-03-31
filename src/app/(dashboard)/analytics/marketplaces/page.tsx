@@ -19,6 +19,7 @@ import {
   ANALYTICS_MARKETPLACES,
   getMarketplaceBySlug,
 } from "@/shared/lib/analytics-marketplaces";
+import { MAX_ANALYTICS_RANGE_DAYS } from "@/shared/lib/analytics-date-range";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -64,7 +65,7 @@ import type { MarketplaceArticleSalesRow } from "@/shared/lib/marketplaceArticle
 type TrendDirection = "up" | "down" | "flat" | "unknown";
 
 const PLACEHOLDER = "—";
-const MAX_RANGE_DAYS = 60;
+const MAX_RANGE_DAYS = MAX_ANALYTICS_RANGE_DAYS;
 
 function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -1493,6 +1494,7 @@ function AnalyticsMarketplacesPage() {
     try {
       const params = new URLSearchParams({
         compare: "true",
+        compareMode: "yoy",
         from,
         to,
       });
@@ -1552,6 +1554,7 @@ function AnalyticsMarketplacesPage() {
     try {
       const params = new URLSearchParams({
         compare: "true",
+        compareMode: "yoy",
         from,
         to,
       });
@@ -1611,6 +1614,7 @@ function AnalyticsMarketplacesPage() {
     try {
       const params = new URLSearchParams({
         compare: "true",
+        compareMode: "yoy",
         from,
         to,
       });
@@ -1670,6 +1674,7 @@ function AnalyticsMarketplacesPage() {
     try {
       const params = new URLSearchParams({
         compare: "true",
+        compareMode: "yoy",
         from,
         to,
       });
@@ -1729,6 +1734,7 @@ function AnalyticsMarketplacesPage() {
     try {
       const params = new URLSearchParams({
         compare: "true",
+        compareMode: "yoy",
         from,
         to,
       });
@@ -1788,6 +1794,7 @@ function AnalyticsMarketplacesPage() {
     try {
       const params = new URLSearchParams({
         compare: "true",
+        compareMode: "yoy",
         from,
         to,
       });
@@ -1847,6 +1854,7 @@ function AnalyticsMarketplacesPage() {
     try {
       const params = new URLSearchParams({
         compare: "true",
+        compareMode: "yoy",
         from,
         to,
       });
@@ -1906,6 +1914,7 @@ function AnalyticsMarketplacesPage() {
     try {
       const params = new URLSearchParams({
         compare: "true",
+        compareMode: "yoy",
         from,
         to,
       });
@@ -1965,6 +1974,7 @@ function AnalyticsMarketplacesPage() {
     try {
       const params = new URLSearchParams({
         compare: "true",
+        compareMode: "yoy",
         from,
         to,
       });
@@ -2409,6 +2419,33 @@ function AnalyticsMarketplacesPage() {
     () => kpiLabelsForPeriod(period.from, period.to, dfLocale, t),
     [period.from, period.to, dfLocale, t]
   );
+  const netSummary = useMemo(() => {
+    if (!totals) return null;
+    const current = {
+      revenue: totals.revenue,
+      returnsAmount: 0,
+      feesAmount: 0,
+      adSpendAmount: 0,
+    };
+    const previous = {
+      revenue: totals.prevRevenue,
+      returnsAmount: 0,
+      feesAmount: 0,
+      adSpendAmount: 0,
+    };
+    const currentNet =
+      current.revenue - current.returnsAmount - current.feesAmount - current.adSpendAmount;
+    const previousNet =
+      previous.revenue - previous.returnsAmount - previous.feesAmount - previous.adSpendAmount;
+    return {
+      currency: totals.currency,
+      current,
+      previous,
+      currentNet,
+      previousNet,
+      note: "Teilweise Datendeckung: Retouren/Gebuehren/Anzeigenkosten werden aktuell als 0 ausgewiesen.",
+    };
+  }, [totals]);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailIndex, setDetailIndex] = useState(0);
@@ -2449,6 +2486,59 @@ function AnalyticsMarketplacesPage() {
         intlTag={intlTag}
         t={t}
       />
+      <section className="overflow-hidden rounded-2xl border border-border/50 bg-card p-3 shadow-sm ring-1 ring-border/30 md:p-5">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Umsatz, Kosten und Netto</h2>
+          <p className="text-[11px] text-muted-foreground">
+            Vergleich: gleicher Zeitraum im Vorjahr
+          </p>
+        </div>
+        {netSummary ? (
+          <div className="space-y-2">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Kennzahl</TableHead>
+                    <TableHead className="text-right">Aktueller Zeitraum</TableHead>
+                    <TableHead className="text-right">Vorjahr</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>Umsatz</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.current.revenue, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.previous.revenue, netSummary.currency, intlTag)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Retouren</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.current.returnsAmount, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.previous.returnsAmount, netSummary.currency, intlTag)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Marktplatzgebuehren</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.current.feesAmount, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.previous.feesAmount, netSummary.currency, intlTag)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Anzeigenkosten</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.current.adSpendAmount, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.previous.adSpendAmount, netSummary.currency, intlTag)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-semibold">Netto</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(netSummary.currentNet, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(netSummary.previousNet, netSummary.currency, intlTag)}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+            <p className="text-[11px] text-muted-foreground">{netSummary.note}</p>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Noch keine Marktplatzdaten fuer die Netto-Aufstellung verfuegbar.</p>
+        )}
+      </section>
 
       <MarketplaceDetailDialog
         open={detailOpen}

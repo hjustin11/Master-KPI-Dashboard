@@ -1,6 +1,12 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
+import {
+  MAX_ANALYTICS_RANGE_DAYS,
+  buildPartialNetBreakdown,
+  resolveComparisonPreviousRange,
+  type CompareMode,
+} from "@/shared/lib/analytics-date-range";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 
 type AmazonOrder = {
@@ -392,6 +398,8 @@ async function buildResponseFromSalesOrderMetrics(args: {
       };
       summary: { orderCount: number; salesAmount: number; units: number; currency: string };
       previousSummary?: { orderCount: number; salesAmount: number; units: number; currency: string };
+      netBreakdown: ReturnType<typeof buildPartialNetBreakdown>;
+      previousNetBreakdown?: ReturnType<typeof buildPartialNetBreakdown>;
       revenueDeltaPct?: number | null;
       points: SalesPoint[];
       previousPoints?: SalesPoint[];
@@ -458,6 +466,8 @@ async function buildResponseFromSalesOrderMetrics(args: {
       },
       summary,
       previousSummary,
+      netBreakdown: buildPartialNetBreakdown(summary.salesAmount),
+      previousNetBreakdown: buildPartialNetBreakdown(previousSummary.salesAmount),
       revenueDeltaPct,
       points: points ?? [],
       previousPoints: previousPoints ?? [],
@@ -488,6 +498,7 @@ async function buildResponseFromSalesOrderMetrics(args: {
       dataSource: "sales_order_metrics" as const,
     },
     summary,
+    netBreakdown: buildPartialNetBreakdown(summary.salesAmount),
     points,
   };
 }
@@ -530,6 +541,7 @@ export async function GET(request: Request) {
       searchParams.get("compare") === "1" ||
       searchParams.get("compare") === "true" ||
       searchParams.get("compare") === "yes";
+    const compareMode: CompareMode = searchParams.get("compareMode") === "previous" ? "previous" : "yoy";
     const fromYmd = parseYmdParam(searchParams.get("from"));
     const toYmd = parseYmdParam(searchParams.get("to"));
 
@@ -555,9 +567,9 @@ export async function GET(request: Request) {
       currentStartMs = r.startMs;
       currentEndMs = r.endMs;
       const spanDays = Math.round((currentEndMs - currentStartMs) / DAY_MS);
-      if (spanDays < 1 || spanDays > 60) {
+      if (spanDays < 1 || spanDays > MAX_ANALYTICS_RANGE_DAYS) {
         return NextResponse.json(
-          { error: "Zeitraum muss 1–60 Tage umfassen." },
+          { error: `Zeitraum muss 1–${String(MAX_ANALYTICS_RANGE_DAYS)} Tage umfassen.` },
           { status: 400 }
         );
       }
@@ -565,16 +577,19 @@ export async function GET(request: Request) {
       rangeFromLabel = fromYmd;
       rangeToLabel = toYmd;
       if (compare) {
-        const len = currentEndMs - currentStartMs;
-        prevEndMs = currentStartMs;
-        prevStartMs = currentStartMs - len;
+        const previous = resolveComparisonPreviousRange(currentStartMs, currentEndMs, compareMode);
+        prevStartMs = previous.prevStartMs;
+        prevEndMs = previous.prevEndMs;
         fetchStartMs = prevStartMs;
       } else {
         fetchStartMs = currentStartMs;
       }
       createdAfterIso = new Date(fetchStartMs).toISOString();
     } else {
-      days = Math.min(Math.max(Number(searchParams.get("days") ?? "7") || 7, 1), 60);
+      days = Math.min(
+        Math.max(Number(searchParams.get("days") ?? "7") || 7, 1),
+        MAX_ANALYTICS_RANGE_DAYS
+      );
       currentStartMs = now - days * DAY_MS;
       currentEndMs = now;
       if (compare) {
@@ -753,6 +768,8 @@ export async function GET(request: Request) {
         },
         summary,
         previousSummary,
+        netBreakdown: buildPartialNetBreakdown(summary.salesAmount),
+        previousNetBreakdown: buildPartialNetBreakdown(previousSummary.salesAmount),
         revenueDeltaPct,
         points,
         previousPoints,
@@ -775,6 +792,7 @@ export async function GET(request: Request) {
         units: totalUnits,
         currency,
       },
+      netBreakdown: buildPartialNetBreakdown(Number(totalSalesAmount.toFixed(2))),
       points,
     });
   } catch (error) {

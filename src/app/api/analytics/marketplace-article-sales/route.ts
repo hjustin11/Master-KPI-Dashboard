@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { MAX_ANALYTICS_RANGE_DAYS } from "@/shared/lib/analytics-date-range";
 import { INTEGRATION_SECRETS_CONFIGURATION_HINT_DE } from "@/shared/lib/integrationSecrets";
 import {
   fetchFressnapfOrdersRawPaginated,
@@ -73,8 +74,11 @@ export async function GET(request: Request) {
     const { startMs: currentStartMs, endMs: currentEndMs } = ymdToUtcRangeExclusiveEnd(fromYmd, toYmd);
     const spanMs = currentEndMs - currentStartMs;
     const spanDays = Math.round(spanMs / (24 * 60 * 60 * 1000));
-    if (spanDays < 1 || spanDays > 60) {
-      return NextResponse.json({ error: "Zeitraum muss 1–60 Tage umfassen." }, { status: 400 });
+    if (spanDays < 1 || spanDays > MAX_ANALYTICS_RANGE_DAYS) {
+      return NextResponse.json(
+        { error: `Zeitraum muss 1–${String(MAX_ANALYTICS_RANGE_DAYS)} Tage umfassen.` },
+        { status: 400 }
+      );
     }
 
     const prevEndMs = currentStartMs;
