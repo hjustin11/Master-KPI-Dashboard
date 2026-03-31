@@ -52,6 +52,19 @@ function normSku(value: string) {
   return value.trim().toLowerCase();
 }
 
+/**
+ * Server-interne `fetch()`-Aufrufe zur eigenen Origin haben standardmäßig keine Session-Cookies —
+ * die Middleware würde auf `/login` (HTML) redirecten → `res.json()` wirft „Unexpected token '<'“.
+ */
+function forwardAuthHeadersFrom(request: Request): HeadersInit {
+  const cookie = request.headers.get("cookie");
+  const authorization = request.headers.get("authorization");
+  const headers: Record<string, string> = {};
+  if (cookie) headers.cookie = cookie;
+  if (authorization) headers.authorization = authorization;
+  return headers;
+}
+
 /** Produkte-API je Marktplatz (ohne Amazon-Spalte; Otto bleibt über Auftragspreise). */
 const ANALYTICS_PRODUCTS_API: Partial<Record<AnalyticsMarketplaceSlug, string>> = {
   ebay: "/api/ebay/products",
@@ -90,10 +103,11 @@ function skuPriceMapFromProductItems(
 
 async function fetchSkuPriceMapFromProductsApi(
   origin: string,
-  path: string
+  path: string,
+  initHeaders: HeadersInit
 ): Promise<Map<string, number | null> | null> {
   try {
-    const res = await fetch(`${origin}${path}`, { cache: "no-store" });
+    const res = await fetch(`${origin}${path}`, { cache: "no-store", headers: initHeaders });
     if (!res.ok) return null;
     const json = (await res.json()) as { items?: Array<Record<string, unknown>> };
     return skuPriceMapFromProductItems(json.items ?? [], "priceEur");
@@ -106,7 +120,10 @@ async function fetchSkuPriceMapFromProductsApi(
  * Amazon: gleiche Produktquelle wie die Amazon-Produktseite (`/api/amazon/products`),
  * inkl. 202 „Report wird erstellt“ und Fehlertext aus der API.
  */
-async function fetchAmazonProductsPriceMap(origin: string): Promise<{
+async function fetchAmazonProductsPriceMap(
+  origin: string,
+  initHeaders: HeadersInit
+): Promise<{
   map: Map<string, number | null> | null;
   warning: string | null;
 }> {
@@ -139,6 +156,7 @@ async function fetchAmazonProductsPriceMap(origin: string): Promise<{
     const res = await fetch(`${origin}/api/amazon/products?status=all`, {
       cache: "no-store",
       signal: controller.signal,
+      headers: initHeaders,
     });
 
     if (res.status === 202) {
@@ -332,11 +350,25 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? "300") || 300, 50), 500);
     const origin = url.origin;
+    const authHeaders = forwardAuthHeadersFrom(request);
 
     const xrRes = await fetch(`${origin}/api/xentral/articles?all=1&limit=${limit}`, {
       cache: "no-store",
+      headers: authHeaders,
     });
-    const xrJson = (await xrRes.json()) as { items?: XentralArticle[]; error?: string };
+    let xrJson: { items?: XentralArticle[]; error?: string };
+    try {
+      xrJson = (await xrRes.json()) as { items?: XentralArticle[]; error?: string };
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "Preisvergleich: interne API lieferte kein JSON (oft fehlende Session beim Server-Aufruf). Bitte Seite neu laden.",
+          rows: [],
+        },
+        { status: 502 }
+      );
+    }
     if (!xrRes.ok) {
       return NextResponse.json(
         { error: xrJson.error ?? "Xentral-Artikel konnten nicht geladen werden.", rows: [] },
@@ -346,14 +378,14 @@ export async function GET(request: Request) {
 
     const articles = xrJson.items ?? [];
 
-    const amazonPromise = fetchAmazonProductsPriceMap(origin);
+    const amazonPromise = fetchAmazonProductsPriceMap(origin, authHeaders);
     const ottoPromise = fetchOttoLatestSkuPrices();
     const productMapEntriesPromise = Promise.all(
       ANALYTICS_MARKETPLACES.map(async (m) => {
         if (m.slug === "otto") return [m.slug, null] as const;
         const path = ANALYTICS_PRODUCTS_API[m.slug];
         if (!path) return [m.slug, null] as const;
-        const map = await fetchSkuPriceMapFromProductsApi(origin, path);
+        const map = await fetchSkuPriceMapFromProductsApi(origin, path, authHeaders);
         return [m.slug, map] as const;
       })
     );

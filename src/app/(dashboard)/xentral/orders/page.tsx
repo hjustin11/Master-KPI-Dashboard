@@ -1126,6 +1126,9 @@ export default function XentralOrdersPage() {
           qs.set("toYmd", t);
         }
       }
+      if (forceRefresh) {
+        qs.set("refresh", "1");
+      }
       const res = await fetch(`/api/xentral/orders?${qs.toString()}`, {
         cache: "no-store",
       });
@@ -1232,6 +1235,10 @@ export default function XentralOrdersPage() {
     }
   }, [t]);
 
+  /** Stabile Ref — verhindert Endlos-Reload bei HMR/Locale-Wechsel (`useEffect` mit `[load]`). */
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
   useEffect(() => {
     setHasMounted(true);
     const d = defaultBerlinLastTwoDays();
@@ -1240,8 +1247,8 @@ export default function XentralOrdersPage() {
     dateToRef.current = d.to;
     setDateFrom(d.from);
     setDateTo(d.to);
-    void load(false);
-  }, [load]);
+    void loadRef.current(false);
+  }, []);
 
   useEffect(() => {
     dateFromRef.current = dateFrom;
@@ -1259,19 +1266,19 @@ export default function XentralOrdersPage() {
     prevDateFilterRef.current = { from: dateFrom, to: dateTo };
     if (!prev || (prev.from === dateFrom && prev.to === dateTo)) return;
     const id = window.setTimeout(() => {
-      void load(true, "recent");
+      void loadRef.current(true, "recent");
     }, 450);
     return () => window.clearTimeout(id);
-  }, [dateFrom, dateTo, hasMounted, importMode, load]);
+  }, [dateFrom, dateTo, hasMounted, importMode]);
 
   useEffect(() => {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
       if (!shouldRunBackgroundSync()) return;
-      void load(false, undefined, true);
+      void loadRef.current(false, undefined, true);
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
-  }, [hasMounted, load]);
+  }, [hasMounted]);
 
   const columns = useMemo<Array<ColumnDef<XentralOrderRow>>>(
     () => [

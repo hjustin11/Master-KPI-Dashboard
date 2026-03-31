@@ -1,4 +1,12 @@
 import { NextResponse } from "next/server";
+import {
+  buildXentralOrdersCacheKey,
+  computeXentralOrdersPayload,
+  XentralOrdersPayloadError,
+  XENTRAL_ORDERS_CACHE_FRESH_MS,
+  XENTRAL_ORDERS_CACHE_STALE_MS,
+} from "@/shared/lib/xentralOrdersPayload";
+import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import {
   aggregateSkuSalesWithFileCache,
@@ -71,6 +79,8 @@ export async function POST(request: Request) {
     maxPages?: number;
     prewarm?: boolean;
     prewarmWindows?: number[];
+    /** Default: true bei `prewarm` — Bestellungen-API in `integration_data_cache` füllen. */
+    prewarmOrders?: boolean;
     toYmd?: string;
     pageSize?: number;
   } = {};
@@ -143,6 +153,33 @@ export async function POST(request: Request) {
       });
     }
 
+    let ordersPrewarm: { ok: boolean; durationMs?: number; error?: string } = { ok: false };
+    if (body.prewarmOrders !== false) {
+      const started = Date.now();
+      const ordersUrl = new URL("http://internal/xentral/orders");
+      ordersUrl.searchParams.set("recentDays", "2");
+      ordersUrl.searchParams.set("limit", "50");
+      const ordersReq = new Request(ordersUrl);
+      try {
+        await getIntegrationCachedOrLoad({
+          cacheKey: buildXentralOrdersCacheKey(ordersUrl.searchParams),
+          source: "xentral:orders",
+          freshMs: XENTRAL_ORDERS_CACHE_FRESH_MS,
+          staleMs: XENTRAL_ORDERS_CACHE_STALE_MS,
+          loader: () => computeXentralOrdersPayload(ordersReq, baseUrl, token),
+        });
+        ordersPrewarm = { ok: true, durationMs: Date.now() - started };
+      } catch (e) {
+        const msg =
+          e instanceof XentralOrdersPayloadError
+            ? String((e.body as { error?: string }).error ?? e.message)
+            : e instanceof Error
+              ? e.message
+              : String(e);
+        ordersPrewarm = { ok: false, durationMs: Date.now() - started, error: msg };
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       prewarm: true,
@@ -150,6 +187,7 @@ export async function POST(request: Request) {
       liveWindowStartYmd: liveWindowStartYmd(),
       cacheExclusiveEndYmd: cacheExclusiveEndYmd(),
       windows: results,
+      ordersPrewarm,
     });
   }
 
