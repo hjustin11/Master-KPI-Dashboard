@@ -296,6 +296,8 @@ export default function SettingsUsersPage() {
         rolePermissions: s.rolePermissions,
         roleSidebarItems: s.roleSidebarItems,
         roleSectionVisibility: s.roleSectionVisibility,
+        roleWidgetVisibility: s.roleWidgetVisibility,
+        roleActionAccess: s.roleActionAccess,
         roleLabels: s.roleLabels,
         customRoleKeys: s.customRoleKeys,
         textOverrides: s.textOverrides,

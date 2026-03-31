@@ -4,7 +4,20 @@ import {
   type AnalyticsMarketplaceSlug,
 } from "@/shared/lib/analytics-marketplaces";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
-import { readIntegrationCache } from "@/shared/lib/integrationDataCache";
+import { getIntegrationCachedOrLoad, readIntegrationCache } from "@/shared/lib/integrationDataCache";
+
+class PriceParityHttpError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly body: Record<string, unknown>
+  ) {
+    super("PriceParityHttpError");
+    this.name = "PriceParityHttpError";
+  }
+}
+
+const PRICE_PARITY_CACHE_FRESH_MS = 3 * 60 * 1000;
+const PRICE_PARITY_CACHE_STALE_MS = 45 * 60 * 1000;
 
 type XentralArticle = {
   sku: string;
@@ -345,161 +358,177 @@ async function fetchOttoLatestSkuPrices(): Promise<{
   };
 }
 
-export async function GET(request: Request) {
+async function computePriceParityPayload(request: Request): Promise<Record<string, unknown>> {
+  const url = new URL(request.url);
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? "300") || 300, 50), 500);
+  const origin = url.origin;
+  const authHeaders = forwardAuthHeadersFrom(request);
+
+  const xrRes = await fetch(`${origin}/api/xentral/articles?all=1&limit=${limit}`, {
+    cache: "no-store",
+    headers: authHeaders,
+  });
+  let xrJson: { items?: XentralArticle[]; error?: string };
   try {
-    const url = new URL(request.url);
-    const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? "300") || 300, 50), 500);
-    const origin = url.origin;
-    const authHeaders = forwardAuthHeadersFrom(request);
-
-    const xrRes = await fetch(`${origin}/api/xentral/articles?all=1&limit=${limit}`, {
-      cache: "no-store",
-      headers: authHeaders,
+    xrJson = (await xrRes.json()) as { items?: XentralArticle[]; error?: string };
+  } catch {
+    throw new PriceParityHttpError(502, {
+      error:
+        "Preisvergleich: interne API lieferte kein JSON (oft fehlende Session beim Server-Aufruf). Bitte Seite neu laden.",
+      rows: [],
     });
-    let xrJson: { items?: XentralArticle[]; error?: string };
-    try {
-      xrJson = (await xrRes.json()) as { items?: XentralArticle[]; error?: string };
-    } catch {
-      return NextResponse.json(
-        {
-          error:
-            "Preisvergleich: interne API lieferte kein JSON (oft fehlende Session beim Server-Aufruf). Bitte Seite neu laden.",
-          rows: [],
-        },
-        { status: 502 }
-      );
+  }
+  if (!xrRes.ok) {
+    throw new PriceParityHttpError(502, {
+      error: xrJson.error ?? "Xentral-Artikel konnten nicht geladen werden.",
+      rows: [],
+    });
+  }
+
+  const articles = xrJson.items ?? [];
+
+  const amazonPromise = fetchAmazonProductsPriceMap(origin, authHeaders);
+  const ottoPromise = fetchOttoLatestSkuPrices();
+  const productMapEntriesPromise = Promise.all(
+    ANALYTICS_MARKETPLACES.map(async (m) => {
+      if (m.slug === "otto") return [m.slug, null] as const;
+      const path = ANALYTICS_PRODUCTS_API[m.slug];
+      if (!path) return [m.slug, null] as const;
+      const map = await fetchSkuPriceMapFromProductsApi(origin, path, authHeaders);
+      return [m.slug, map] as const;
+    })
+  );
+
+  const [amazonFetch, otto, productMapEntries] = await Promise.all([
+    amazonPromise,
+    ottoPromise,
+    productMapEntriesPromise,
+  ]);
+
+  const amazonWarning = amazonFetch.warning;
+  const amazonBySku = new Map<string, { price: number | null }>();
+  if (amazonFetch.map) {
+    for (const [k, price] of amazonFetch.map) {
+      amazonBySku.set(k, { price });
     }
-    if (!xrRes.ok) {
-      return NextResponse.json(
-        { error: xrJson.error ?? "Xentral-Artikel konnten nicht geladen werden.", rows: [] },
-        { status: 502 }
-      );
-    }
+  }
 
-    const articles = xrJson.items ?? [];
+  const ottoBySku = otto.bySku;
 
-    const amazonPromise = fetchAmazonProductsPriceMap(origin, authHeaders);
-    const ottoPromise = fetchOttoLatestSkuPrices();
-    const productMapEntriesPromise = Promise.all(
-      ANALYTICS_MARKETPLACES.map(async (m) => {
-        if (m.slug === "otto") return [m.slug, null] as const;
-        const path = ANALYTICS_PRODUCTS_API[m.slug];
-        if (!path) return [m.slug, null] as const;
-        const map = await fetchSkuPriceMapFromProductsApi(origin, path, authHeaders);
-        return [m.slug, map] as const;
-      })
-    );
+  const productMaps: Partial<Record<AnalyticsMarketplaceSlug, Map<string, number | null> | null>> =
+    {};
+  for (const [slug, map] of productMapEntries) {
+    if (slug === "otto") continue;
+    productMaps[slug] = map;
+  }
 
-    const [amazonFetch, otto, productMapEntries] = await Promise.all([
-      amazonPromise,
-      ottoPromise,
-      productMapEntriesPromise,
-    ]);
+  const rows: PriceParityRow[] = articles.map((a) => {
+    const key = normSku(a.sku);
+    const amz = key ? amazonBySku.get(key) : undefined;
+    const amazonPrice = amz?.price ?? null;
+    const ottoPrice = key ? (ottoBySku.get(key) ?? null) : null;
 
-    const amazonWarning = amazonFetch.warning;
-    const amazonBySku = new Map<string, { price: number | null }>();
-    if (amazonFetch.map) {
-      for (const [k, price] of amazonFetch.map) {
-        amazonBySku.set(k, { price });
+    const flat: Record<string, MutableCell> = {};
+
+    let amazonProv: MarketplaceCellState = "ok";
+    if (!amz) amazonProv = "missing";
+    else if (amazonPrice == null) amazonProv = "no_price";
+    flat.amazon = { price: amazonPrice, state: amazonProv };
+
+    for (const m of ANALYTICS_MARKETPLACES) {
+      if (m.slug === "otto") continue;
+      const pmap = productMaps[m.slug];
+      if (pmap == null) {
+        flat[m.slug] = { price: null, state: "not_connected" };
+        continue;
       }
+      const hasSku = Boolean(key && pmap.has(key));
+      const price = hasSku ? (pmap.get(key) ?? null) : null;
+      let ms: MarketplaceCellState = "ok";
+      if (!key || !hasSku) ms = "missing";
+      else if (price == null) ms = "no_price";
+      flat[m.slug] = { price, state: ms };
     }
 
-    const ottoBySku = otto.bySku;
+    if (ottoBySku.size > 0) {
+      let ottoState: MarketplaceCellState = "ok";
+      if (!key || !ottoBySku.has(key)) ottoState = "missing";
+      else if (ottoPrice == null) ottoState = "no_price";
+      flat.otto = { price: ottoPrice, state: ottoState };
+    } else {
+      flat.otto = { price: null, state: "not_connected" };
+    }
 
-    const productMaps: Partial<Record<AnalyticsMarketplaceSlug, Map<string, number | null> | null>> =
+    const afterDeviation = applyMajorityDeviation(flat);
+    const amazon = afterDeviation.amazon ?? { price: amazonPrice, state: amazonProv };
+    const otherMarketplaces: Record<string, { price: number | null; state: MarketplaceCellState }> =
       {};
-    for (const [slug, map] of productMapEntries) {
-      if (slug === "otto") continue;
-      productMaps[slug] = map;
+    for (const m of ANALYTICS_MARKETPLACES) {
+      otherMarketplaces[m.slug] =
+        afterDeviation[m.slug] ?? flat[m.slug] ?? { price: null, state: "not_connected" };
     }
 
-    const rows: PriceParityRow[] = articles.map((a) => {
-      const key = normSku(a.sku);
-      const amz = key ? amazonBySku.get(key) : undefined;
-      const amazonPrice = amz?.price ?? null;
-      const ottoPrice = key ? (ottoBySku.get(key) ?? null) : null;
+    const needsReview =
+      amazon.state !== "ok" ||
+      Object.values(otherMarketplaces).some((c) => c.state !== "ok" && c.state !== "not_connected");
 
-      const flat: Record<string, MutableCell> = {};
+    return {
+      sku: a.sku,
+      name: a.name,
+      stock: a.stock,
+      amazon,
+      otherMarketplaces,
+      needsReview,
+    };
+  });
 
-      let amazonProv: MarketplaceCellState = "ok";
-      if (!amz) amazonProv = "missing";
-      else if (amazonPrice == null) amazonProv = "no_price";
-      flat.amazon = { price: amazonPrice, state: amazonProv };
+  const issueCount = rows.filter((r) => r.needsReview).length;
 
-      for (const m of ANALYTICS_MARKETPLACES) {
-        if (m.slug === "otto") continue;
-        const pmap = productMaps[m.slug];
-        if (pmap == null) {
-          flat[m.slug] = { price: null, state: "not_connected" };
-          continue;
-        }
-        const hasSku = Boolean(key && pmap.has(key));
-        const price = hasSku ? (pmap.get(key) ?? null) : null;
-        let ms: MarketplaceCellState = "ok";
-        if (!key || !hasSku) ms = "missing";
-        else if (price == null) ms = "no_price";
-        flat[m.slug] = { price, state: ms };
-      }
-
-      if (ottoBySku.size > 0) {
-        let ottoState: MarketplaceCellState = "ok";
-        if (!key || !ottoBySku.has(key)) ottoState = "missing";
-        else if (ottoPrice == null) ottoState = "no_price";
-        flat.otto = { price: ottoPrice, state: ottoState };
-      } else {
-        flat.otto = { price: null, state: "not_connected" };
-      }
-
-      const afterDeviation = applyMajorityDeviation(flat);
-      const amazon = afterDeviation.amazon ?? { price: amazonPrice, state: amazonProv };
-      const otherMarketplaces: Record<string, { price: number | null; state: MarketplaceCellState }> =
-        {};
-      for (const m of ANALYTICS_MARKETPLACES) {
-        otherMarketplaces[m.slug] =
-          afterDeviation[m.slug] ?? flat[m.slug] ?? { price: null, state: "not_connected" };
-      }
-
-      const needsReview =
-        amazon.state !== "ok" ||
-        Object.values(otherMarketplaces).some(
-          (c) => c.state !== "ok" && c.state !== "not_connected"
-        );
-
-      return {
-        sku: a.sku,
-        name: a.name,
-        stock: a.stock,
-        amazon,
-        otherMarketplaces,
-        needsReview,
-      };
-    });
-
-    const issueCount = rows.filter((r) => r.needsReview).length;
-
-    return NextResponse.json({
-      meta: {
-        articleCount: rows.length,
-        amazonMatchedSkus: amazonBySku.size,
-        amazonWarning,
-        ottoWarning: otto.warning,
-        channels: {
-          connected: [
-            "amazon",
-            ...(ottoBySku.size > 0 ? ["otto"] : []),
-            ...ANALYTICS_MARKETPLACES.filter((m) => {
-              if (m.slug === "otto") return false;
-              return productMaps[m.slug] != null;
-            }).map((m) => m.slug),
-          ],
-          planned: [],
-        },
+  return {
+    meta: {
+      articleCount: rows.length,
+      amazonMatchedSkus: amazonBySku.size,
+      amazonWarning,
+      ottoWarning: otto.warning,
+      channels: {
+        connected: [
+          "amazon",
+          ...(ottoBySku.size > 0 ? ["otto"] : []),
+          ...ANALYTICS_MARKETPLACES.filter((m) => {
+            if (m.slug === "otto") return false;
+            return productMaps[m.slug] != null;
+          }).map((m) => m.slug),
+        ],
+        planned: [],
       },
-      rows,
-      issueCount,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
+    },
+    rows,
+    issueCount,
+  };
+}
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? "300") || 300, 50), 500);
+  const bypassCache =
+    url.searchParams.get("refresh") === "1" || process.env.PRICE_PARITY_CACHE_DISABLE === "1";
+
+  try {
+    const payload = bypassCache
+      ? await computePriceParityPayload(request)
+      : await getIntegrationCachedOrLoad({
+          cacheKey: `marketplaces:price-parity:limit=${limit}`,
+          source: "marketplaces:price-parity",
+          freshMs: PRICE_PARITY_CACHE_FRESH_MS,
+          staleMs: PRICE_PARITY_CACHE_STALE_MS,
+          loader: () => computePriceParityPayload(request),
+        });
+    return NextResponse.json(payload);
+  } catch (e) {
+    if (e instanceof PriceParityHttpError) {
+      return NextResponse.json(e.body, { status: e.status });
+    }
+    const message = e instanceof Error ? e.message : "Unbekannter Fehler.";
     return NextResponse.json({ error: message, rows: [] }, { status: 500 });
   }
 }

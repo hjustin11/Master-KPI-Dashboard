@@ -10,6 +10,12 @@ import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
 import { cn } from "@/lib/utils";
 import { DASHBOARD_PAGE_SHELL, DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboardUi";
+import {
+  DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
+  readLocalJsonCache,
+  shouldRunBackgroundSync,
+  writeLocalJsonCache,
+} from "@/shared/lib/dashboardClientCache";
 import type { ContainerComparisonDelta } from "@/shared/lib/procurement/compareProcurementImports";
 import {
   containerArrivalIsUpcoming,
@@ -71,6 +77,14 @@ function maxLeadingIdentifierLen(groups: ProcurementTableRow[][]): number {
   return n;
 }
 
+const PROCUREMENT_LINES_CLIENT_CACHE_KEY = "analytics_procurement_lines_v1";
+
+type CachedProcurementPayload = {
+  savedAt: number;
+  lines: ProcurementTableRow[];
+  comparison: Record<string, ContainerComparisonDelta>;
+};
+
 const TABLE_MIN_W = "min-w-[44rem]";
 
 /** Genug Breite für „2.767 → 1.407“ in einer Zeile, konsistent mit Grid + colgroup. */
@@ -81,6 +95,7 @@ export default function AnalyticsProcurementPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [lines, setLines] = useState<ProcurementTableRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -96,10 +111,39 @@ export default function AnalyticsProcurementPage() {
     [locale]
   );
 
-  const loadLines = useCallback(async () => {
-    setLoadError(null);
+  const loadLines = useCallback(async (forceRefresh = false, silent = false) => {
+    let hadCache = false;
+
+    if (!forceRefresh && !silent) {
+      const parsed = readLocalJsonCache<CachedProcurementPayload>(PROCUREMENT_LINES_CLIENT_CACHE_KEY);
+      if (parsed && Array.isArray(parsed.lines)) {
+        setLines(parsed.lines);
+        setContainerComparison(
+          parsed.comparison && typeof parsed.comparison === "object" ? parsed.comparison : {}
+        );
+        hadCache = true;
+        setLoading(false);
+      }
+    }
+
+    if (forceRefresh && !silent) {
+      setLoading(true);
+    } else if (!hadCache && !silent) {
+      setLoading(true);
+    }
+
+    const showBackgroundIndicator = silent || (!forceRefresh && hadCache);
+    if (showBackgroundIndicator) {
+      setIsBackgroundSyncing(true);
+    }
+
+    if (!silent) {
+      setLoadError(null);
+    }
+
     try {
-      const res = await fetch("/api/procurement/lines", { cache: "no-store" });
+      const qs = forceRefresh ? "?refresh=1" : "";
+      const res = await fetch(`/api/procurement/lines${qs}`, { cache: "no-store" });
       const payload = (await res.json()) as {
         error?: string;
         lines?: ProcurementTableRow[];
@@ -108,22 +152,50 @@ export default function AnalyticsProcurementPage() {
       if (!res.ok) {
         throw new Error(payload.error ?? t("analyticsProcurement.loadError"));
       }
-      setLines(payload.lines ?? []);
-      setContainerComparison(
-        payload.comparison && typeof payload.comparison === "object" ? payload.comparison : {}
-      );
+      const nextLines = payload.lines ?? [];
+      const nextComp =
+        payload.comparison && typeof payload.comparison === "object" ? payload.comparison : {};
+      setLines(nextLines);
+      setContainerComparison(nextComp);
+      writeLocalJsonCache(PROCUREMENT_LINES_CLIENT_CACHE_KEY, {
+        savedAt: Date.now(),
+        lines: nextLines,
+        comparison: nextComp,
+      } satisfies CachedProcurementPayload);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : t("analyticsProcurement.loadError"));
-      setLines([]);
-      setContainerComparison({});
+      if (silent) {
+        console.warn("[Beschaffung] Hintergrund-Abgleich fehlgeschlagen:", e);
+      } else {
+        setLoadError(e instanceof Error ? e.message : t("analyticsProcurement.loadError"));
+        if (!hadCache) {
+          setLines([]);
+          setContainerComparison({});
+        }
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
+      if (showBackgroundIndicator) {
+        setIsBackgroundSyncing(false);
+      }
     }
   }, [t]);
 
+  const loadLinesRef = useRef(loadLines);
+  loadLinesRef.current = loadLines;
+
   useEffect(() => {
-    void loadLines();
-  }, [loadLines]);
+    void loadLinesRef.current(false, false);
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (!shouldRunBackgroundSync()) return;
+      void loadLinesRef.current(false, true);
+    }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
+    return () => window.clearInterval(id);
+  }, []);
 
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -140,7 +212,7 @@ export default function AnalyticsProcurementPage() {
         throw new Error(payload.error ?? t("analyticsProcurement.importError"));
       }
       toast.success(t("analyticsProcurement.importSuccess", { count: String(payload.rowCount ?? 0) }));
-      await loadLines();
+      await loadLinesRef.current(true, false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("analyticsProcurement.importError"));
     } finally {
@@ -233,6 +305,11 @@ export default function AnalyticsProcurementPage() {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
           {t("commonUi.loading")}
+        </div>
+      ) : isBackgroundSyncing ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground/90">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          {t("commonUi.syncing")}
         </div>
       ) : null}
 

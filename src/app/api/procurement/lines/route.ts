@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
 import type { ContainerComparisonDelta } from "@/shared/lib/procurement/compareProcurementImports";
+import {
+  buildProcurementPayload,
+  PROCUREMENT_LINES_CACHE_FRESH_MS,
+  PROCUREMENT_LINES_CACHE_STALE_MS,
+  type LatestImportRow,
+} from "@/shared/lib/procurement/procurementLinesPayload";
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createServerSupabase();
   const {
     data: { user },
@@ -24,6 +31,10 @@ export async function GET() {
     );
   }
 
+  const { searchParams } = new URL(request.url);
+  const bypassCache =
+    searchParams.get("refresh") === "1" || process.env.PROCUREMENT_LINES_CACHE_DISABLE === "1";
+
   const { data: latest, error: impErr } = await admin
     .from("procurement_imports")
     .select("id,file_name,created_at,row_count,import_comparison")
@@ -43,44 +54,21 @@ export async function GET() {
     });
   }
 
-  const importId = latest.id as string;
-  const { data: rawLines, error: linesErr } = await admin
-    .from("procurement_lines")
-    .select(
-      "id,sort_index,container_number,manufacture,product_name,sku,amount,arrival_at_port,notes"
-    )
-    .eq("import_id", importId)
-    .order("sort_index", { ascending: true });
+  const row = latest as LatestImportRow;
 
-  if (linesErr) {
-    return NextResponse.json({ error: linesErr.message }, { status: 500 });
+  try {
+    const payload = bypassCache
+      ? await buildProcurementPayload(admin, row)
+      : await getIntegrationCachedOrLoad({
+          cacheKey: `procurement:lines:${row.id}`,
+          source: "procurement:lines",
+          freshMs: PROCUREMENT_LINES_CACHE_FRESH_MS,
+          staleMs: PROCUREMENT_LINES_CACHE_STALE_MS,
+          loader: () => buildProcurementPayload(admin, row),
+        });
+    return NextResponse.json(payload);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unbekannter Fehler";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const lines = (rawLines ?? []).map((r) => ({
-    id: r.id as string,
-    sortIndex: r.sort_index as number,
-    containerNumber: String(r.container_number ?? ""),
-    manufacture: String(r.manufacture ?? ""),
-    productName: String(r.product_name ?? ""),
-    sku: String(r.sku ?? ""),
-    amount: Number(r.amount ?? 0),
-    arrivalAtPort: r.arrival_at_port ? String(r.arrival_at_port) : "",
-    notes: String(r.notes ?? ""),
-  }));
-
-  const rawComp = latest.import_comparison as
-    | Record<string, ContainerComparisonDelta>
-    | null
-    | undefined;
-
-  return NextResponse.json({
-    import: {
-      id: latest.id,
-      fileName: latest.file_name,
-      createdAt: latest.created_at,
-      rowCount: latest.row_count,
-    },
-    lines,
-    comparison: rawComp && typeof rawComp === "object" ? rawComp : {},
-  });
 }

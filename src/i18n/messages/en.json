@@ -18,7 +18,15 @@
     "profile": "Profile",
     "roleTestMode": "Role test mode",
     "restoreDeveloperView": "Restore developer view",
-    "testAs": "Test as {role}"
+    "testAs": "Test as {role}",
+    "roleTestAccessTarget": "Test role: {role}",
+    "roleTestAccessEdit": "Edit access",
+    "roleTestAccessEditHint": "All menu items are visible. Checkboxes apply to the selected test role (not the developer).",
+    "roleTestAccessPanelOpen": "Permissions & tiles",
+    "roleTestAccessPanelTitle": "Permissions and settings tiles",
+    "roleTestAccessPanelLead": "Applies to test role “{role}”. The developer role stays fully unrestricted.",
+    "roleTestAccessPanelPermissionsHint": "What this role is allowed to do in the dashboard.",
+    "roleTestAccessPanelSectionsHint": "Visible sections on Settings → Users (tiles)."
   },
   "sidebar": {
     "toggleSidebar": "Collapse or expand sidebar",
@@ -51,6 +59,9 @@
     "xentralProducts": "Items",
     "xentralOrders": "Orders",
     "advertising": "Advertising",
+    "advertisingWipBadge": "Work in progress",
+    "advertisingLockedHint": "This area is under construction. Only developers have access.",
+    "advertisingWipTooltip": "Advertising – work in progress (full access for developers only)",
     "adCampaigns": "Campaigns",
     "adPerformance": "Performance",
     "analytics": "Analytics",
@@ -306,7 +317,8 @@
   },
   "commonUi": {
     "unknownError": "Unknown error.",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "syncing": "Syncing data…"
   },
   "analyticsPage": {
     "title": "Analytics"
@@ -848,7 +860,8 @@
     "toOverview": "To review",
     "geocodeSyncing": "Syncing…",
     "emptyBeforeValue": "empty",
-    "beforeWasTitle": "Previously: {value}"
+    "beforeWasTitle": "Previously: {value}",
+    "noPermissionAddressCorrection": "You are not allowed to correct addresses."
   },
   "ebayOrders": {
     "subtitle": "Default: today + yesterday. Data from the eBay API (configurable).",

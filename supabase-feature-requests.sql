@@ -9,7 +9,9 @@ create table if not exists public.feature_requests (
   title text not null,
   message text not null,
   status text not null default 'open' check (status in ('open','in_progress','done')),
-  owner_reply text null
+  owner_reply text null,
+  page_path text null,
+  attachments jsonb not null default '[]'::jsonb
 );
 
 create index if not exists feature_requests_created_at_idx

@@ -66,6 +66,21 @@ export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey }> = [
   { key: "updates" },
 ];
 
+export const SIDEBAR_REQUIRED_PERMISSIONS: Partial<Record<SidebarItemKey, PermissionKey[]>> = {
+  amazon: ["manage_integrations"],
+  ebay: ["manage_integrations"],
+  otto: ["manage_integrations"],
+  kaufland: ["manage_integrations"],
+  fressnapf: ["manage_integrations"],
+  mediamarktSaturn: ["manage_integrations"],
+  zooplus: ["manage_integrations"],
+  tiktok: ["manage_integrations"],
+  shopify: ["manage_integrations"],
+  xentral: ["manage_integrations"],
+  advertising: ["manage_integrations"],
+  analytics: ["export_data"],
+};
+
 export const DASHBOARD_SECTION_CONFIG: Array<{ key: DashboardSectionKey }> = [
   { key: "roles-manage" },
   { key: "invite" },

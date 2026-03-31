@@ -62,6 +62,7 @@ import { mergeXentralOrderLists } from "@/shared/lib/xentralOrderMerge";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
+import { usePermissions } from "@/shared/hooks/usePermissions";
 
 type AddressValidationState = "ok" | "invalid";
 /** Anzeige: Rot bei jedem Fehler; Orange nur „bearbeitet“ (ohne Fehler); Grün = ok. */
@@ -678,6 +679,7 @@ function XentralAddressErrorDialogRow({
 
 export default function XentralOrdersPage() {
   const { t, locale } = useTranslation();
+  const { canUseAction } = usePermissions();
   const intlTag = intlLocaleTag(locale);
   const formatMoney = useCallback(
     (amount: number | null, currency: string | null) => {
@@ -825,6 +827,10 @@ export default function XentralOrdersPage() {
    * werden weder an Xentral gesendet noch lokal aus dem Entwurf übernommen.
    */
   const openAddressCorrectionDialog = useCallback(() => {
+    if (!canUseAction("xentral.orders.correctAddress")) {
+      toast.error(t("xentralOrders.noPermissionAddressCorrection"));
+      return;
+    }
     const visible = displayedRowsRef.current;
     const invalid = visible.filter((row) => resolveAddressDisplay(row) === "invalid");
     if (invalid.length === 0) {
@@ -845,7 +851,7 @@ export default function XentralOrdersPage() {
     setAddressXentralError(null);
     setAddressXentralSubmitting(false);
     setAddressErrorsOpen(true);
-  }, []);
+  }, [canUseAction, t]);
 
   const handleAddressDialogOpenChange = useCallback((open: boolean) => {
     if (!open) {
@@ -1678,21 +1684,23 @@ export default function XentralOrdersPage() {
           data={dateFilteredData}
             filterColumn={t("filters.xentralOrders")}
             toolbarBetween={
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5"
-                onClick={() => openAddressCorrectionDialog()}
-                disabled={!hasMounted}
-              >
-                {t("xentralOrders.correctAddresses")}
-                {addressErrorRows.length > 0 ? (
-                  <span className="rounded-full bg-destructive/15 px-1.5 py-px text-xs font-medium tabular-nums text-destructive">
-                    {addressErrorRows.length}
-                  </span>
-                ) : null}
-              </Button>
+              canUseAction("xentral.orders.correctAddress") ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-1.5"
+                  onClick={() => openAddressCorrectionDialog()}
+                  disabled={!hasMounted}
+                >
+                  {t("xentralOrders.correctAddresses")}
+                  {addressErrorRows.length > 0 ? (
+                    <span className="rounded-full bg-destructive/15 px-1.5 py-px text-xs font-medium tabular-nums text-destructive">
+                      {addressErrorRows.length}
+                    </span>
+                  ) : null}
+                </Button>
+              ) : null
             }
           toolbarEnd={
             <div className="flex flex-wrap items-center justify-end gap-3">
@@ -1740,7 +1748,7 @@ export default function XentralOrdersPage() {
             </div>
           }
           paginate={false}
-            compact
+          compact
           className="flex-1 min-h-0"
           tableWrapClassName="min-h-0"
           onDisplayedRowsChange={setDisplayedRows}

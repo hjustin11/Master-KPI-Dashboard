@@ -18,7 +18,15 @@
     "profile": "Profil",
     "roleTestMode": "Rollen-Testmodus",
     "restoreDeveloperView": "Entwickler-Ansicht wiederherstellen",
-    "testAs": "Als {role} testen"
+    "testAs": "Als {role} testen",
+    "roleTestAccessTarget": "Testrolle: {role}",
+    "roleTestAccessEdit": "Zugriffe bearbeiten",
+    "roleTestAccessEditHint": "Alle Menüpunkte sind sichtbar. Die Checkboxen gelten für die gewählte Testrolle (nicht für Entwickler).",
+    "roleTestAccessPanelOpen": "Berechtigungen & Kacheln",
+    "roleTestAccessPanelTitle": "Rechte und Einstellungs-Kacheln",
+    "roleTestAccessPanelLead": "Gilt für die Testrolle „{role}“. Die Rolle Entwickler ist unverändert voll.",
+    "roleTestAccessPanelPermissionsHint": "Welche Aktionen die Rolle im Dashboard ausführen darf.",
+    "roleTestAccessPanelSectionsHint": "Sichtbare Bereiche auf Einstellungen → Benutzer (Kacheln)."
   },
   "sidebar": {
     "toggleSidebar": "Sidebar ein- oder ausklappen",
@@ -51,6 +59,9 @@
     "xentralProducts": "Artikel",
     "xentralOrders": "Aufträge",
     "advertising": "Werbung",
+    "advertisingWipBadge": "In Arbeit",
+    "advertisingLockedHint": "Bereich in Arbeit. Nur Entwickler haben Zugriff.",
+    "advertisingWipTooltip": "Werbung – in Arbeit (voller Zugriff nur für Entwickler)",
     "adCampaigns": "Kampagnen",
     "adPerformance": "Performance",
     "analytics": "Analytics",
@@ -305,7 +316,8 @@
   },
   "commonUi": {
     "unknownError": "Unbekannter Fehler.",
-    "loading": "Laden…"
+    "loading": "Laden…",
+    "syncing": "Daten werden abgeglichen…"
   },
   "analyticsPage": {
     "title": "Analytics"
@@ -847,7 +859,8 @@
     "toOverview": "Zur Übersicht",
     "geocodeSyncing": "Abgleich…",
     "emptyBeforeValue": "leer",
-    "beforeWasTitle": "Bisher: {value}"
+    "beforeWasTitle": "Bisher: {value}",
+    "noPermissionAddressCorrection": "Du hast keine Berechtigung, Adressen zu korrigieren."
   },
   "ebayOrders": {
     "subtitle": "Standard: heute + gestern. Daten aus der eBay API (konfigurierbar).",

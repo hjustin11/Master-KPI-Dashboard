@@ -1,13 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboardUi";
-
-export default function AnalyticsPerformancePage() {
-  return (
-    <div className="space-y-4">
-      <h1 className={DASHBOARD_PAGE_TITLE}>Analytics Performance</h1>
-      <p className="text-muted-foreground">Dieser Bereich wird noch aufgebaut.</p>
-    </div>
-  );
+/** Performance-Unterseite entfernt; alte Links leiten auf Marktplätze um. */
+export default function AnalyticsPerformanceRedirectPage() {
+  redirect("/analytics/marketplaces");
 }
-

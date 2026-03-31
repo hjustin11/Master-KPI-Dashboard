@@ -1991,29 +1991,36 @@ function AnalyticsMarketplacesPage() {
     }
   }, [t]);
 
+  const loadAmazonSalesRef = useRef(loadAmazonSales);
+  loadAmazonSalesRef.current = loadAmazonSales;
+  const loadEbaySalesRef = useRef(loadEbaySales);
+  loadEbaySalesRef.current = loadEbaySales;
+  const loadOttoSalesRef = useRef(loadOttoSales);
+  loadOttoSalesRef.current = loadOttoSales;
+  const loadKauflandSalesRef = useRef(loadKauflandSales);
+  loadKauflandSalesRef.current = loadKauflandSales;
+  const loadFressnapfSalesRef = useRef(loadFressnapfSales);
+  loadFressnapfSalesRef.current = loadFressnapfSales;
+  const loadMmsSalesRef = useRef(loadMmsSales);
+  loadMmsSalesRef.current = loadMmsSales;
+  const loadZooplusSalesRef = useRef(loadZooplusSales);
+  loadZooplusSalesRef.current = loadZooplusSales;
+  const loadTiktokSalesRef = useRef(loadTiktokSales);
+  loadTiktokSalesRef.current = loadTiktokSales;
+  const loadShopifySalesRef = useRef(loadShopifySales);
+  loadShopifySalesRef.current = loadShopifySales;
+
   useEffect(() => {
-    void loadAmazonSales(false, false);
-    void loadEbaySales(false, false);
-    void loadOttoSales(false, false);
-    void loadKauflandSales(false, false);
-    void loadFressnapfSales(false, false);
-    void loadMmsSales(false, false);
-    void loadZooplusSales(false, false);
-    void loadTiktokSales(false, false);
-    void loadShopifySales(false, false);
-  }, [
-    period.from,
-    period.to,
-    loadAmazonSales,
-    loadEbaySales,
-    loadOttoSales,
-    loadKauflandSales,
-    loadFressnapfSales,
-    loadMmsSales,
-    loadZooplusSales,
-    loadTiktokSales,
-    loadShopifySales,
-  ]);
+    void loadAmazonSalesRef.current(false, false);
+    void loadEbaySalesRef.current(false, false);
+    void loadOttoSalesRef.current(false, false);
+    void loadKauflandSalesRef.current(false, false);
+    void loadFressnapfSalesRef.current(false, false);
+    void loadMmsSalesRef.current(false, false);
+    void loadZooplusSalesRef.current(false, false);
+    void loadTiktokSalesRef.current(false, false);
+    void loadShopifySalesRef.current(false, false);
+  }, [period.from, period.to]);
 
   useEffect(() => {
     setAnalyticsHasMounted(true);
@@ -2023,29 +2030,18 @@ function AnalyticsMarketplacesPage() {
     if (!analyticsHasMounted) return;
     const id = window.setInterval(() => {
       if (!shouldRunBackgroundSync()) return;
-      void loadAmazonSales(false, true);
-      void loadEbaySales(false, true);
-      void loadOttoSales(false, true);
-      void loadKauflandSales(false, true);
-      void loadFressnapfSales(false, true);
-      void loadMmsSales(false, true);
-      void loadZooplusSales(false, true);
-      void loadTiktokSales(false, true);
-      void loadShopifySales(false, true);
+      void loadAmazonSalesRef.current(false, true);
+      void loadEbaySalesRef.current(false, true);
+      void loadOttoSalesRef.current(false, true);
+      void loadKauflandSalesRef.current(false, true);
+      void loadFressnapfSalesRef.current(false, true);
+      void loadMmsSalesRef.current(false, true);
+      void loadZooplusSalesRef.current(false, true);
+      void loadTiktokSalesRef.current(false, true);
+      void loadShopifySalesRef.current(false, true);
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
-  }, [
-    analyticsHasMounted,
-    loadAmazonSales,
-    loadEbaySales,
-    loadOttoSales,
-    loadKauflandSales,
-    loadFressnapfSales,
-    loadMmsSales,
-    loadZooplusSales,
-    loadTiktokSales,
-    loadShopifySales,
-  ]);
+  }, [analyticsHasMounted]);
 
   const summary = amazonData?.summary;
   const prev = amazonData?.previousSummary;

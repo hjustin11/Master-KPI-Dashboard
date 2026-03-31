@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useMemo } from "react";
 import {
   BarChart3,
+  Construction,
   Megaphone,
   Menu,
   Package,
@@ -15,8 +17,12 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePermissions } from "@/shared/hooks/usePermissions";
+import { useUser } from "@/shared/hooks/useUser";
+import { useTranslation } from "@/i18n/I18nProvider";
 import { useTutorialNavGate } from "@/shared/components/tutorial/TutorialNavContext";
 import { type PermissionKey, type SidebarItemKey } from "@/shared/lib/access-control";
+import { useAppStore } from "@/shared/stores/useAppStore";
+import type { NavAccessEditConfig } from "@/shared/lib/nav-access-edit";
 import {
   Sheet,
   SheetContent,
@@ -104,7 +110,6 @@ const moreItems: Array<{
   { key: "analytics", label: "Marktplätze", href: "/analytics/marketplaces", requiredPermissions: ["export_data"] },
   { key: "analytics", label: "Bedarfsprognose", href: "/analytics/article-forecast", requiredPermissions: ["export_data"] },
   { key: "analytics", label: "Beschaffung", href: "/analytics/procurement", requiredPermissions: ["export_data"] },
-  { key: "analytics", label: "Performance", href: "/analytics/performance", requiredPermissions: ["export_data"] },
   {
     key: "settings",
     label: "Administration",
@@ -115,7 +120,6 @@ const moreItems: Array<{
     key: "updates",
     label: "Update & Feedback",
     href: "/updates",
-    requiredPermissions: ["manage_users"],
   },
 ];
 
@@ -126,8 +130,35 @@ function isActive(pathname: string, href: string) {
 
 export function MobileNav() {
   const pathname = usePathname();
+  const { t } = useTranslation();
+  const user = useUser();
   const { visibleSidebarKeys } = useTutorialNavGate();
-  const { canAccessSidebarItem, hasPermission } = usePermissions();
+  const { canAccessSidebarItem, hasPermission, isAdvertisingDeveloper } = usePermissions();
+  const activeRole = useAppStore((s) => s.activeRole);
+  const roleTestingEnabled = useAppStore((s) => s.roleTestingEnabled);
+  const roleTestAccessEditMode = useAppStore((s) => s.roleTestAccessEditMode);
+  const roleSidebarItems = useAppStore((s) => s.roleSidebarItems);
+  const toggleRoleSidebarItem = useAppStore((s) => s.toggleRoleSidebarItem);
+  const advertisingLocked = !user.isLoading && !isAdvertisingDeveloper;
+
+  const navAccessEdit = useMemo((): NavAccessEditConfig | undefined => {
+    if (user.isLoading || user.roleKey !== "owner" || !roleTestingEnabled || !roleTestAccessEditMode) {
+      return undefined;
+    }
+    return {
+      targetRoleKey: activeRole,
+      isChecked: (key: SidebarItemKey) => Boolean(roleSidebarItems[activeRole]?.[key]),
+      toggle: (key: SidebarItemKey) => toggleRoleSidebarItem(activeRole, key),
+    };
+  }, [
+    user.isLoading,
+    user.roleKey,
+    roleTestingEnabled,
+    roleTestAccessEditMode,
+    activeRole,
+    roleSidebarItems,
+    toggleRoleSidebarItem,
+  ]);
   const visibleMainItems = mainItems.filter(
     (item) =>
       canAccessSidebarItem(item.key) &&
@@ -159,19 +190,77 @@ export function MobileNav() {
             const Icon = item.icon;
             const active = isActive(pathname, item.activeGroup ?? item.href);
 
+            if (item.key === "advertising" && advertisingLocked) {
+              return (
+                <span
+                  key={item.key}
+                  data-tutorial-nav={item.key}
+                  title={t("nav.advertisingLockedHint")}
+                  className={cn(
+                    "flex min-w-[72px] shrink-0 cursor-not-allowed flex-col items-center justify-center gap-1 px-0.5 text-[10px] opacity-60 transition-colors duration-150 sm:text-[11px]",
+                    "text-muted-foreground"
+                  )}
+                >
+                  {navAccessEdit ? (
+                    <input
+                      type="checkbox"
+                      className="mb-0.5 h-3 w-3 accent-primary"
+                      checked={navAccessEdit.isChecked(item.key)}
+                      disabled={navAccessEdit.targetRoleKey === "owner"}
+                      onChange={() => navAccessEdit.toggle(item.key)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Sidebar"
+                    />
+                  ) : null}
+                  <span className="inline-flex items-center justify-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/[0.12] px-1 py-0.5 dark:border-amber-500/30 dark:bg-amber-500/10">
+                    <Construction
+                      className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500"
+                      aria-hidden
+                    />
+                    <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  </span>
+                  <span className="max-w-[72px] truncate">{item.label}</span>
+                </span>
+              );
+            }
+
             return (
-              <Link
+              <div
                 key={item.key}
-                href={item.href}
-                data-tutorial-nav={item.key}
-                className={cn(
-                  "flex min-w-[68px] shrink-0 flex-col items-center justify-center gap-1 px-0.5 text-[10px] transition-colors duration-150 sm:text-[11px]",
-                  active ? "text-primary" : "text-muted-foreground"
-                )}
+                className="flex min-w-[68px] shrink-0 flex-col items-center justify-center px-0.5"
               >
-                <Icon className="h-4 w-4" />
-                <span className="max-w-[72px] truncate">{item.label}</span>
-              </Link>
+                {navAccessEdit ? (
+                  <input
+                    type="checkbox"
+                    className="mb-0.5 h-3 w-3 accent-primary"
+                    checked={navAccessEdit.isChecked(item.key)}
+                    disabled={navAccessEdit.targetRoleKey === "owner"}
+                    onChange={() => navAccessEdit.toggle(item.key)}
+                    aria-label="Sidebar"
+                  />
+                ) : null}
+                <Link
+                  href={item.href}
+                  data-tutorial-nav={item.key}
+                  className={cn(
+                    "flex flex-col items-center justify-center gap-1 text-[10px] transition-colors duration-150 sm:text-[11px]",
+                    active ? "text-primary" : "text-muted-foreground"
+                  )}
+                >
+                  {item.key === "advertising" && !user.isLoading && isAdvertisingDeveloper ? (
+                    <span className="relative inline-flex">
+                      <Icon className="h-4 w-4" />
+                      <Construction
+                        className="absolute -right-1 -top-1 h-3 w-3 text-amber-600"
+                        aria-hidden
+                      />
+                    </span>
+                  ) : (
+                    <Icon className="h-4 w-4" />
+                  )}
+                  <span className="max-w-[72px] truncate">{item.label}</span>
+                </Link>
+              </div>
             );
           })}
         </div>
@@ -198,17 +287,28 @@ export function MobileNav() {
             </SheetHeader>
             <div className="space-y-2 p-4 pt-0">
               {visibleMoreItemsGated.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  data-tutorial-subnav={item.href}
-                  className={cn(
-                    "block rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent/60",
-                    isActive(pathname, item.activePrefix ?? item.href) ? "bg-primary/10 text-primary" : ""
-                  )}
-                >
-                  {item.label}
-                </Link>
+                <div key={item.href} className="flex items-center gap-2">
+                  {navAccessEdit ? (
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 shrink-0 accent-primary"
+                      checked={navAccessEdit.isChecked(item.key)}
+                      disabled={navAccessEdit.targetRoleKey === "owner"}
+                      onChange={() => navAccessEdit.toggle(item.key)}
+                      aria-label="Sidebar"
+                    />
+                  ) : null}
+                  <Link
+                    href={item.href}
+                    data-tutorial-subnav={item.href}
+                    className={cn(
+                      "block min-w-0 flex-1 rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent/60",
+                      isActive(pathname, item.activePrefix ?? item.href) ? "bg-primary/10 text-primary" : ""
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                </div>
               ))}
             </div>
           </SheetContent>

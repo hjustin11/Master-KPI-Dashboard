@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/shared/components/layout/AppSidebar";
 import { Header } from "@/shared/components/layout/Header";
+import { RoleTestAccessToolbar } from "@/shared/components/layout/RoleTestAccessToolbar";
+import { RoleTestAccessPersistOnExit } from "@/shared/components/layout/RoleTestAccessPersistOnExit";
 import { MobileNav } from "@/shared/components/layout/MobileNav";
 import { Toaster } from "@/components/ui/sonner";
 import { DashboardAccessConfigSync } from "@/shared/components/DashboardAccessConfigSync";
@@ -45,6 +47,7 @@ export default function DashboardLayout({
       }
     >
       <DashboardAccessConfigSync />
+      <RoleTestAccessPersistOnExit />
       <div className="relative flex min-h-screen w-full overflow-hidden bg-gradient-to-br from-white via-white to-white">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-blue-50/45 blur-3xl" />
@@ -60,6 +63,7 @@ export default function DashboardLayout({
             className="relative z-10 flex min-h-screen min-w-0 w-full flex-1 basis-0 flex-col"
           >
             <Header />
+            <RoleTestAccessToolbar />
             <div
               className="flex flex-1 flex-col w-full max-w-none p-4 pb-20 md:p-6 md:pb-6 lg:p-8"
               style={tutorialLocked ? { filter: "blur(1.8px)", pointerEvents: "none" } : undefined}

@@ -12,6 +12,7 @@ import {
   ChevronRight,
   ChevronsUpDown,
   Cat,
+  Construction,
   Megaphone,
   Monitor,
   Package,
@@ -65,6 +66,7 @@ import { useAppStore } from "@/shared/stores/useAppStore";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { resolveRoleLabel } from "@/i18n/resolve-role-label";
 import { useTutorialNavGate } from "@/shared/components/tutorial/TutorialNavContext";
+import type { NavAccessEditConfig } from "@/shared/lib/nav-access-edit";
 
 type NavItem = {
   key: SidebarItemKey;
@@ -74,6 +76,33 @@ type NavItem = {
   requiredPermissions?: PermissionKey[];
   children?: Array<{ labelKey: string; href: string; requiredPermissions?: PermissionKey[] }>;
 };
+
+function NavAccessCheckbox({
+  itemKey,
+  accessEdit,
+  compact,
+}: {
+  itemKey: SidebarItemKey;
+  accessEdit?: NavAccessEditConfig;
+  compact?: boolean;
+}) {
+  if (!accessEdit) return null;
+  const disabled = accessEdit.targetRoleKey === "owner";
+  return (
+    <input
+      type="checkbox"
+      className={cn(
+        "shrink-0 accent-primary",
+        compact ? "h-3 w-3" : "h-3.5 w-3.5"
+      )}
+      checked={accessEdit.isChecked(itemKey)}
+      disabled={disabled}
+      onChange={() => accessEdit.toggle(itemKey)}
+      onClick={(e) => e.stopPropagation()}
+      aria-label="Sidebar sichtbar"
+    />
+  );
+}
 
 const navItems: NavItem[] = [
   {
@@ -207,7 +236,6 @@ const navItems: NavItem[] = [
       { labelKey: "nav.analyticsMarketplaces", href: "/analytics/marketplaces" },
       { labelKey: "nav.analyticsArticleForecast", href: "/analytics/article-forecast" },
       { labelKey: "nav.analyticsProcurement", href: "/analytics/procurement" },
-      { labelKey: "nav.analyticsPerformance", href: "/analytics/performance" },
     ],
   },
   {
@@ -315,6 +343,9 @@ function SingleNavItem({
   collapsed,
   compact,
   t,
+  userIsLoading,
+  isAdvertisingDeveloper,
+  accessEdit,
 }: {
   item: NavItem;
   pathname: string;
@@ -322,12 +353,19 @@ function SingleNavItem({
   collapsed: boolean;
   compact?: boolean;
   t: Translate;
+  userIsLoading: boolean;
+  isAdvertisingDeveloper: boolean;
+  accessEdit?: NavAccessEditConfig;
 }) {
   const { primaryHref, activePrefix } = resolveNavLink(item, hasPermission);
   const active = isActivePath(pathname, activePrefix);
   const Icon = item.icon;
   const visibleChildren = visibleNavChildren(item, hasPermission);
   const hasSubnav = visibleChildren.length > 0;
+  const advertisingLocked =
+    item.key === "advertising" && !userIsLoading && !isAdvertisingDeveloper;
+  const advertisingWipOwner =
+    item.key === "advertising" && !userIsLoading && isAdvertisingDeveloper;
   /** Eingeklappte Sidebar (Icons): nur Hauptlink. Sonst: Unterpunkte per Zeile ein-/ausklappbar. */
   const subnavCollapsible = !collapsed && hasSubnav;
 
@@ -354,22 +392,43 @@ function SingleNavItem({
     collapsed && "justify-center border-l-0 px-2"
   );
 
-  const baseLink = (
-    <Link href={primaryHref} className={linkClass}>
-      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4">
-        <Icon aria-hidden />
+  const mainLabel =
+    advertisingWipOwner && !collapsed ? (
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left">
+        <span className="truncate">{t(item.labelKey)}</span>
+        <span title={t("nav.advertisingWipBadge")} className="inline-flex shrink-0">
+          <Construction className="h-3.5 w-3.5 text-amber-600" aria-hidden />
+        </span>
       </span>
-      {!collapsed ? (
-        <span className="min-w-0 flex-1 truncate text-left">{t(item.labelKey)}</span>
-      ) : null}
+    ) : !collapsed ? (
+      <span className="min-w-0 flex-1 truncate text-left">{t(item.labelKey)}</span>
+    ) : null;
+
+  const baseLink = (
+    <Link href={primaryHref} className={cn(linkClass, accessEdit && "min-w-0 flex-1")}>
+      <span
+        className={cn(
+          "inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4",
+          advertisingWipOwner && "relative"
+        )}
+      >
+        <Icon aria-hidden />
+        {advertisingWipOwner && collapsed ? (
+          <Construction
+            className="pointer-events-none absolute -right-1 -top-0.5 h-3 w-3 text-amber-600"
+            aria-hidden
+          />
+        ) : null}
+      </span>
+      {mainLabel}
     </Link>
   );
 
-  const collapsibleRow = (
+  const collapsibleRowInner = (
     <button
       type="button"
       className={cn(
-        "flex w-full min-w-0 items-center gap-3 rounded-md border-l-2 border-transparent px-3 text-left text-sm font-medium transition-all duration-200 hover:bg-accent/60",
+        "flex w-full min-w-0 flex-1 items-center gap-3 rounded-md border-l-2 border-transparent px-3 text-left text-sm font-medium transition-all duration-200 hover:bg-accent/60",
         compact ? "py-1.5" : "py-2",
         active && "border-primary bg-primary/10 text-primary"
       )}
@@ -380,7 +439,14 @@ function SingleNavItem({
       <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4">
         <Icon aria-hidden />
       </span>
-      <span className="min-w-0 flex-1 truncate text-left">{t(item.labelKey)}</span>
+      {advertisingWipOwner ? (
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left">
+          <span className="truncate">{t(item.labelKey)}</span>
+          <Construction className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-left">{t(item.labelKey)}</span>
+      )}
       <ChevronDown
         className={cn(
           "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
@@ -391,24 +457,84 @@ function SingleNavItem({
     </button>
   );
 
+  const collapsibleRow = accessEdit ? (
+    <div className="flex w-full min-w-0 items-center gap-1 pr-1">
+      {collapsibleRowInner}
+      <NavAccessCheckbox itemKey={item.key} accessEdit={accessEdit} compact={compact} />
+    </div>
+  ) : (
+    collapsibleRowInner
+  );
+
   const childClass = cn(
     "block rounded-md px-2 text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground",
     compact ? "py-1 text-[11px] leading-snug" : "py-1.5 text-xs"
   );
 
-  const showSubnav = !collapsed && hasSubnav && subOpen;
+  const showSubnav = !collapsed && hasSubnav && subOpen && !advertisingLocked;
+
+  if (advertisingLocked) {
+    const lockedRow = (
+      <div
+        className={cn(linkClass, "cursor-not-allowed opacity-[0.65]")}
+        aria-disabled
+        title={t("nav.advertisingLockedHint")}
+      >
+        <span
+          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/[0.12] px-1.5 py-1 dark:border-amber-500/30 dark:bg-amber-500/10"
+          aria-hidden
+        >
+          <Construction className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+          <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        </span>
+        {!collapsed ? (
+          <span className="min-w-0 flex-1 truncate text-left">{t(item.labelKey)}</span>
+        ) : null}
+      </div>
+    );
+    return (
+      <div data-tutorial-nav={item.key} className={cn("space-y-1", compact && "space-y-0.5")}>
+        {collapsed ? (
+          <Tooltip>
+            <TooltipTrigger render={<div />}>{lockedRow}</TooltipTrigger>
+            <TooltipContent side="right">{t("nav.advertisingLockedHint")}</TooltipContent>
+          </Tooltip>
+        ) : (
+          lockedRow
+        )}
+      </div>
+    );
+  }
+
+  const baseLinkWrapped = accessEdit ? (
+    collapsed ? (
+      <div className="flex w-full flex-col items-center gap-1">
+        {baseLink}
+        <NavAccessCheckbox itemKey={item.key} accessEdit={accessEdit} compact={compact} />
+      </div>
+    ) : (
+      <div className="flex w-full min-w-0 items-center gap-1 pr-1">
+        {baseLink}
+        <NavAccessCheckbox itemKey={item.key} accessEdit={accessEdit} compact={compact} />
+      </div>
+    )
+  ) : (
+    baseLink
+  );
 
   return (
     <div data-tutorial-nav={item.key} className={cn("space-y-1", compact && "space-y-0.5")}>
       {collapsed ? (
         <Tooltip>
-          <TooltipTrigger render={<div />}>{baseLink}</TooltipTrigger>
-          <TooltipContent side="right">{t(item.labelKey)}</TooltipContent>
+          <TooltipTrigger render={<div />}>{baseLinkWrapped}</TooltipTrigger>
+          <TooltipContent side="right">
+            {advertisingWipOwner ? t("nav.advertisingWipTooltip") : t(item.labelKey)}
+          </TooltipContent>
         </Tooltip>
       ) : subnavCollapsible ? (
         collapsibleRow
       ) : (
-        baseLink
+        baseLinkWrapped
       )}
 
       {showSubnav ? (
@@ -441,11 +567,17 @@ function MarketplaceExpandedGroup({
   items,
   pathname,
   hasPermission,
+  userIsLoading,
+  isAdvertisingDeveloper,
+  accessEdit,
   t,
 }: {
   items: NavItem[];
   pathname: string;
   hasPermission: (permission: PermissionKey) => boolean;
+  userIsLoading: boolean;
+  isAdvertisingDeveloper: boolean;
+  accessEdit?: NavAccessEditConfig;
   t: Translate;
 }) {
   const anyActive = useMemo(
@@ -491,6 +623,9 @@ function MarketplaceExpandedGroup({
               hasPermission={hasPermission}
               collapsed={false}
               compact
+              userIsLoading={userIsLoading}
+              isAdvertisingDeveloper={isAdvertisingDeveloper}
+              accessEdit={accessEdit}
               t={t}
             />
           ))}
@@ -504,11 +639,13 @@ function CollapsedMarketplacePopover({
   items,
   pathname,
   hasPermission,
+  accessEdit,
   t,
 }: {
   items: NavItem[];
   pathname: string;
   hasPermission: (permission: PermissionKey) => boolean;
+  accessEdit?: NavAccessEditConfig;
   t: Translate;
 }) {
   const anyActive = useMemo(
@@ -551,7 +688,8 @@ function CollapsedMarketplacePopover({
                 >
                   <div className="flex items-center gap-2 px-1.5 py-1 text-xs font-medium">
                     <Icon className="h-3.5 w-3.5 shrink-0 opacity-90" />
-                    <span className="truncate">{t(item.labelKey)}</span>
+                    <span className="min-w-0 flex-1 truncate">{t(item.labelKey)}</span>
+                    <NavAccessCheckbox itemKey={item.key} accessEdit={accessEdit} compact />
                   </div>
                   <div className="mt-0.5 space-y-0.5">
                     {visibleChildren.map((child) => {
@@ -587,9 +725,13 @@ export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const { visibleSidebarKeys } = useTutorialNavGate();
   const user = useUser();
-  const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole } = usePermissions();
+  const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole, isAdvertisingDeveloper } =
+    usePermissions();
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
   const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
+  const roleTestAccessEditMode = useAppStore((stateFromStore) => stateFromStore.roleTestAccessEditMode);
+  const roleSidebarItems = useAppStore((stateFromStore) => stateFromStore.roleSidebarItems);
+  const toggleRoleSidebarItem = useAppStore((stateFromStore) => stateFromStore.toggleRoleSidebarItem);
   const setRoleTestingEnabled = useAppStore(
     (stateFromStore) => stateFromStore.setRoleTestingEnabled
   );
@@ -657,6 +799,25 @@ export function AppSidebar() {
         : (safeIndex + 1) % values.length;
     setActiveRole(values[nextIndex] ?? "owner");
   };
+
+  const navAccessEdit = useMemo((): NavAccessEditConfig | undefined => {
+    if (user.isLoading || user.roleKey !== "owner" || !roleTestingEnabled || !roleTestAccessEditMode) {
+      return undefined;
+    }
+    return {
+      targetRoleKey: activeRole,
+      isChecked: (key: SidebarItemKey) => Boolean(roleSidebarItems[activeRole]?.[key]),
+      toggle: (key: SidebarItemKey) => toggleRoleSidebarItem(activeRole, key),
+    };
+  }, [
+    user.isLoading,
+    user.roleKey,
+    roleTestingEnabled,
+    roleTestAccessEditMode,
+    activeRole,
+    roleSidebarItems,
+    toggleRoleSidebarItem,
+  ]);
 
   return (
     <Sidebar
@@ -730,6 +891,7 @@ export function AppSidebar() {
                 items={marketplaces}
                 pathname={pathname}
                 hasPermission={effectiveHasPermission}
+                accessEdit={navAccessEdit}
                 t={t}
               />
             ) : (
@@ -737,6 +899,9 @@ export function AppSidebar() {
                 items={marketplaces}
                 pathname={pathname}
                 hasPermission={effectiveHasPermission}
+                userIsLoading={user.isLoading}
+                isAdvertisingDeveloper={isAdvertisingDeveloper}
+                accessEdit={navAccessEdit}
                 t={t}
               />
             )
@@ -748,6 +913,9 @@ export function AppSidebar() {
               pathname={pathname}
               hasPermission={effectiveHasPermission}
               collapsed={collapsed}
+              userIsLoading={user.isLoading}
+              isAdvertisingDeveloper={isAdvertisingDeveloper}
+              accessEdit={navAccessEdit}
               t={t}
             />
           ))}
@@ -863,7 +1031,8 @@ export function MobileSidebarTrigger() {
   const { t, locale } = useTranslation();
   const { visibleSidebarKeys } = useTutorialNavGate();
   const user = useUser();
-  const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole } = usePermissions();
+  const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole, isAdvertisingDeveloper } =
+    usePermissions();
   const effectiveHasPermission: (permission: PermissionKey) => boolean = user.isLoading
     ? () => true
     : hasPermission;
@@ -891,6 +1060,9 @@ export function MobileSidebarTrigger() {
   );
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
   const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
+  const roleTestAccessEditMode = useAppStore((stateFromStore) => stateFromStore.roleTestAccessEditMode);
+  const roleSidebarItems = useAppStore((stateFromStore) => stateFromStore.roleSidebarItems);
+  const toggleRoleSidebarItem = useAppStore((stateFromStore) => stateFromStore.toggleRoleSidebarItem);
   const setRoleTestingEnabled = useAppStore(
     (stateFromStore) => stateFromStore.setRoleTestingEnabled
   );
@@ -923,6 +1095,25 @@ export function MobileSidebarTrigger() {
     setActiveRole(values[nextIndex] ?? "owner");
   };
 
+  const navAccessEdit = useMemo((): NavAccessEditConfig | undefined => {
+    if (user.isLoading || user.roleKey !== "owner" || !roleTestingEnabled || !roleTestAccessEditMode) {
+      return undefined;
+    }
+    return {
+      targetRoleKey: activeRole,
+      isChecked: (key: SidebarItemKey) => Boolean(roleSidebarItems[activeRole]?.[key]),
+      toggle: (key: SidebarItemKey) => toggleRoleSidebarItem(activeRole, key),
+    };
+  }, [
+    user.isLoading,
+    user.roleKey,
+    roleTestingEnabled,
+    roleTestAccessEditMode,
+    activeRole,
+    roleSidebarItems,
+    toggleRoleSidebarItem,
+  ]);
+
   return (
     <Sheet>
       <SheetTrigger render={<Button variant="ghost" size="icon-sm" className="md:hidden" />}>
@@ -950,6 +1141,9 @@ export function MobileSidebarTrigger() {
               items={marketplaces}
               pathname={pathname}
               hasPermission={effectiveHasPermission}
+              userIsLoading={user.isLoading}
+              isAdvertisingDeveloper={isAdvertisingDeveloper}
+              accessEdit={navAccessEdit}
               t={t}
             />
           ) : null}
@@ -960,6 +1154,9 @@ export function MobileSidebarTrigger() {
               pathname={pathname}
               hasPermission={effectiveHasPermission}
               collapsed={false}
+              userIsLoading={user.isLoading}
+              isAdvertisingDeveloper={isAdvertisingDeveloper}
+              accessEdit={navAccessEdit}
               t={t}
             />
           ))}

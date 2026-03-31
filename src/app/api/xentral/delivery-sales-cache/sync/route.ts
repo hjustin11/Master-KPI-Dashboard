@@ -22,6 +22,7 @@ import {
   syncDeliverySalesCacheStep,
 } from "@/shared/lib/xentralDeliverySalesCache";
 import { fetchXentralProjectByIdLookup } from "@/shared/lib/xentralProjectLookup";
+import { warmProcurementLinesCache } from "@/shared/lib/procurement/procurementLinesPayload";
 
 function env(name: string) {
   return (process.env[name] ?? "").trim();
@@ -81,6 +82,8 @@ export async function POST(request: Request) {
     prewarmWindows?: number[];
     /** Default: true bei `prewarm` — Bestellungen-API in `integration_data_cache` füllen. */
     prewarmOrders?: boolean;
+    /** Default: true bei `prewarm` — Beschaffung (`procurement:lines`) wärmen. */
+    prewarmProcurement?: boolean;
     toYmd?: string;
     pageSize?: number;
   } = {};
@@ -180,6 +183,25 @@ export async function POST(request: Request) {
       }
     }
 
+    let procurementPrewarm: {
+      ok: boolean;
+      skipped?: boolean;
+      importId?: string;
+      durationMs?: number;
+      error?: string;
+    } = { ok: false };
+    if (body.prewarmProcurement !== false) {
+      const started = Date.now();
+      const pr = await warmProcurementLinesCache();
+      procurementPrewarm = {
+        ok: pr.ok,
+        skipped: pr.skipped,
+        importId: pr.importId,
+        durationMs: Date.now() - started,
+        error: pr.error,
+      };
+    }
+
     return NextResponse.json({
       ok: true,
       prewarm: true,
@@ -188,6 +210,7 @@ export async function POST(request: Request) {
       cacheExclusiveEndYmd: cacheExclusiveEndYmd(),
       windows: results,
       ordersPrewarm,
+      procurementPrewarm,
     });
   }
 

@@ -92,7 +92,7 @@ type ParityResponse = {
   issueCount?: number;
 };
 
-const PRICE_PARITY_CACHE_KEY = "marketplace_price_parity_v3";
+const PRICE_PARITY_CACHE_KEY = "marketplace_price_parity_v4";
 const PRICE_PARITY_PAGE_SIZE = 25;
 
 /** Einheitliche Breite für Amazon- und Marktplatz-Preisspalten */
@@ -206,7 +206,7 @@ export function MarketplacePriceParitySection() {
 
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<CachedParityPayload>(PRICE_PARITY_CACHE_KEY);
-      if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0 && !parsed.error) {
+      if (parsed && Array.isArray(parsed.rows) && !parsed.error) {
         setPayload(parsed);
         hadCache = true;
         setLoading(false);
@@ -229,7 +229,9 @@ export function MarketplacePriceParitySection() {
     }
 
     try {
-      const res = await fetch("/api/marketplaces/price-parity?limit=350", { cache: "no-store" });
+      const qs = new URLSearchParams({ limit: "350" });
+      if (forceRefresh) qs.set("refresh", "1");
+      const res = await fetch(`/api/marketplaces/price-parity?${qs}`, { cache: "no-store" });
       const json = (await res.json()) as ParityResponse;
       if (!res.ok) {
         throw new Error(json.error ?? t("priceParity.loadError"));
@@ -258,19 +260,22 @@ export function MarketplacePriceParitySection() {
     }
   }, [t]);
 
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
   useEffect(() => {
     setHasMounted(true);
-    void load(false, false);
-  }, [load]);
+    void loadRef.current(false, false);
+  }, []);
 
   useEffect(() => {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
       if (!shouldRunBackgroundSync()) return;
-      void load(false, true);
+      void loadRef.current(false, true);
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
-  }, [hasMounted, load]);
+  }, [hasMounted]);
 
   const rows = useMemo(() => payload?.rows ?? [], [payload]);
   const filtered = useMemo(() => {

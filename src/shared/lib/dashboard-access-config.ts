@@ -3,6 +3,12 @@ import {
   isValidSettingsUsersSectionOrder,
   type SettingsUsersSectionId,
 } from "@/shared/lib/settings-users-section-order";
+import {
+  actionAccessForRole,
+  type DashboardActionKey,
+  type DashboardWidgetKey,
+  widgetVisibilityForRole,
+} from "@/shared/lib/role-surface-access";
 
 export const DASHBOARD_ACCESS_CONFIG_VERSION = 1 as const;
 
@@ -11,6 +17,8 @@ export type DashboardAccessConfigV1 = {
   rolePermissions: Record<string, PermissionKey[]>;
   roleSidebarItems: Record<string, Record<SidebarItemKey, boolean>>;
   roleSectionVisibility: Record<string, Record<DashboardSectionKey, boolean>>;
+  roleWidgetVisibility: Record<string, Record<DashboardWidgetKey, boolean>>;
+  roleActionAccess: Record<string, Record<DashboardActionKey, boolean>>;
   roleLabels: Record<string, string>;
   customRoleKeys: string[];
   textOverrides: Record<string, string>;
@@ -27,12 +35,50 @@ export function parseDashboardAccessConfig(raw: unknown): DashboardAccessConfigV
   if (!isPlainObject(raw.rolePermissions)) return null;
   if (!isPlainObject(raw.roleSidebarItems)) return null;
   if (!isPlainObject(raw.roleSectionVisibility)) return null;
+  if (raw.roleWidgetVisibility !== undefined && !isPlainObject(raw.roleWidgetVisibility)) return null;
+  if (raw.roleActionAccess !== undefined && !isPlainObject(raw.roleActionAccess)) return null;
   if (!isPlainObject(raw.roleLabels)) return null;
   if (!Array.isArray(raw.customRoleKeys) || !raw.customRoleKeys.every((k) => typeof k === "string")) {
     return null;
   }
   if (!isPlainObject(raw.textOverrides)) return null;
   if (!isValidSettingsUsersSectionOrder(raw.settingsUsersSectionOrder)) return null;
+
+  const customRoleKeys = raw.customRoleKeys as string[];
+  const allRoleKeys = [
+    "owner",
+    "admin",
+    "manager",
+    "analyst",
+    "viewer",
+    ...customRoleKeys,
+  ];
+  const roleWidgetVisibilityRaw = (raw.roleWidgetVisibility ?? {}) as Record<
+    string,
+    Record<DashboardWidgetKey, boolean>
+  >;
+  const roleActionAccessRaw = (raw.roleActionAccess ?? {}) as Record<
+    string,
+    Record<DashboardActionKey, boolean>
+  >;
+  const roleWidgetVisibility = Object.fromEntries(
+    allRoleKeys.map((roleKey) => [
+      roleKey,
+      {
+        ...widgetVisibilityForRole(roleKey),
+        ...(roleWidgetVisibilityRaw[roleKey] ?? {}),
+      },
+    ])
+  ) as Record<string, Record<DashboardWidgetKey, boolean>>;
+  const roleActionAccess = Object.fromEntries(
+    allRoleKeys.map((roleKey) => [
+      roleKey,
+      {
+        ...actionAccessForRole(roleKey),
+        ...(roleActionAccessRaw[roleKey] ?? {}),
+      },
+    ])
+  ) as Record<string, Record<DashboardActionKey, boolean>>;
 
   return {
     v: DASHBOARD_ACCESS_CONFIG_VERSION,
@@ -42,8 +88,10 @@ export function parseDashboardAccessConfig(raw: unknown): DashboardAccessConfigV
       string,
       Record<DashboardSectionKey, boolean>
     >,
+    roleWidgetVisibility,
+    roleActionAccess,
     roleLabels: raw.roleLabels as Record<string, string>,
-    customRoleKeys: raw.customRoleKeys as string[],
+    customRoleKeys,
     textOverrides: raw.textOverrides as Record<string, string>,
     settingsUsersSectionOrder: raw.settingsUsersSectionOrder,
   };
@@ -53,6 +101,8 @@ export type DashboardAccessStoreSlice = {
   rolePermissions: Record<string, PermissionKey[]>;
   roleSidebarItems: Record<string, Record<SidebarItemKey, boolean>>;
   roleSectionVisibility: Record<string, Record<DashboardSectionKey, boolean>>;
+  roleWidgetVisibility: Record<string, Record<DashboardWidgetKey, boolean>>;
+  roleActionAccess: Record<string, Record<DashboardActionKey, boolean>>;
   roleLabels: Record<string, string>;
   customRoleKeys: string[];
   textOverrides: Record<string, string>;
@@ -67,6 +117,8 @@ export function buildDashboardAccessPayloadFromSlice(
     rolePermissions: slice.rolePermissions,
     roleSidebarItems: slice.roleSidebarItems,
     roleSectionVisibility: slice.roleSectionVisibility,
+    roleWidgetVisibility: slice.roleWidgetVisibility,
+    roleActionAccess: slice.roleActionAccess,
     roleLabels: slice.roleLabels,
     customRoleKeys: slice.customRoleKeys,
     textOverrides: slice.textOverrides,

@@ -16,6 +16,12 @@ import {
   DEFAULT_SETTINGS_USERS_SECTION_ORDER,
   type SettingsUsersSectionId,
 } from "@/shared/lib/settings-users-section-order";
+import {
+  type DashboardActionKey,
+  type DashboardWidgetKey,
+  actionAccessForRole,
+  widgetVisibilityForRole,
+} from "@/shared/lib/role-surface-access";
 
 function emptySectionVisibility(): Record<DashboardSectionKey, boolean> {
   return DASHBOARD_SECTION_CONFIG.reduce(
@@ -45,10 +51,14 @@ type AppState = {
   sidebarOpen: boolean;
   dashboardEditMode: boolean;
   roleTestingEnabled: boolean;
+  /** Nur Entwickler + Rollen-Test: Sidebar/Berechtigungen/Kacheln pro Testrolle per Checkbox bearbeiten. */
+  roleTestAccessEditMode: boolean;
   activeRole: string;
   rolePermissions: Record<string, PermissionKey[]>;
   roleSidebarItems: Record<string, Record<SidebarItemKey, boolean>>;
   roleSectionVisibility: Record<string, Record<DashboardSectionKey, boolean>>;
+  roleWidgetVisibility: Record<string, Record<DashboardWidgetKey, boolean>>;
+  roleActionAccess: Record<string, Record<DashboardActionKey, boolean>>;
   roleLabels: Record<string, string>;
   customRoleKeys: string[];
   textOverrides: Record<string, string>;
@@ -56,11 +66,14 @@ type AppState = {
   setSidebarOpen: (open: boolean) => void;
   setDashboardEditMode: (enabled: boolean) => void;
   setRoleTestingEnabled: (enabled: boolean) => void;
+  setRoleTestAccessEditMode: (enabled: boolean) => void;
   setActiveRole: (roleKey: string) => void;
   setRoleLabel: (roleKey: string, label: string) => void;
   toggleRolePermission: (roleKey: string, permission: PermissionKey) => void;
   toggleRoleSidebarItem: (roleKey: string, itemKey: SidebarItemKey) => void;
   toggleRoleSectionVisibility: (roleKey: string, sectionKey: DashboardSectionKey) => void;
+  toggleRoleWidgetVisibility: (roleKey: string, widgetKey: DashboardWidgetKey) => void;
+  toggleRoleActionAccess: (roleKey: string, actionKey: DashboardActionKey) => void;
   addCustomRole: (label: string, templateRoleKey: string) => string;
   removeRole: (roleKey: string) => void;
   setTextOverride: (key: string, value: string) => void;
@@ -75,12 +88,27 @@ export const useAppStore = create<AppState>()(
       sidebarOpen: true,
       dashboardEditMode: false,
       roleTestingEnabled: false,
+      roleTestAccessEditMode: false,
       activeRole: "owner",
       rolePermissions: INITIAL_ROLE_PERMISSIONS as Record<string, PermissionKey[]>,
       roleSidebarItems:
         INITIAL_ROLE_SIDEBAR_ITEMS as Record<string, Record<SidebarItemKey, boolean>>,
       roleSectionVisibility:
         INITIAL_ROLE_SECTION_VISIBILITY as Record<string, Record<DashboardSectionKey, boolean>>,
+      roleWidgetVisibility: {
+        owner: widgetVisibilityForRole("owner"),
+        admin: widgetVisibilityForRole("admin"),
+        manager: widgetVisibilityForRole("manager"),
+        analyst: widgetVisibilityForRole("analyst"),
+        viewer: widgetVisibilityForRole("viewer"),
+      },
+      roleActionAccess: {
+        owner: actionAccessForRole("owner"),
+        admin: actionAccessForRole("admin"),
+        manager: actionAccessForRole("manager"),
+        analyst: actionAccessForRole("analyst"),
+        viewer: actionAccessForRole("viewer"),
+      },
       roleLabels: ROLE_OPTIONS.reduce(
         (acc, item) => {
           acc[item.value] = "";
@@ -93,7 +121,12 @@ export const useAppStore = create<AppState>()(
       settingsUsersSectionOrder: [...DEFAULT_SETTINGS_USERS_SECTION_ORDER],
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setDashboardEditMode: (enabled) => set({ dashboardEditMode: enabled }),
-      setRoleTestingEnabled: (enabled) => set({ roleTestingEnabled: enabled }),
+      setRoleTestingEnabled: (enabled) =>
+        set({
+          roleTestingEnabled: enabled,
+          ...(enabled ? {} : { roleTestAccessEditMode: false }),
+        }),
+      setRoleTestAccessEditMode: (enabled) => set({ roleTestAccessEditMode: enabled }),
       setActiveRole: (roleKey) => set({ activeRole: roleKey }),
       setRoleLabel: (roleKey, label) =>
         set((state) => ({
@@ -144,6 +177,26 @@ export const useAppStore = create<AppState>()(
             },
           },
         })),
+      toggleRoleWidgetVisibility: (roleKey, widgetKey) =>
+        set((state) => ({
+          roleWidgetVisibility: {
+            ...state.roleWidgetVisibility,
+            [roleKey]: {
+              ...(state.roleWidgetVisibility[roleKey] ?? widgetVisibilityForRole(roleKey)),
+              [widgetKey]: !Boolean(state.roleWidgetVisibility[roleKey]?.[widgetKey]),
+            },
+          },
+        })),
+      toggleRoleActionAccess: (roleKey, actionKey) =>
+        set((state) => ({
+          roleActionAccess: {
+            ...state.roleActionAccess,
+            [roleKey]: {
+              ...(state.roleActionAccess[roleKey] ?? actionAccessForRole(roleKey)),
+              [actionKey]: !Boolean(state.roleActionAccess[roleKey]?.[actionKey]),
+            },
+          },
+        })),
       addCustomRole: (label, templateRoleKey) => {
         const roleKey = `custom-${Date.now().toString(36)}`;
 
@@ -151,6 +204,10 @@ export const useAppStore = create<AppState>()(
           const templatePermissions = state.rolePermissions[templateRoleKey] ?? [];
           const templateSidebarItems = state.roleSidebarItems[templateRoleKey] ?? {};
           const templateSectionVisibility = sectionVisibilityForTemplate(state, templateRoleKey);
+          const templateWidgetVisibility =
+            state.roleWidgetVisibility[templateRoleKey] ?? widgetVisibilityForRole(templateRoleKey);
+          const templateActionAccess =
+            state.roleActionAccess[templateRoleKey] ?? actionAccessForRole(templateRoleKey);
 
           return {
             activeRole: roleKey,
@@ -170,6 +227,14 @@ export const useAppStore = create<AppState>()(
               ...state.roleSectionVisibility,
               [roleKey]: { ...templateSectionVisibility },
             },
+            roleWidgetVisibility: {
+              ...state.roleWidgetVisibility,
+              [roleKey]: { ...templateWidgetVisibility },
+            },
+            roleActionAccess: {
+              ...state.roleActionAccess,
+              [roleKey]: { ...templateActionAccess },
+            },
             customRoleKeys: [...state.customRoleKeys, roleKey],
           };
         });
@@ -185,11 +250,15 @@ export const useAppStore = create<AppState>()(
           const nextRolePermissions = { ...state.rolePermissions };
           const nextRoleSidebarItems = { ...state.roleSidebarItems };
           const nextRoleSectionVisibility = { ...state.roleSectionVisibility };
+          const nextRoleWidgetVisibility = { ...state.roleWidgetVisibility };
+          const nextRoleActionAccess = { ...state.roleActionAccess };
           const nextRoleLabels = { ...state.roleLabels };
 
           delete nextRolePermissions[roleKey];
           delete nextRoleSidebarItems[roleKey];
           delete nextRoleSectionVisibility[roleKey];
+          delete nextRoleWidgetVisibility[roleKey];
+          delete nextRoleActionAccess[roleKey];
           delete nextRoleLabels[roleKey];
 
           const nextActiveRole = state.activeRole === roleKey ? "owner" : state.activeRole;
@@ -200,6 +269,8 @@ export const useAppStore = create<AppState>()(
             rolePermissions: nextRolePermissions,
             roleSidebarItems: nextRoleSidebarItems,
             roleSectionVisibility: nextRoleSectionVisibility,
+            roleWidgetVisibility: nextRoleWidgetVisibility,
+            roleActionAccess: nextRoleActionAccess,
             roleLabels: nextRoleLabels,
           };
         }),
@@ -222,6 +293,8 @@ export const useAppStore = create<AppState>()(
           rolePermissions: config.rolePermissions,
           roleSidebarItems: config.roleSidebarItems,
           roleSectionVisibility: config.roleSectionVisibility,
+          roleWidgetVisibility: config.roleWidgetVisibility,
+          roleActionAccess: config.roleActionAccess,
           roleLabels: config.roleLabels,
           customRoleKeys: config.customRoleKeys,
           textOverrides: config.textOverrides,

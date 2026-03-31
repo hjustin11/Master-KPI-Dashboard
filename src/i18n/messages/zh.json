@@ -18,7 +18,15 @@
     "profile": "个人资料",
     "roleTestMode": "角色测试模式",
     "restoreDeveloperView": "恢复开发者视图",
-    "testAs": "以 {role} 身份测试"
+    "testAs": "以 {role} 身份测试",
+    "roleTestAccessTarget": "测试角色：{role}",
+    "roleTestAccessEdit": "编辑权限与可见性",
+    "roleTestAccessEditHint": "显示全部菜单项。复选框作用于当前测试角色（不含开发者）。",
+    "roleTestAccessPanelOpen": "权限与设置卡片",
+    "roleTestAccessPanelTitle": "权限与设置区卡片",
+    "roleTestAccessPanelLead": "适用于测试角色「{role}」。开发者角色不受限制。",
+    "roleTestAccessPanelPermissionsHint": "该角色在仪表盘可执行的操作。",
+    "roleTestAccessPanelSectionsHint": "在 设置 → 用户 中可见的区域（卡片）。"
   },
   "sidebar": {
     "toggleSidebar": "收起或展开侧边栏",
@@ -51,6 +59,9 @@
     "xentralProducts": "物料",
     "xentralOrders": "订单",
     "advertising": "广告",
+    "advertisingWipBadge": "施工中",
+    "advertisingLockedHint": "该区域施工中，仅开发者可访问。",
+    "advertisingWipTooltip": "广告 – 施工中（仅开发者可完整访问）",
     "adCampaigns": "广告活动",
     "adPerformance": "成效",
     "analytics": "分析",
@@ -306,7 +317,8 @@
   },
   "commonUi": {
     "unknownError": "未知错误。",
-    "loading": "加载中…"
+    "loading": "加载中…",
+    "syncing": "正在同步数据…"
   },
   "analyticsPage": {
     "title": "分析"
@@ -824,7 +836,8 @@
     "toOverview": "前往预览",
     "geocodeSyncing": "同步中…",
     "emptyBeforeValue": "空",
-    "beforeWasTitle": "原值：{value}"
+    "beforeWasTitle": "原值：{value}",
+    "noPermissionAddressCorrection": "你没有权限修正地址。"
   },
   "ebayOrders": {
     "subtitle": "默认：今天 + 昨天。数据来自 eBay API（可配置）。",

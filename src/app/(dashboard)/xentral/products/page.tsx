@@ -41,6 +41,11 @@ type XentralArticleRow = {
   price?: number | null;
 };
 
+type XentralArticleTableRow = XentralArticleRow & {
+  /** Dedizierter Sortierschlüssel für Tag-Spalte (stabil für TanStack). */
+  __tagSort: string;
+};
+
 const XENTRAL_ARTICLES_CACHE_KEY = "xentral_articles_cache_v5";
 
 type CachedPayload = {
@@ -666,7 +671,20 @@ export default function XentralProductsPage() {
     return () => window.clearInterval(id);
   }, [hasMounted, load]);
 
-  const columns = useMemo<Array<ColumnDef<XentralArticleRow>>>(
+  const tableData = useMemo<XentralArticleTableRow[]>(
+    () =>
+      data.map((row) => {
+        const sku = (row.sku ?? "").trim();
+        const rawTag = sku ? getTagForSku(sku) ?? "" : "";
+        return {
+          ...row,
+          __tagSort: rawTag.trim().toLocaleLowerCase(),
+        };
+      }),
+    [data, getTagForSku]
+  );
+
+  const columns = useMemo<Array<ColumnDef<XentralArticleTableRow>>>(
     () => [
       {
         accessorKey: "sku",
@@ -694,11 +712,8 @@ export default function XentralProductsPage() {
         id: "tags",
         header: t("xentralProducts.tags"),
         meta: { align: "left" as const },
-        accessorFn: (row) => {
-          const sku = (row.sku ?? "").trim();
-          if (!sku) return "";
-          return getTagForSku(sku) ?? "";
-        },
+        accessorKey: "__tagSort",
+        enableSorting: true,
         sortingFn: (rowA, rowB, columnId) =>
           compareLocaleStringEmptyLast(
             String(rowA.getValue(columnId) ?? ""),
@@ -793,7 +808,7 @@ export default function XentralProductsPage() {
       ) : (
         <DataTable
           columns={columns}
-          data={data}
+          data={tableData}
           filterColumn={t("filters.skuOrArticleName")}
           paginate={false}
           compact
