@@ -72,7 +72,8 @@
     "mediamarktSaturnProducts": "Products",
     "zooplusProducts": "Products",
     "tiktokProducts": "Products",
-    "shopifyProducts": "Products"
+    "shopifyProducts": "Products",
+    "personalArea": "My workspace"
   },
   "breadcrumbs": {
     "amazon": "Amazon",
@@ -117,7 +118,7 @@
     "export_data": "Export data"
   },
   "sidebarItems": {
-    "overview": "Overview",
+    "overview": "My workspace",
     "amazon": "Amazon",
     "otto": "Otto",
     "kaufland": "Kaufland",
@@ -872,5 +873,41 @@
     "statusCompleted": "Completed",
     "statusPending": "Pending",
     "loadFailed": "Could not load eBay orders."
+  },
+  "home": {
+    "title": "Welcome, {name}",
+    "lead": "This is your personal homepage. You can move tiles freely and show/hide them.",
+    "saving": "Saving…",
+    "editTiles": "Edit tiles",
+    "finishEditing": "Finish editing",
+    "openTile": "Open",
+    "hideTile": "Hide",
+    "availableTiles": "Available tiles",
+    "tiles": {
+      "analyticsMarketplaces": {
+        "title": "Marketplace analytics",
+        "description": "Revenue, orders, and trends across marketplaces."
+      },
+      "analyticsForecast": {
+        "title": "Demand forecast",
+        "description": "Forecast, stock view, and next procurement decisions."
+      },
+      "updates": {
+        "title": "Updates & feedback",
+        "description": "New features, releases, and your feedback."
+      },
+      "profile": {
+        "title": "My profile",
+        "description": "Manage personal information and account settings."
+      },
+      "xentralOrders": {
+        "title": "Xentral orders",
+        "description": "Open orders, address checks, and shipping status."
+      },
+      "amazonOrders": {
+        "title": "Amazon orders",
+        "description": "Quick access to current Amazon orders."
+      }
+    }
   }
 }

@@ -72,7 +72,8 @@
     "mediamarktSaturnProducts": "Produkte",
     "zooplusProducts": "Produkte",
     "tiktokProducts": "Produkte",
-    "shopifyProducts": "Produkte"
+    "shopifyProducts": "Produkte",
+    "personalArea": "Mein Bereich"
   },
   "breadcrumbs": {
     "amazon": "Amazon",
@@ -117,7 +118,7 @@
     "export_data": "Daten exportieren"
   },
   "sidebarItems": {
-    "overview": "Übersicht",
+    "overview": "Mein Bereich",
     "amazon": "Amazon",
     "otto": "Otto",
     "kaufland": "Kaufland",
@@ -871,5 +872,41 @@
     "statusCompleted": "Abgeschlossen",
     "statusPending": "Ausstehend",
     "loadFailed": "eBay-Bestellungen konnten nicht geladen werden."
+  },
+  "home": {
+    "title": "Willkommen, {name}",
+    "lead": "Das ist deine persönliche Startseite. Du kannst Kacheln frei anordnen und ein-/ausblenden.",
+    "saving": "Wird gespeichert…",
+    "editTiles": "Kacheln bearbeiten",
+    "finishEditing": "Bearbeitung beenden",
+    "openTile": "Öffnen",
+    "hideTile": "Ausblenden",
+    "availableTiles": "Verfügbare Kacheln",
+    "tiles": {
+      "analyticsMarketplaces": {
+        "title": "Marktplatz-Analytics",
+        "description": "Umsatz, Orders und Trends über alle Marktplätze."
+      },
+      "analyticsForecast": {
+        "title": "Bedarfsprognose",
+        "description": "Forecast, Bestandsblick und nächste Beschaffungsentscheidungen."
+      },
+      "updates": {
+        "title": "Updates & Feedback",
+        "description": "Neue Funktionen, Änderungen und deine Rückmeldungen."
+      },
+      "profile": {
+        "title": "Mein Profil",
+        "description": "Persönliche Daten und Konto-Einstellungen verwalten."
+      },
+      "xentralOrders": {
+        "title": "Xentral Aufträge",
+        "description": "Offene Aufträge, Adressprüfungen und Versandstatus."
+      },
+      "amazonOrders": {
+        "title": "Amazon Bestellungen",
+        "description": "Schnellzugriff auf aktuelle Amazon-Bestellungen."
+      }
+    }
   }
 }

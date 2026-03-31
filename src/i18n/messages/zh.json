@@ -72,7 +72,8 @@
     "mediamarktSaturnProducts": "商品",
     "zooplusProducts": "商品",
     "tiktokProducts": "商品",
-    "shopifyProducts": "商品"
+    "shopifyProducts": "商品",
+    "personalArea": "我的工作区"
   },
   "breadcrumbs": {
     "amazon": "亚马逊",
@@ -117,7 +118,7 @@
     "export_data": "导出数据"
   },
   "sidebarItems": {
-    "overview": "概览",
+    "overview": "我的工作区",
     "amazon": "亚马逊",
     "otto": "Otto",
     "kaufland": "Kaufland",
@@ -848,5 +849,41 @@
     "statusCompleted": "已完成",
     "statusPending": "待处理",
     "loadFailed": "无法加载 eBay 订单。"
+  },
+  "home": {
+    "title": "欢迎你，{name}",
+    "lead": "这是你的个人首页。你可以自由排列卡片并显示/隐藏。",
+    "saving": "正在保存…",
+    "editTiles": "编辑卡片",
+    "finishEditing": "完成编辑",
+    "openTile": "打开",
+    "hideTile": "隐藏",
+    "availableTiles": "可用卡片",
+    "tiles": {
+      "analyticsMarketplaces": {
+        "title": "平台分析",
+        "description": "查看各平台的销售额、订单和趋势。"
+      },
+      "analyticsForecast": {
+        "title": "需求预测",
+        "description": "查看预测、库存与下一步采购决策。"
+      },
+      "updates": {
+        "title": "更新与反馈",
+        "description": "查看新功能、版本变更与反馈入口。"
+      },
+      "profile": {
+        "title": "我的资料",
+        "description": "管理个人信息与账户设置。"
+      },
+      "xentralOrders": {
+        "title": "Xentral 订单",
+        "description": "查看待处理订单、地址校验与发货状态。"
+      },
+      "amazonOrders": {
+        "title": "Amazon 订单",
+        "description": "快速进入当前 Amazon 订单视图。"
+      }
+    }
   }
 }
