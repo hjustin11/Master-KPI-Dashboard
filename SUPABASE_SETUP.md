@@ -86,3 +86,29 @@ Ohne diese Tabelle: die App nutzt weiterhin nur den lokalen Browser-Store (`loca
   - E-Mail-Provider in Supabase Authentication prüfen
 - `Nicht authentifiziert` bei API
   - Du bist im Browser nicht als Owner eingeloggt
+
+## 7) Profitabilitaet: Gebuehren-Fallback konfigurieren
+
+Fuer `Analytics -> Marktplaetze` koennen Gebuehren als Fallback-Prozentsatz je Marktplatz gesetzt werden.
+Die App liest zuerst `process.env`, danach `public.integration_secrets`.
+
+Empfohlene Keys:
+
+- `MARKETPLACE_FEE_DEFAULT_PERCENT` (global, z. B. `10`)
+- `MARKETPLACE_FEE_AMAZON_PERCENT` (z. B. `15`)
+- `MARKETPLACE_FEE_EBAY_PERCENT` (z. B. `12`)
+- `MARKETPLACE_FEE_OTTO_PERCENT` (z. B. `14`)
+- `MARKETPLACE_FEE_KAUFLAND_PERCENT` (z. B. `12`)
+- `MARKETPLACE_FEE_FRESSNAPF_PERCENT` (z. B. `10`)
+- `MARKETPLACE_FEE_MEDIAMARKT_SATURN_PERCENT` (z. B. `10`)
+- `MARKETPLACE_FEE_ZOOPLUS_PERCENT` (z. B. `10`)
+- `MARKETPLACE_FEE_TIKTOK_PERCENT` (z. B. `9`)
+- `MARKETPLACE_FEE_SHOPIFY_PERCENT` (z. B. `2`)
+
+Optional je Marktplatz:
+
+- `MARKETPLACE_FEE_<MARKTPLATZ>_FIXED_PER_ORDER`
+
+Beispiel in `integration_secrets`:
+
+- `key = MARKETPLACE_FEE_AMAZON_PERCENT`, `value = 15`

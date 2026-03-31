@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 import {
   MAX_ANALYTICS_RANGE_DAYS,
-  buildPartialNetBreakdown,
   resolveComparisonPreviousRange,
   type CompareMode,
 } from "@/shared/lib/analytics-date-range";
@@ -16,6 +15,12 @@ import {
   ymdToUtcRangeExclusiveEnd,
   type KauflandOrderUnit,
 } from "@/shared/lib/kauflandApiClient";
+import {
+  buildNetBreakdown,
+  estimateMarketplaceFeeAmount,
+  getMarketplaceFeePolicy,
+  sumStatusAmounts,
+} from "@/shared/lib/marketplace-profitability";
 
 type KauflandSalesPoint = {
   date: string;
@@ -130,6 +135,7 @@ async function writeSyncRecord(args: {
 
 export async function GET(request: Request) {
   try {
+    const feePolicy = await getMarketplaceFeePolicy("kaufland");
     const config = await getKauflandIntegrationConfig();
     const missing = {
       KAUFLAND_CLIENT_KEY: !config.clientKey,
@@ -242,12 +248,48 @@ export async function GET(request: Request) {
         meta,
       });
 
+      const currentFee = estimateMarketplaceFeeAmount({
+        salesAmount: current.summary.salesAmount,
+        orderCount: current.summary.orderCount,
+        policy: feePolicy,
+      });
+      const previousFee = estimateMarketplaceFeeAmount({
+        salesAmount: previous.summary.salesAmount,
+        orderCount: previous.summary.orderCount,
+        policy: feePolicy,
+      });
+      const currentReturns = sumStatusAmounts({
+        items: currentUnits,
+        getStatus: (unit) => unit.status,
+        getAmount: (unit) => centsToAmount(typeof unit.price === "number" ? unit.price : unit.revenue_gross),
+      });
+      const previousReturns = sumStatusAmounts({
+        items: previousUnits,
+        getStatus: (unit) => unit.status,
+        getAmount: (unit) => centsToAmount(typeof unit.price === "number" ? unit.price : unit.revenue_gross),
+      });
       return NextResponse.json({
         meta,
         summary: current.summary,
         previousSummary: previous.summary,
-        netBreakdown: buildPartialNetBreakdown(current.summary.salesAmount),
-        previousNetBreakdown: buildPartialNetBreakdown(previous.summary.salesAmount),
+        netBreakdown: buildNetBreakdown({
+          salesAmount: current.summary.salesAmount,
+          returnedAmount: currentReturns.returnedAmount,
+          cancelledAmount: currentReturns.cancelledAmount,
+          feesAmount: currentFee.feesAmount,
+          adSpendAmount: 0,
+          feeSource: currentFee.feeSource,
+          returnsSource: currentReturns.returnsSource,
+        }),
+        previousNetBreakdown: buildNetBreakdown({
+          salesAmount: previous.summary.salesAmount,
+          returnedAmount: previousReturns.returnedAmount,
+          cancelledAmount: previousReturns.cancelledAmount,
+          feesAmount: previousFee.feesAmount,
+          adSpendAmount: 0,
+          feeSource: previousFee.feeSource,
+          returnsSource: previousReturns.returnsSource,
+        }),
         revenueDeltaPct,
         points: current.points,
         previousPoints: previous.points,
@@ -274,10 +316,28 @@ export async function GET(request: Request) {
       meta,
     });
 
+    const fee = estimateMarketplaceFeeAmount({
+      salesAmount: current.summary.salesAmount,
+      orderCount: current.summary.orderCount,
+      policy: feePolicy,
+    });
+    const returns = sumStatusAmounts({
+      items: units,
+      getStatus: (unit) => unit.status,
+      getAmount: (unit) => centsToAmount(typeof unit.price === "number" ? unit.price : unit.revenue_gross),
+    });
     return NextResponse.json({
       meta,
       summary: current.summary,
-      netBreakdown: buildPartialNetBreakdown(current.summary.salesAmount),
+      netBreakdown: buildNetBreakdown({
+        salesAmount: current.summary.salesAmount,
+        returnedAmount: returns.returnedAmount,
+        cancelledAmount: returns.cancelledAmount,
+        feesAmount: fee.feesAmount,
+        adSpendAmount: 0,
+        feeSource: fee.feeSource,
+        returnsSource: returns.returnsSource,
+      }),
       points: current.points,
     });
   } catch (error) {

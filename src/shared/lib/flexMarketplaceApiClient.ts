@@ -525,9 +525,23 @@ export function normalizeFlexOrder(raw: unknown, amountScale: number): FlexNorma
     }, 0);
   }
 
-  const status = String(
-    o.status ?? o.financial_status ?? o.state ?? o.order_state ?? o.order_status ?? ""
-  );
+  const statusParts = [
+    o.status,
+    o.financial_status,
+    o.state,
+    o.order_state,
+    o.order_status,
+    o.fulfillment_status,
+    o.payment_status,
+    o.cancel_reason,
+    o.cancellation_reason,
+    o.cancelled_at ? "cancelled" : "",
+    o.refunded_at ? "refunded" : "",
+    o.returned_at ? "returned" : "",
+  ]
+    .map((part) => String(part ?? "").trim())
+    .filter(Boolean);
+  const status = statusParts.join(" ");
 
   return {
     id,

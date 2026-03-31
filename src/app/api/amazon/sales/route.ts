@@ -3,15 +3,23 @@ import { NextResponse } from "next/server";
 import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import {
   MAX_ANALYTICS_RANGE_DAYS,
-  buildPartialNetBreakdown,
   resolveComparisonPreviousRange,
   type CompareMode,
 } from "@/shared/lib/analytics-date-range";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import {
+  buildNetBreakdown,
+  estimateMarketplaceFeeAmount,
+  getMarketplaceFeePolicy,
+  sumStatusAmounts,
+  type MarketplaceFeePolicy,
+} from "@/shared/lib/marketplace-profitability";
 
 type AmazonOrder = {
   AmazonOrderId?: string;
   PurchaseDate?: string;
+  OrderStatus?: string;
+  FulfillmentChannel?: string;
   OrderTotal?: {
     Amount?: string;
     CurrencyCode?: string;
@@ -369,6 +377,59 @@ function ordersToDailyPoints(orders: AmazonOrder[]): SalesPoint[] {
   return Array.from(pointsMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+async function fetchOrdersForFbaUnits(args: {
+  config: Awaited<ReturnType<typeof getConfig>>;
+  lwaAccessToken: string;
+  createdAfterIso: string;
+}): Promise<AmazonOrder[]> {
+  const allOrders: AmazonOrder[] = [];
+  let nextToken = "";
+  let guard = 0;
+  while (guard < 20) {
+    const query: Record<string, string> = nextToken
+      ? { NextToken: nextToken }
+      : {
+          MarketplaceIds: args.config.marketplaceIds.join(","),
+          CreatedAfter: args.createdAfterIso,
+          MaxResultsPerPage: "100",
+        };
+    const ordersResult = await spApiGet({
+      endpoint: args.config.endpoint,
+      region: args.config.region,
+      path: "/orders/v0/orders",
+      query,
+      awsAccessKeyId: args.config.awsAccessKeyId,
+      awsSecretAccessKey: args.config.awsSecretAccessKey,
+      awsSessionToken: args.config.awsSessionToken,
+      lwaAccessToken: args.lwaAccessToken,
+    });
+    if (!ordersResult.res.ok || !ordersResult.json) {
+      throw new Error(`Amazon Orders konnten nicht geladen werden (HTTP ${ordersResult.res.status}).`);
+    }
+    const payload = ordersResult.json as {
+      payload?: { Orders?: AmazonOrder[]; NextToken?: string };
+    };
+    allOrders.push(...(payload?.payload?.Orders ?? []));
+    nextToken = payload?.payload?.NextToken ?? "";
+    if (!nextToken) break;
+    guard += 1;
+  }
+  return allOrders;
+}
+
+function sumFbaUnitsInRange(orders: AmazonOrder[], startMs: number, endMs: number): number {
+  let units = 0;
+  for (const order of orders) {
+    if (String(order.FulfillmentChannel ?? "").toUpperCase() !== "AFN") continue;
+    const purchaseDate = typeof order.PurchaseDate === "string" ? order.PurchaseDate : "";
+    if (!purchaseDate) continue;
+    const t = new Date(purchaseDate).getTime();
+    if (Number.isNaN(t) || t < startMs || t >= endMs) continue;
+    units += toNumber(order.NumberOfItemsShipped ?? 0) + toNumber(order.NumberOfItemsUnshipped ?? 0);
+  }
+  return units;
+}
+
 async function buildResponseFromSalesOrderMetrics(args: {
   config: Awaited<ReturnType<typeof getConfig>>;
   lwaAccessToken: string;
@@ -384,6 +445,27 @@ async function buildResponseFromSalesOrderMetrics(args: {
     marketplaces: string[];
     region: string;
   };
+  feePolicy: MarketplaceFeePolicy;
+  adSpend: {
+    currentAdSpend: number;
+    previousAdSpend: number;
+    source: "csv" | "none";
+  };
+  txCosts: {
+    current: {
+      feesAmount: number;
+      returnedAmount: number;
+      cancelledAmount: number;
+      adSpendAmount: number;
+    };
+    previous: {
+      feesAmount: number;
+      returnedAmount: number;
+      cancelledAmount: number;
+      adSpendAmount: number;
+    };
+    source: "csv" | "none";
+  };
 }): Promise<
   | {
       meta: {
@@ -396,17 +478,29 @@ async function buildResponseFromSalesOrderMetrics(args: {
         region: string;
         dataSource: "sales_order_metrics";
       };
-      summary: { orderCount: number; salesAmount: number; units: number; currency: string };
-      previousSummary?: { orderCount: number; salesAmount: number; units: number; currency: string };
-      netBreakdown: ReturnType<typeof buildPartialNetBreakdown>;
-      previousNetBreakdown?: ReturnType<typeof buildPartialNetBreakdown>;
+      summary: {
+        orderCount: number;
+        salesAmount: number;
+        units: number;
+        currency: string;
+        fbaUnits?: number;
+      };
+      previousSummary?: {
+        orderCount: number;
+        salesAmount: number;
+        units: number;
+        currency: string;
+        fbaUnits?: number;
+      };
+      netBreakdown: ReturnType<typeof buildNetBreakdown>;
+      previousNetBreakdown?: ReturnType<typeof buildNetBreakdown>;
       revenueDeltaPct?: number | null;
       points: SalesPoint[];
       previousPoints?: SalesPoint[];
     }
   | null
 > {
-  const { config, lwaAccessToken, compare, createdAfterIso, current, previous, meta } = args;
+  const { config, lwaAccessToken, compare, createdAfterIso, current, previous, meta, adSpend, txCosts } = args;
   const spArgsBase = {
     endpoint: config.endpoint,
     region: config.region,
@@ -466,8 +560,38 @@ async function buildResponseFromSalesOrderMetrics(args: {
       },
       summary,
       previousSummary,
-      netBreakdown: buildPartialNetBreakdown(summary.salesAmount),
-      previousNetBreakdown: buildPartialNetBreakdown(previousSummary.salesAmount),
+      netBreakdown: buildNetBreakdown({
+        salesAmount: summary.salesAmount,
+        returnedAmount: txCosts.current.returnedAmount,
+        cancelledAmount: txCosts.current.cancelledAmount,
+        feesAmount:
+          txCosts.source === "csv"
+            ? txCosts.current.feesAmount
+            : estimateMarketplaceFeeAmount({
+                salesAmount: summary.salesAmount,
+                orderCount: summary.orderCount,
+                policy: args.feePolicy,
+              }).feesAmount,
+        adSpendAmount: txCosts.source === "csv" ? txCosts.current.adSpendAmount : adSpend.currentAdSpend,
+        feeSource: txCosts.source === "csv" ? "api" : args.feePolicy.source,
+        returnsSource: txCosts.source === "csv" ? "api" : "none",
+      }),
+      previousNetBreakdown: buildNetBreakdown({
+        salesAmount: previousSummary.salesAmount,
+        returnedAmount: txCosts.previous.returnedAmount,
+        cancelledAmount: txCosts.previous.cancelledAmount,
+        feesAmount:
+          txCosts.source === "csv"
+            ? txCosts.previous.feesAmount
+            : estimateMarketplaceFeeAmount({
+                salesAmount: previousSummary.salesAmount,
+                orderCount: previousSummary.orderCount,
+                policy: args.feePolicy,
+              }).feesAmount,
+        adSpendAmount: txCosts.source === "csv" ? txCosts.previous.adSpendAmount : adSpend.previousAdSpend,
+        feeSource: txCosts.source === "csv" ? "api" : args.feePolicy.source,
+        returnsSource: txCosts.source === "csv" ? "api" : "none",
+      }),
       revenueDeltaPct,
       points: points ?? [],
       previousPoints: previousPoints ?? [],
@@ -498,7 +622,22 @@ async function buildResponseFromSalesOrderMetrics(args: {
       dataSource: "sales_order_metrics" as const,
     },
     summary,
-    netBreakdown: buildPartialNetBreakdown(summary.salesAmount),
+    netBreakdown: buildNetBreakdown({
+      salesAmount: summary.salesAmount,
+      returnedAmount: txCosts.current.returnedAmount,
+      cancelledAmount: txCosts.current.cancelledAmount,
+      feesAmount:
+        txCosts.source === "csv"
+          ? txCosts.current.feesAmount
+          : estimateMarketplaceFeeAmount({
+              salesAmount: summary.salesAmount,
+              orderCount: summary.orderCount,
+              policy: args.feePolicy,
+            }).feesAmount,
+      adSpendAmount: txCosts.source === "csv" ? txCosts.current.adSpendAmount : adSpend.currentAdSpend,
+      feeSource: txCosts.source === "csv" ? "api" : args.feePolicy.source,
+      returnsSource: txCosts.source === "csv" ? "api" : "none",
+    }),
     points,
   };
 }
@@ -522,6 +661,7 @@ function ymdToUtcRangeExclusiveEnd(fromYmd: string, toYmd: string): { startMs: n
 
 export async function GET(request: Request) {
   try {
+    const feePolicy = await getMarketplaceFeePolicy("amazon");
     const config = await getConfig();
     const missing = {
       AMAZON_SP_API_REFRESH_TOKEN: !config.refreshToken,
@@ -615,6 +755,24 @@ export async function GET(request: Request) {
       marketplaces: config.marketplaceIds,
       region: config.region,
     };
+    const adSpend: {
+      currentAdSpend: number;
+      previousAdSpend: number;
+      source: "csv" | "none";
+    } = {
+      currentAdSpend: 0,
+      previousAdSpend: 0,
+      source: "none",
+    };
+    const txCosts: {
+      current: { feesAmount: number; returnedAmount: number; cancelledAmount: number; adSpendAmount: number };
+      previous: { feesAmount: number; returnedAmount: number; cancelledAmount: number; adSpendAmount: number };
+      source: "csv" | "none";
+    } = {
+      current: { feesAmount: 0, returnedAmount: 0, cancelledAmount: 0, adSpendAmount: 0 },
+      previous: { feesAmount: 0, returnedAmount: 0, cancelledAmount: 0, adSpendAmount: 0 },
+      source: "none",
+    };
 
     const fromMetrics = await buildResponseFromSalesOrderMetrics({
       config,
@@ -624,9 +782,30 @@ export async function GET(request: Request) {
       current: { startMs: currentStartMs, endMs: currentEndMs },
       previous: compare ? { startMs: prevStartMs, endMs: prevEndMs } : undefined,
       meta: metaBase,
+      feePolicy,
+      adSpend,
+      txCosts,
     });
     if (fromMetrics) {
-      return NextResponse.json(fromMetrics);
+      try {
+        const fbaOrders = await fetchOrdersForFbaUnits({
+          config,
+          lwaAccessToken,
+          createdAfterIso,
+        });
+        const currentFbaUnits = sumFbaUnitsInRange(fbaOrders, currentStartMs, currentEndMs);
+        const previousFbaUnits =
+          compare && prevEndMs > prevStartMs ? sumFbaUnitsInRange(fbaOrders, prevStartMs, prevEndMs) : 0;
+        return NextResponse.json({
+          ...fromMetrics,
+          summary: { ...fromMetrics.summary, fbaUnits: currentFbaUnits },
+          ...(fromMetrics.previousSummary
+            ? { previousSummary: { ...fromMetrics.previousSummary, fbaUnits: previousFbaUnits } }
+            : {}),
+        });
+      } catch {
+        return NextResponse.json(fromMetrics);
+      }
     }
 
     const allOrders: AmazonOrder[] = [];
@@ -743,8 +922,14 @@ export async function GET(request: Request) {
     if (compare) {
       const currentOrders = allOrders.filter((o) => orderBucket(o) === "current");
       const previousOrders = allOrders.filter((o) => orderBucket(o) === "previous");
-      const summary = aggregateBucket(currentOrders);
-      const previousSummary = aggregateBucket(previousOrders);
+      const summary = {
+        ...aggregateBucket(currentOrders),
+        fbaUnits: sumFbaUnitsInRange(allOrders, currentStartMs, currentEndMs),
+      };
+      const previousSummary = {
+        ...aggregateBucket(previousOrders),
+        fbaUnits: sumFbaUnitsInRange(allOrders, prevStartMs, prevEndMs),
+      };
       const previousPoints = ordersToDailyPoints(previousOrders);
       let revenueDeltaPct: number | null = null;
       if (previousSummary.salesAmount > 0) {
@@ -755,6 +940,27 @@ export async function GET(request: Request) {
           ).toFixed(1)
         );
       }
+
+      const currentFee = estimateMarketplaceFeeAmount({
+        salesAmount: summary.salesAmount,
+        orderCount: summary.orderCount,
+        policy: feePolicy,
+      });
+      const previousFee = estimateMarketplaceFeeAmount({
+        salesAmount: previousSummary.salesAmount,
+        orderCount: previousSummary.orderCount,
+        policy: feePolicy,
+      });
+      const currentReturns = sumStatusAmounts({
+        items: currentOrders,
+        getStatus: (order) => order.OrderStatus,
+        getAmount: (order) => toNumber(order.OrderTotal?.Amount ?? 0),
+      });
+      const previousReturns = sumStatusAmounts({
+        items: previousOrders,
+        getStatus: (order) => order.OrderStatus,
+        getAmount: (order) => toNumber(order.OrderTotal?.Amount ?? 0),
+      });
 
       return NextResponse.json({
         meta: {
@@ -768,13 +974,44 @@ export async function GET(request: Request) {
         },
         summary,
         previousSummary,
-        netBreakdown: buildPartialNetBreakdown(summary.salesAmount),
-        previousNetBreakdown: buildPartialNetBreakdown(previousSummary.salesAmount),
+        netBreakdown: buildNetBreakdown({
+          salesAmount: summary.salesAmount,
+          returnedAmount:
+            txCosts.source === "csv" ? txCosts.current.returnedAmount : currentReturns.returnedAmount,
+          cancelledAmount:
+            txCosts.source === "csv" ? txCosts.current.cancelledAmount : currentReturns.cancelledAmount,
+          feesAmount: txCosts.source === "csv" ? txCosts.current.feesAmount : currentFee.feesAmount,
+          adSpendAmount: txCosts.source === "csv" ? txCosts.current.adSpendAmount : adSpend.currentAdSpend,
+          feeSource: txCosts.source === "csv" ? "api" : currentFee.feeSource,
+          returnsSource: txCosts.source === "csv" ? "api" : currentReturns.returnsSource,
+        }),
+        previousNetBreakdown: buildNetBreakdown({
+          salesAmount: previousSummary.salesAmount,
+          returnedAmount:
+            txCosts.source === "csv" ? txCosts.previous.returnedAmount : previousReturns.returnedAmount,
+          cancelledAmount:
+            txCosts.source === "csv" ? txCosts.previous.cancelledAmount : previousReturns.cancelledAmount,
+          feesAmount: txCosts.source === "csv" ? txCosts.previous.feesAmount : previousFee.feesAmount,
+          adSpendAmount: txCosts.source === "csv" ? txCosts.previous.adSpendAmount : adSpend.previousAdSpend,
+          feeSource: txCosts.source === "csv" ? "api" : previousFee.feeSource,
+          returnsSource: txCosts.source === "csv" ? "api" : previousReturns.returnsSource,
+        }),
         revenueDeltaPct,
         points,
         previousPoints,
       });
     }
+
+    const fee = estimateMarketplaceFeeAmount({
+      salesAmount: Number(totalSalesAmount.toFixed(2)),
+      orderCount: allOrders.filter((o) => orderBucket(o) === "all").length,
+      policy: feePolicy,
+    });
+    const returns = sumStatusAmounts({
+      items: allOrders.filter((o) => orderBucket(o) === "all"),
+      getStatus: (order) => order.OrderStatus,
+      getAmount: (order) => toNumber(order.OrderTotal?.Amount ?? 0),
+    });
 
     return NextResponse.json({
       meta: {
@@ -791,8 +1028,18 @@ export async function GET(request: Request) {
         salesAmount: Number(totalSalesAmount.toFixed(2)),
         units: totalUnits,
         currency,
+        fbaUnits: sumFbaUnitsInRange(allOrders, currentStartMs, currentEndMs),
       },
-      netBreakdown: buildPartialNetBreakdown(Number(totalSalesAmount.toFixed(2))),
+      netBreakdown: buildNetBreakdown({
+        salesAmount: Number(totalSalesAmount.toFixed(2)),
+        returnedAmount: txCosts.source === "csv" ? txCosts.current.returnedAmount : returns.returnedAmount,
+        cancelledAmount:
+          txCosts.source === "csv" ? txCosts.current.cancelledAmount : returns.cancelledAmount,
+        feesAmount: txCosts.source === "csv" ? txCosts.current.feesAmount : fee.feesAmount,
+        adSpendAmount: txCosts.source === "csv" ? txCosts.current.adSpendAmount : adSpend.currentAdSpend,
+        feeSource: txCosts.source === "csv" ? "api" : fee.feeSource,
+        returnsSource: txCosts.source === "csv" ? "api" : returns.returnsSource,
+      }),
       points,
     });
   } catch (error) {

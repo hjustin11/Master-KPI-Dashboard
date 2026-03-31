@@ -1,3 +1,166 @@
+"use client";
+
+import Link from "next/link";
+import {
+  BarChart3,
+  LayoutGrid,
+  LineChart,
+  Megaphone,
+  PackageSearch,
+  ShoppingBag,
+  UserRound,
+} from "lucide-react";
+import { WelcomeHero } from "@/components/dashboard/welcome/WelcomeHero";
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { useTranslation } from "@/i18n/I18nProvider";
+import { DASHBOARD_PAGE_SHELL } from "@/shared/lib/dashboardUi";
+import { useUser } from "@/shared/hooks/useUser";
+
+type HomeTileKey =
+  | "analyticsMarketplaces"
+  | "analyticsForecast"
+  | "updates"
+  | "profile"
+  | "xentralOrders"
+  | "amazonOrders";
+
+type HomeTile = {
+  key: HomeTileKey;
+  href: string;
+  icon: typeof BarChart3;
+  bar: string;
+  iconSurface: string;
+};
+
+const HOME_TILES: HomeTile[] = [
+  {
+    key: "analyticsMarketplaces",
+    href: "/analytics/marketplaces",
+    icon: BarChart3,
+    bar: "from-sky-500/35 via-sky-400/22 to-transparent",
+    iconSurface:
+      "border-sky-200/60 bg-gradient-to-br from-sky-400/14 to-sky-600/8 text-sky-800/90 dark:border-sky-800/40 dark:text-sky-300/90",
+  },
+  {
+    key: "analyticsForecast",
+    href: "/analytics/article-forecast",
+    icon: LineChart,
+    bar: "from-violet-500/35 via-violet-400/22 to-transparent",
+    iconSurface:
+      "border-violet-200/60 bg-gradient-to-br from-violet-400/14 to-violet-600/8 text-violet-900/85 dark:border-violet-800/40 dark:text-violet-300/90",
+  },
+  {
+    key: "updates",
+    href: "/updates",
+    icon: Megaphone,
+    bar: "from-amber-500/35 via-amber-400/22 to-transparent",
+    iconSurface:
+      "border-amber-200/60 bg-gradient-to-br from-amber-400/14 to-amber-600/8 text-amber-950/85 dark:border-amber-800/40 dark:text-amber-300/90",
+  },
+  {
+    key: "profile",
+    href: "/settings/profile",
+    icon: UserRound,
+    bar: "from-emerald-500/35 via-emerald-400/22 to-transparent",
+    iconSurface:
+      "border-emerald-200/60 bg-gradient-to-br from-emerald-400/14 to-emerald-600/8 text-emerald-950/85 dark:border-emerald-800/40 dark:text-emerald-300/90",
+  },
+  {
+    key: "xentralOrders",
+    href: "/xentral/orders",
+    icon: PackageSearch,
+    bar: "from-rose-500/35 via-rose-400/22 to-transparent",
+    iconSurface:
+      "border-rose-200/60 bg-gradient-to-br from-rose-400/14 to-rose-600/8 text-rose-950/85 dark:border-rose-800/40 dark:text-rose-300/90",
+  },
+  {
+    key: "amazonOrders",
+    href: "/amazon/orders",
+    icon: ShoppingBag,
+    bar: "from-orange-500/35 via-orange-400/22 to-transparent",
+    iconSurface:
+      "border-orange-200/60 bg-gradient-to-br from-orange-400/14 to-orange-600/8 text-orange-950/85 dark:border-orange-800/40 dark:text-orange-300/90",
+  },
+];
+
 export default function DashboardHome() {
-  return null;
+  const { t } = useTranslation();
+  const user = useUser();
+  const firstName = user.fullName.split(" ")[0] || user.fullName;
+
+  return (
+    <div className={cn(DASHBOARD_PAGE_SHELL, "gap-8")}>
+      <WelcomeHero firstName={firstName} />
+
+      <section className="space-y-4" aria-labelledby="home-tiles-heading">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/60 bg-gradient-to-br from-primary/10 to-accent/10 text-primary/80">
+            <LayoutGrid className="h-4 w-4" aria-hidden />
+          </span>
+          <div>
+            <h2
+              id="home-tiles-heading"
+              className="text-base font-semibold tracking-tight text-foreground"
+            >
+              {t("home.quickLinksTitle")}
+            </h2>
+            <p className="text-xs text-muted-foreground">{t("home.quickLinksPlayfulHint")}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {HOME_TILES.map((tile) => (
+            <Card
+              key={tile.key}
+              className={cn(
+                "group overflow-hidden border-border/50 bg-card/85",
+                "transition-all duration-300",
+                "motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:hover:shadow-primary/5",
+              )}
+            >
+              <div
+                className={cn(
+                  "h-1 w-full bg-gradient-to-r opacity-80 transition-opacity group-hover:opacity-100",
+                  tile.bar,
+                )}
+              />
+              <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2 pt-4">
+                <div
+                  className={cn(
+                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+                    "motion-safe:transition-transform motion-safe:duration-300 motion-safe:group-hover:scale-[1.04] motion-safe:group-hover:rotate-2",
+                    tile.iconSurface,
+                  )}
+                >
+                  <tile.icon className="h-5 w-5" strokeWidth={1.85} />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <CardTitle className="text-base leading-snug">
+                    {t(`home.tiles.${tile.key}.title`)}
+                  </CardTitle>
+                  <CardDescription className="text-pretty text-sm leading-relaxed">
+                    {t(`home.tiles.${tile.key}.description`)}
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardFooter className="pt-2">
+                <Link
+                  className={cn(
+                    buttonVariants({ size: "sm", variant: "ghost" }),
+                    "w-full font-medium text-muted-foreground",
+                    "hover:bg-primary/6 hover:text-primary/90",
+                  )}
+                  href={tile.href}
+                >
+                  {t("home.ctaGo")}
+                </Link>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
 }

@@ -31,19 +31,27 @@ export function resolveComparisonPreviousRange(
 }
 
 export type NetBreakdown = {
+  returnedAmount: number;
+  cancelledAmount: number;
   returnsAmount: number;
   feesAmount: number;
   adSpendAmount: number;
   netAmount: number;
-  costCoverage: "partial";
+  feeSource: "api" | "configured_percentage" | "default_percentage";
+  returnsSource: "api" | "status_based" | "none";
+  costCoverage: "api" | "estimated" | "mixed";
 };
 
 export function buildPartialNetBreakdown(salesAmount: number): NetBreakdown {
   return {
+    returnedAmount: 0,
+    cancelledAmount: 0,
     returnsAmount: 0,
     feesAmount: 0,
     adSpendAmount: 0,
     netAmount: Number(salesAmount.toFixed(2)),
-    costCoverage: "partial",
+    feeSource: "default_percentage",
+    returnsSource: "none",
+    costCoverage: "estimated",
   };
 }

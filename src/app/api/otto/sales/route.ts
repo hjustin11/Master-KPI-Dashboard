@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 import {
   MAX_ANALYTICS_RANGE_DAYS,
-  buildPartialNetBreakdown,
   resolveComparisonPreviousRange,
   type CompareMode,
 } from "@/shared/lib/analytics-date-range";
@@ -16,6 +15,12 @@ import {
   parseYmdParam,
   ymdToUtcRangeExclusiveEnd,
 } from "@/shared/lib/ottoApiClient";
+import {
+  buildNetBreakdown,
+  estimateMarketplaceFeeAmount,
+  getMarketplaceFeePolicy,
+  sumStatusAmounts,
+} from "@/shared/lib/marketplace-profitability";
 
 type OttoSalesPoint = {
   date: string;
@@ -101,6 +106,44 @@ function summarizeOrders(orders: OttoOrder[]): { summary: OttoSummary; points: O
   };
 }
 
+function orderStatus(order: OttoOrder): string {
+  const statusParts = [
+    typeof order.order_lifecycle_status === "string" ? order.order_lifecycle_status : "",
+    typeof order.orderLifecycleStatus === "string" ? order.orderLifecycleStatus : "",
+    typeof order.fulfillment_status === "string" ? order.fulfillment_status : "",
+    typeof order.fulfillmentStatus === "string" ? order.fulfillmentStatus : "",
+    typeof order.status === "string" ? order.status : "",
+    typeof order.order_status === "string" ? order.order_status : "",
+    typeof order.orderStatus === "string" ? order.orderStatus : "",
+    typeof order.payment_status === "string" ? order.payment_status : "",
+    typeof order.paymentStatus === "string" ? order.paymentStatus : "",
+    typeof order.cancel_reason === "string" ? order.cancel_reason : "",
+    typeof order.cancellation_reason === "string" ? order.cancellation_reason : "",
+    order.cancelled_at ? "cancelled" : "",
+    order.refunded_at ? "refunded" : "",
+    order.returned_at ? "returned" : "",
+  ]
+    .map((s) => String(s || "").trim())
+    .filter(Boolean);
+  return statusParts.join(" ");
+}
+
+function orderAmount(order: OttoOrder): number {
+  const positionItems = Array.isArray(order.position_items)
+    ? order.position_items
+    : Array.isArray(order.positionItems)
+      ? order.positionItems
+      : [];
+  let amount = 0;
+  for (const item of positionItems) {
+    const reduced = item.item_value_reduced_gross_price ?? item.itemValueReducedGrossPrice;
+    const gross = item.item_value_gross_price ?? item.itemValueGrossPrice;
+    const price = reduced ?? gross;
+    amount += toNumber(price?.amount ?? 0);
+  }
+  return Number(amount.toFixed(2));
+}
+
 async function writeSyncRecord(args: {
   fromYmd?: string;
   toYmd?: string;
@@ -140,6 +183,7 @@ async function writeSyncRecord(args: {
 
 export async function GET(request: Request) {
   try {
+    const feePolicy = await getMarketplaceFeePolicy("otto");
     const config = await getOttoIntegrationConfig();
     const missing = {
       OTTO_API_CLIENT_ID: !config.clientId,
@@ -264,12 +308,48 @@ export async function GET(request: Request) {
         meta,
       });
 
+      const currentFee = estimateMarketplaceFeeAmount({
+        salesAmount: current.summary.salesAmount,
+        orderCount: current.summary.orderCount,
+        policy: feePolicy,
+      });
+      const previousFee = estimateMarketplaceFeeAmount({
+        salesAmount: previous.summary.salesAmount,
+        orderCount: previous.summary.orderCount,
+        policy: feePolicy,
+      });
+      const currentReturns = sumStatusAmounts({
+        items: currentOrders,
+        getStatus: orderStatus,
+        getAmount: orderAmount,
+      });
+      const previousReturns = sumStatusAmounts({
+        items: previousOrders,
+        getStatus: orderStatus,
+        getAmount: orderAmount,
+      });
       return NextResponse.json({
         meta,
         summary: current.summary,
         previousSummary: previous.summary,
-        netBreakdown: buildPartialNetBreakdown(current.summary.salesAmount),
-        previousNetBreakdown: buildPartialNetBreakdown(previous.summary.salesAmount),
+        netBreakdown: buildNetBreakdown({
+          salesAmount: current.summary.salesAmount,
+          returnedAmount: currentReturns.returnedAmount,
+          cancelledAmount: currentReturns.cancelledAmount,
+          feesAmount: currentFee.feesAmount,
+          adSpendAmount: 0,
+          feeSource: currentFee.feeSource,
+          returnsSource: currentReturns.returnsSource,
+        }),
+        previousNetBreakdown: buildNetBreakdown({
+          salesAmount: previous.summary.salesAmount,
+          returnedAmount: previousReturns.returnedAmount,
+          cancelledAmount: previousReturns.cancelledAmount,
+          feesAmount: previousFee.feesAmount,
+          adSpendAmount: 0,
+          feeSource: previousFee.feeSource,
+          returnsSource: previousReturns.returnsSource,
+        }),
         revenueDeltaPct,
         points: current.points,
         previousPoints: previous.points,
@@ -301,10 +381,28 @@ export async function GET(request: Request) {
       meta,
     });
 
+    const fee = estimateMarketplaceFeeAmount({
+      salesAmount: current.summary.salesAmount,
+      orderCount: current.summary.orderCount,
+      policy: feePolicy,
+    });
+    const returns = sumStatusAmounts({
+      items: orders,
+      getStatus: orderStatus,
+      getAmount: orderAmount,
+    });
     return NextResponse.json({
       meta,
       summary: current.summary,
-      netBreakdown: buildPartialNetBreakdown(current.summary.salesAmount),
+      netBreakdown: buildNetBreakdown({
+        salesAmount: current.summary.salesAmount,
+        returnedAmount: returns.returnedAmount,
+        cancelledAmount: returns.cancelledAmount,
+        feesAmount: fee.feesAmount,
+        adSpendAmount: 0,
+        feeSource: fee.feeSource,
+        returnsSource: returns.returnsSource,
+      }),
       points: current.points,
     });
   } catch (error) {

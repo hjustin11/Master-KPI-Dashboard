@@ -44,6 +44,11 @@ import {
 } from "./marketplaceActionBands";
 import { PromotionDealsDialog } from "./PromotionDealsDialog";
 import { usePromotionDeals } from "./usePromotionDeals";
+import {
+  MarketplaceReportPrintView,
+  buildMarketplaceReportHtml,
+  type MarketplaceReportRow,
+} from "./MarketplaceReportPrintView";
 import { MarketplaceBrandImg } from "@/shared/components/MarketplaceBrandImg";
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
@@ -190,14 +195,38 @@ type AmazonSalesCompareResponse = {
     salesAmount: number;
     units: number;
     currency: string;
+    fbaUnits?: number;
   };
   previousSummary?: {
     orderCount: number;
     salesAmount: number;
     units: number;
     currency: string;
+    fbaUnits?: number;
   };
   revenueDeltaPct?: number | null;
+  netBreakdown?: {
+    returnedAmount: number;
+    cancelledAmount: number;
+    returnsAmount: number;
+    feesAmount: number;
+    adSpendAmount: number;
+    netAmount: number;
+    feeSource: "api" | "configured_percentage" | "default_percentage";
+    returnsSource: "api" | "status_based" | "none";
+    costCoverage: "api" | "estimated" | "mixed";
+  };
+  previousNetBreakdown?: {
+    returnedAmount: number;
+    cancelledAmount: number;
+    returnsAmount: number;
+    feesAmount: number;
+    adSpendAmount: number;
+    netAmount: number;
+    feeSource: "api" | "configured_percentage" | "default_percentage";
+    returnsSource: "api" | "status_based" | "none";
+    costCoverage: "api" | "estimated" | "mixed";
+  };
   points?: AmazonSalesPoint[];
   previousPoints?: AmazonSalesPoint[];
 };
@@ -375,6 +404,68 @@ function pickRevenueChartCurrency(
   return "EUR";
 }
 
+function buildReportRow(args: {
+  id: string;
+  label: string;
+  data: AmazonSalesCompareResponse | null;
+}): MarketplaceReportRow {
+  const summary = args.data?.summary;
+  const previousSummary = args.data?.previousSummary;
+  const net = args.data?.netBreakdown;
+  const prevNet = args.data?.previousNetBreakdown;
+  const currency = summary?.currency ?? previousSummary?.currency ?? "EUR";
+  const currentRevenue = summary?.salesAmount ?? 0;
+  const previousRevenue = previousSummary?.salesAmount ?? 0;
+  const currentOrders = summary?.orderCount ?? 0;
+  const previousOrders = previousSummary?.orderCount ?? 0;
+  const currentUnits = summary?.units ?? 0;
+  const previousUnits = previousSummary?.units ?? 0;
+  const currentFbaUnits = summary?.fbaUnits ?? 0;
+  const previousFbaUnits = previousSummary?.fbaUnits ?? 0;
+  const currentReturns = net?.returnsAmount ?? 0;
+  const previousReturns = prevNet?.returnsAmount ?? 0;
+  const currentReturned = net?.returnedAmount ?? 0;
+  const previousReturned = prevNet?.returnedAmount ?? 0;
+  const currentCancelled = net?.cancelledAmount ?? 0;
+  const previousCancelled = prevNet?.cancelledAmount ?? 0;
+  const currentFees = net?.feesAmount ?? 0;
+  const previousFees = prevNet?.feesAmount ?? 0;
+  const currentAds = net?.adSpendAmount ?? 0;
+  const previousAds = prevNet?.adSpendAmount ?? 0;
+  const currentNet = net?.netAmount ?? Math.max(0, currentRevenue - currentReturns - currentFees - currentAds);
+  const previousNetAmount =
+    prevNet?.netAmount ?? Math.max(0, previousRevenue - previousReturns - previousFees - previousAds);
+
+  return {
+    id: args.id,
+    label: args.label,
+    currency,
+    currentRevenue,
+    previousRevenue,
+    currentOrders,
+    previousOrders,
+    currentUnits,
+    previousUnits,
+    currentFbaUnits,
+    previousFbaUnits,
+    currentReturns,
+    previousReturns,
+    currentReturned,
+    previousReturned,
+    currentCancelled,
+    previousCancelled,
+    currentFees,
+    previousFees,
+    currentAds,
+    previousAds,
+    currentNet,
+    previousNet: previousNetAmount,
+    feeSource: net?.feeSource ?? "default_percentage",
+    returnsSource: net?.returnsSource ?? "none",
+    costCoverage: net?.costCoverage ?? "estimated",
+  };
+}
+
 function PeriodRangePicker({
   periodFrom,
   periodTo,
@@ -451,6 +542,7 @@ function TotalMarketplacesKpiStrip({
   periodTo,
   onPeriodChange,
   onOpenPromotionDeals,
+  onOpenReport,
   backgroundSyncing,
   dfLocale,
   intlTag,
@@ -467,6 +559,7 @@ function TotalMarketplacesKpiStrip({
   periodTo: string;
   onPeriodChange: (from: string, to: string) => void;
   onOpenPromotionDeals: () => void;
+  onOpenReport: () => void;
   backgroundSyncing?: boolean;
   dfLocale: DateFnsLocale;
   intlTag: string;
@@ -495,9 +588,14 @@ function TotalMarketplacesKpiStrip({
     <section className="overflow-hidden rounded-2xl border border-border/50 bg-card p-3 shadow-sm ring-1 ring-border/30 md:p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 className="sr-only">{t("analyticsMp.totalTitle")}</h2>
-        <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={onOpenPromotionDeals}>
-          {t("analyticsMp.promotionsButton")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={onOpenPromotionDeals}>
+            {t("analyticsMp.promotionsButton")}
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={onOpenReport}>
+            Bericht erstellen (PDF)
+          </Button>
+        </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <PeriodRangePicker
             periodFrom={periodFrom}
@@ -2419,39 +2517,89 @@ function AnalyticsMarketplacesPage() {
     () => kpiLabelsForPeriod(period.from, period.to, dfLocale, t),
     [period.from, period.to, dfLocale, t]
   );
+  const reportRows = useMemo<MarketplaceReportRow[]>(
+    () => [
+      buildReportRow({ id: "amazon", label: "Amazon", data: amazonData }),
+      buildReportRow({ id: "ebay", label: "eBay", data: ebayData }),
+      buildReportRow({ id: "otto", label: "Otto", data: ottoData }),
+      buildReportRow({ id: "kaufland", label: "Kaufland", data: kauflandData }),
+      buildReportRow({ id: "fressnapf", label: "Fressnapf", data: fressnapfData }),
+      buildReportRow({ id: "mediamarkt-saturn", label: "MediaMarkt Saturn", data: mmsData }),
+      buildReportRow({ id: "zooplus", label: "Zooplus", data: zooplusData }),
+      buildReportRow({ id: "tiktok", label: "TikTok Shop", data: tiktokData }),
+      buildReportRow({ id: "shopify", label: "Shopify", data: shopifyData }),
+    ],
+    [amazonData, ebayData, ottoData, kauflandData, fressnapfData, mmsData, zooplusData, tiktokData, shopifyData]
+  );
   const netSummary = useMemo(() => {
     if (!totals) return null;
+    const sameCurrencyRows = reportRows.filter((row) => row.currency === totals.currency);
     const current = {
-      revenue: totals.revenue,
-      returnsAmount: 0,
-      feesAmount: 0,
-      adSpendAmount: 0,
+      revenue: sameCurrencyRows.reduce((sum, row) => sum + row.currentRevenue, 0),
+      returnedAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentReturned, 0),
+      cancelledAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentCancelled, 0),
+      returnsAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentReturns, 0),
+      feesAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentFees, 0),
+      adSpendAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentAds, 0),
     };
     const previous = {
-      revenue: totals.prevRevenue,
-      returnsAmount: 0,
-      feesAmount: 0,
-      adSpendAmount: 0,
+      revenue: sameCurrencyRows.reduce((sum, row) => sum + row.previousRevenue, 0),
+      returnedAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousReturned, 0),
+      cancelledAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousCancelled, 0),
+      returnsAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousReturns, 0),
+      feesAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousFees, 0),
+      adSpendAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousAds, 0),
     };
     const currentNet =
       current.revenue - current.returnsAmount - current.feesAmount - current.adSpendAmount;
     const previousNet =
       previous.revenue - previous.returnsAmount - previous.feesAmount - previous.adSpendAmount;
+    const coverageOrder = { api: 0, mixed: 1, estimated: 2 } as const;
+    const coverage = sameCurrencyRows.reduce<"api" | "mixed" | "estimated">((worst, row) => {
+      return coverageOrder[row.costCoverage] > coverageOrder[worst] ? row.costCoverage : worst;
+    }, "api");
     return {
       currency: totals.currency,
       current,
       previous,
       currentNet,
       previousNet,
-      note: "Teilweise Datendeckung: Retouren/Gebuehren/Anzeigenkosten werden aktuell als 0 ausgewiesen.",
+      note: `Datendeckung gesamt: ${coverage}. Returned/Cancelled werden statusbasiert ausgewertet, Gebühren via API oder konfigurierten Prozentsatz.`,
     };
-  }, [totals]);
+  }, [totals, reportRows]);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailIndex, setDetailIndex] = useState(0);
   const [promotionsOpen, setPromotionsOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportMode, setReportMode] = useState<"all" | "single" | "selected">("all");
+  const [reportMarketplaceId, setReportMarketplaceId] = useState<string>("amazon");
+  const [reportSelectedIds, setReportSelectedIds] = useState<string[]>([
+    "amazon",
+    "ebay",
+    "otto",
+    "kaufland",
+    "fressnapf",
+    "mediamarkt-saturn",
+    "zooplus",
+    "tiktok",
+    "shopify",
+  ]);
   const { deals: promotionDeals, persist: persistPromotionDeals, remoteError: promotionRemoteError } =
     usePromotionDeals();
+  const activeReportRows = useMemo(
+    () => {
+      if (reportMode === "single") {
+        return reportRows.filter((row) => row.id === reportMarketplaceId);
+      }
+      if (reportMode === "selected") {
+        const rows = reportRows.filter((row) => reportSelectedIds.includes(row.id));
+        return rows.length > 0 ? rows : reportRows;
+      }
+      return reportRows;
+    },
+    [reportMode, reportMarketplaceId, reportRows, reportSelectedIds]
+  );
 
   const totalChartBands = useMemo(() => bandsForTotalChart(promotionDeals), [promotionDeals]);
 
@@ -2466,6 +2614,59 @@ function AnalyticsMarketplacesPage() {
     setDetailIndex(idx >= 0 ? idx : 0);
     setDetailOpen(true);
   }, []);
+  const printReport = useCallback(() => {
+    const html = buildMarketplaceReportHtml({
+      periodFrom: period.from,
+      periodTo: period.to,
+      mode: reportMode,
+      rows: activeReportRows,
+      intlTag,
+    });
+    const popup = window.open("", "_blank", "width=1200,height=900");
+    if (popup) {
+      popup.document.open();
+      popup.document.write(html);
+      popup.document.close();
+      const triggerPrint = () => {
+        popup.focus();
+        popup.print();
+      };
+      popup.addEventListener("load", triggerPrint, { once: true });
+      window.setTimeout(triggerPrint, 350);
+      return;
+    }
+
+    // Fallback für Browser/Settings mit Popup-Blockern.
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.setAttribute("aria-hidden", "true");
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+    doc.open();
+    doc.write(html);
+    doc.close();
+    const cleanup = () => {
+      window.setTimeout(() => {
+        iframe.remove();
+      }, 700);
+    };
+    iframe.onload = () => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      cleanup();
+    };
+    window.setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      cleanup();
+    }, 400);
+  }, [period.from, period.to, reportMode, activeReportRows, intlTag]);
 
   return (
     <div className="space-y-4 text-sm leading-snug">
@@ -2481,6 +2682,7 @@ function AnalyticsMarketplacesPage() {
         periodTo={period.to}
         onPeriodChange={(from, to) => setPeriod({ from, to })}
         onOpenPromotionDeals={() => setPromotionsOpen(true)}
+        onOpenReport={() => setReportOpen(true)}
         backgroundSyncing={stripBackgroundSyncing}
         dfLocale={dfLocale}
         intlTag={intlTag}
@@ -2514,6 +2716,16 @@ function AnalyticsMarketplacesPage() {
                     <TableCell>Retouren</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.current.returnsAmount, netSummary.currency, intlTag)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.previous.returnsAmount, netSummary.currency, intlTag)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">- returned</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.current.returnedAmount, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.previous.returnedAmount, netSummary.currency, intlTag)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">- cancelled</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.current.cancelledAmount, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(netSummary.previous.cancelledAmount, netSummary.currency, intlTag)}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>Marktplatzgebuehren</TableCell>
@@ -2624,6 +2836,84 @@ function AnalyticsMarketplacesPage() {
         onPersist={persistPromotionDeals}
         remoteError={promotionRemoteError}
       />
+      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+        <DialogContent className="max-h-[92vh] max-w-[calc(100%-1rem)] w-full overflow-y-auto p-0 sm:max-w-5xl">
+          <div className="space-y-3 p-4 md:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-semibold">PDF-Bericht: Marktplatz-Vergleich</h2>
+              <Button type="button" onClick={printReport}>
+                Als PDF drucken
+              </Button>
+            </div>
+            <div className="grid gap-3 rounded-lg border border-border/50 bg-muted/10 p-3 md:grid-cols-[220px_minmax(0,1fr)]">
+              <label className="space-y-1 text-xs">
+                <span>Berichtsmodus</span>
+                <select
+                  value={reportMode}
+                  onChange={(event) => setReportMode(event.target.value as "all" | "single" | "selected")}
+                  className="w-full rounded-md border border-border/50 bg-background px-2 py-1.5 text-sm"
+                >
+                  <option value="all">Alle Marktplätze</option>
+                  <option value="single">Einzel-Marktplatz</option>
+                  <option value="selected">Ausgewählte Marktplätze</option>
+                </select>
+              </label>
+              {reportMode === "single" ? (
+                <label className="space-y-1 text-xs">
+                  <span>Marktplatz</span>
+                  <select
+                    value={reportMarketplaceId}
+                    onChange={(event) => setReportMarketplaceId(event.target.value)}
+                    className="w-full rounded-md border border-border/50 bg-background px-2 py-1.5 text-sm"
+                  >
+                    {reportRows.map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {row.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : reportMode === "selected" ? (
+                <div className="space-y-1 text-xs">
+                  <span>Marktplätze auswählen</span>
+                  <div className="grid max-h-40 grid-cols-2 gap-1 overflow-y-auto rounded-md border border-border/50 bg-background p-2 text-sm">
+                    {reportRows.map((row) => {
+                      const checked = reportSelectedIds.includes(row.id);
+                      return (
+                        <label key={row.id} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) => {
+                              const next = event.target.checked
+                                ? [...reportSelectedIds, row.id]
+                                : reportSelectedIds.filter((id) => id !== row.id);
+                              setReportSelectedIds(next);
+                            }}
+                          />
+                          <span>{row.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground md:self-end">
+                  Es werden alle Marktplätze als separierte Abschnitte exportiert.
+                </p>
+              )}
+            </div>
+            <MarketplaceReportPrintView
+              rows={activeReportRows}
+              periodFrom={period.from}
+              periodTo={period.to}
+              mode={reportMode}
+              generatedAt={new Date()}
+              intlTag={intlTag}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className={MARKETPLACE_TILE_GRID_CLASS}>
         <button

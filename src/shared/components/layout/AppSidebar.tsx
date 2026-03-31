@@ -16,6 +16,7 @@ import {
   Megaphone,
   Monitor,
   Package,
+  Home,
   PanelLeft,
   Settings,
   ShoppingBag,
@@ -105,6 +106,12 @@ function NavAccessCheckbox({
 }
 
 const navItems: NavItem[] = [
+  {
+    key: "overview",
+    labelKey: "nav.start",
+    href: "/",
+    icon: Home,
+  },
   {
     key: "amazon",
     labelKey: "nav.amazon",
@@ -327,14 +334,22 @@ const MARKETPLACE_NAV_KEYS = new Set<SidebarItemKey>([
   "shopify",
 ]);
 
-function partitionNavItems(items: NavItem[]): { marketplaces: NavItem[]; rest: NavItem[] } {
+const START_NAV_KEYS = new Set<SidebarItemKey>(["overview"]);
+
+function partitionNavItems(items: NavItem[]): {
+  start: NavItem[];
+  marketplaces: NavItem[];
+  rest: NavItem[];
+} {
+  const start: NavItem[] = [];
   const marketplaces: NavItem[] = [];
   const rest: NavItem[] = [];
   for (const item of items) {
-    if (MARKETPLACE_NAV_KEYS.has(item.key)) marketplaces.push(item);
+    if (START_NAV_KEYS.has(item.key)) start.push(item);
+    else if (MARKETPLACE_NAV_KEYS.has(item.key)) marketplaces.push(item);
     else rest.push(item);
   }
-  return { marketplaces, rest };
+  return { start, marketplaces, rest };
 }
 
 function isMarketplaceItemActive(
@@ -814,7 +829,7 @@ export function AppSidebar() {
     const allow = new Set(visibleSidebarKeys);
     return filteredNavItems.filter((item) => allow.has(item.key));
   }, [filteredNavItems, visibleSidebarKeys]);
-  const { marketplaces, rest } = useMemo(
+  const { start, marketplaces, rest } = useMemo(
     () => partitionNavItems(tutorialGatedNavItems),
     [tutorialGatedNavItems]
   );
@@ -916,6 +931,20 @@ export function AppSidebar() {
 
       <SidebarContent className="p-2">
         <nav className="space-y-1">
+          {start.map((item) => (
+            <SingleNavItem
+              key={item.key}
+              item={item}
+              pathname={pathname}
+              hasPermission={effectiveHasPermission}
+              canAccessPageByPath={canAccessPageByPath}
+              collapsed={collapsed}
+              userIsLoading={user.isLoading}
+              isAdvertisingDeveloper={isAdvertisingDeveloper}
+              accessEdit={navAccessEdit}
+              t={t}
+            />
+          ))}
           {marketplaces.length > 0 ? (
             collapsed ? (
               <CollapsedMarketplacePopover
@@ -1094,7 +1123,7 @@ export function MobileSidebarTrigger() {
     const allow = new Set(visibleSidebarKeys);
     return filteredNavItems.filter((item) => allow.has(item.key));
   }, [filteredNavItems, visibleSidebarKeys]);
-  const { marketplaces, rest } = useMemo(
+  const { start, marketplaces, rest } = useMemo(
     () => partitionNavItems(tutorialGatedNavItems),
     [tutorialGatedNavItems]
   );
@@ -1176,6 +1205,20 @@ export function MobileSidebarTrigger() {
           <SheetDescription className="text-xs">{t("sidebar.navigation")}</SheetDescription>
         </SheetHeader>
         <nav className="space-y-1 px-4 pb-4">
+          {start.map((item) => (
+            <SingleNavItem
+              key={item.key}
+              item={item}
+              pathname={pathname}
+              hasPermission={effectiveHasPermission}
+              canAccessPageByPath={canAccessPageByPath}
+              collapsed={false}
+              userIsLoading={user.isLoading}
+              isAdvertisingDeveloper={isAdvertisingDeveloper}
+              accessEdit={navAccessEdit}
+              t={t}
+            />
+          ))}
           {marketplaces.length > 0 ? (
             <MarketplaceExpandedGroup
               items={marketplaces}

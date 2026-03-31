@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 import {
   MAX_ANALYTICS_RANGE_DAYS,
-  buildPartialNetBreakdown,
   resolveComparisonPreviousRange,
   type CompareMode,
 } from "@/shared/lib/analytics-date-range";
@@ -16,6 +15,12 @@ import {
   summarizeEbayOrders,
   ymdToUtcRangeExclusiveEnd,
 } from "@/shared/lib/ebayApiClient";
+import {
+  buildNetBreakdown,
+  estimateMarketplaceFeeAmount,
+  getMarketplaceFeePolicy,
+  sumStatusAmounts,
+} from "@/shared/lib/marketplace-profitability";
 
 async function writeSyncRecord(args: {
   fromYmd?: string;
@@ -56,6 +61,7 @@ async function writeSyncRecord(args: {
 
 export async function GET(request: Request) {
   try {
+    const feePolicy = await getMarketplaceFeePolicy("ebay");
     const config = await getEbayIntegrationConfig();
     const missing = ebayMissingKeysForConfig(config).filter((x) => x.missing);
     if (missing.length > 0) {
@@ -167,12 +173,47 @@ export async function GET(request: Request) {
         meta,
       });
 
+      const currentFee = estimateMarketplaceFeeAmount({
+        salesAmount: current.summary.salesAmount,
+        orderCount: current.summary.orderCount,
+        policy: feePolicy,
+      });
+      const previousFee = estimateMarketplaceFeeAmount({
+        salesAmount: previous.summary.salesAmount,
+        orderCount: previous.summary.orderCount,
+        policy: feePolicy,
+      });
+      const currentReturns = sumStatusAmounts({
+        items: currentRaw,
+        getStatus: (order) => order.status,
+        getAmount: (order) => order.amount,
+      });
+      const previousReturns = sumStatusAmounts({
+        items: previousRaw,
+        getStatus: (order) => order.status,
+        getAmount: (order) => order.amount,
+      });
+
       return NextResponse.json({
         meta,
         summary: current.summary,
         previousSummary: previous.summary,
-        netBreakdown: buildPartialNetBreakdown(current.summary.salesAmount),
-        previousNetBreakdown: buildPartialNetBreakdown(previous.summary.salesAmount),
+        netBreakdown: buildNetBreakdown({
+          salesAmount: current.summary.salesAmount,
+          returnedAmount: currentReturns.returnedAmount,
+          cancelledAmount: currentReturns.cancelledAmount,
+          feesAmount: currentFee.feesAmount,
+          feeSource: currentFee.feeSource,
+          returnsSource: currentReturns.returnsSource,
+        }),
+        previousNetBreakdown: buildNetBreakdown({
+          salesAmount: previous.summary.salesAmount,
+          returnedAmount: previousReturns.returnedAmount,
+          cancelledAmount: previousReturns.cancelledAmount,
+          feesAmount: previousFee.feesAmount,
+          feeSource: previousFee.feeSource,
+          returnsSource: previousReturns.returnsSource,
+        }),
         revenueDeltaPct,
         points: current.points,
         previousPoints: previous.points,
@@ -199,10 +240,28 @@ export async function GET(request: Request) {
       meta,
     });
 
+    const fee = estimateMarketplaceFeeAmount({
+      salesAmount: current.summary.salesAmount,
+      orderCount: current.summary.orderCount,
+      policy: feePolicy,
+    });
+    const returns = sumStatusAmounts({
+      items: filtered,
+      getStatus: (order) => order.status,
+      getAmount: (order) => order.amount,
+    });
+
     return NextResponse.json({
       meta,
       summary: current.summary,
-      netBreakdown: buildPartialNetBreakdown(current.summary.salesAmount),
+      netBreakdown: buildNetBreakdown({
+        salesAmount: current.summary.salesAmount,
+        returnedAmount: returns.returnedAmount,
+        cancelledAmount: returns.cancelledAmount,
+        feesAmount: fee.feesAmount,
+        feeSource: fee.feeSource,
+        returnsSource: returns.returnsSource,
+      }),
       points: current.points,
     });
   } catch (error) {
