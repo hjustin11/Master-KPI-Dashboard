@@ -3,6 +3,7 @@ import { gunzipSync } from "node:zlib";
 import { NextResponse } from "next/server";
 import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { readIntegrationCache, writeIntegrationCache } from "@/shared/lib/integrationDataCache";
 
 /** Vercel/Serverless: Listings können viele Seiten haben — genug Budget für Pagination + Reports. */
 export const maxDuration = 120;
@@ -41,6 +42,32 @@ type ReportFallbackState = {
 };
 
 const fallbackByMarketplace: Record<string, ReportFallbackState> = {};
+const AMAZON_PRODUCTS_CACHE_FRESH_MS = 15 * 60 * 1000;
+const AMAZON_PRODUCTS_CACHE_STALE_MS = 12 * 60 * 60 * 1000;
+
+type AmazonProductsCachedPayload = {
+  sellerId: string;
+  rows: ProductRow[];
+};
+
+function parsePaginationParam(raw: string | null, fallback: number, min: number, max: number) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(n)));
+}
+
+function filterRowsByStatus(rows: ProductRow[], statusFilter: string): ProductRow[] {
+  return statusFilter === "inactive"
+    ? rows.filter((row) => !row.isActive)
+    : statusFilter === "all"
+      ? rows
+      : rows.filter((row) => row.isActive);
+}
+
+function paginateRows(rows: ProductRow[], offset: number, limit: number): ProductRow[] {
+  if (offset >= rows.length) return [];
+  return rows.slice(offset, offset + limit);
+}
 
 function env(name: string) {
   return (process.env[name] ?? "").trim();
@@ -557,6 +584,10 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const statusFilter = (searchParams.get("status") ?? "active").toLowerCase();
+    const limit = parsePaginationParam(searchParams.get("limit"), 50, 1, 250);
+    const offset = parsePaginationParam(searchParams.get("offset"), 0, 0, 200_000);
+    const marketplaceId = config.marketplaceIds[0];
+    const cacheKey = `amazon:products:${marketplaceId}`;
 
     const lwaAccessToken = await getLwaAccessToken({
       refreshToken: config.refreshToken,
@@ -674,6 +705,18 @@ export async function GET(request: Request) {
           marketplaceId: config.marketplaceIds[0],
         });
         if (fallback.pending) {
+          const cached = await readIntegrationCache<AmazonProductsCachedPayload>(cacheKey);
+          if (cached.state !== "miss") {
+            const filtered = filterRowsByStatus(cached.value.rows, statusFilter);
+            const pageItems = paginateRows(filtered, offset, limit);
+            return NextResponse.json({
+              status: statusFilter,
+              sellerId: cached.value.sellerId,
+              source: `${fallback.source}:cache-${cached.state}`,
+              totalCount: filtered.length,
+              items: pageItems,
+            });
+          }
           return NextResponse.json(
             {
               pending: true,
@@ -684,18 +727,25 @@ export async function GET(request: Request) {
           );
         }
         if (fallback.rows.length) {
+          await writeIntegrationCache({
+            cacheKey,
+            source: "amazon:products",
+            value: {
+              sellerId: effectiveSellerId,
+              rows: fallback.rows,
+            } satisfies AmazonProductsCachedPayload,
+            freshMs: AMAZON_PRODUCTS_CACHE_FRESH_MS,
+            staleMs: AMAZON_PRODUCTS_CACHE_STALE_MS,
+          });
           const filtered =
-            statusFilter === "inactive"
-              ? fallback.rows.filter((row) => !row.isActive)
-              : statusFilter === "all"
-                ? fallback.rows
-                : fallback.rows.filter((row) => row.isActive);
+            filterRowsByStatus(fallback.rows, statusFilter);
+          const pageItems = paginateRows(filtered, offset, limit);
           return NextResponse.json({
             status: statusFilter,
             sellerId: effectiveSellerId,
             source: fallback.source,
             totalCount: filtered.length,
-            items: filtered,
+            items: pageItems,
           });
         }
 
@@ -748,17 +798,25 @@ export async function GET(request: Request) {
     }
 
     const filtered =
-      statusFilter === "inactive"
-        ? rows.filter((row) => !row.isActive)
-        : statusFilter === "all"
-          ? rows
-          : rows.filter((row) => row.isActive);
+      filterRowsByStatus(rows, statusFilter);
+    const pageItems = paginateRows(filtered, offset, limit);
+
+    await writeIntegrationCache({
+      cacheKey,
+      source: "amazon:products",
+      value: {
+        sellerId: effectiveSellerId,
+        rows,
+      } satisfies AmazonProductsCachedPayload,
+      freshMs: AMAZON_PRODUCTS_CACHE_FRESH_MS,
+      staleMs: AMAZON_PRODUCTS_CACHE_STALE_MS,
+    });
 
     return NextResponse.json({
       status: statusFilter,
       sellerId: effectiveSellerId,
       totalCount: filtered.length,
-      items: filtered,
+      items: pageItems,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unbekannter Fehler.";

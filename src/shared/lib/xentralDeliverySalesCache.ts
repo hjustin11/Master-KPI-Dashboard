@@ -9,8 +9,10 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 import { consolidateArticleForecastSoldByProject } from "@/shared/lib/xentralArticleForecastProject";
+import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
 import {
   aggregateSkuSalesInBerlinWindow,
   candidatesFromPayload,
@@ -26,6 +28,8 @@ import {
 
 export const DELIVERY_SALES_CACHE_VERSION = 1 as const;
 export const DELIVERY_SALES_ANCHOR_YMD = "2024-01-01";
+const SALES_WINDOW_CACHE_FRESH_MS = 3 * 60 * 1000;
+const SALES_WINDOW_CACHE_STALE_MS = 12 * 60 * 60 * 1000;
 
 export type DeliverySalesSyncStateV1 = {
   source: "idle" | "v3" | "v1";
@@ -116,6 +120,10 @@ export function cacheExclusiveEndYmd(): string {
   return subtractCalendarDaysFromYmd(liveWindowStartYmd(), 1);
 }
 
+function hashCacheInput(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex").slice(0, 24);
+}
+
 export async function loadDeliverySalesCacheFile(): Promise<DeliverySalesCacheFileV1> {
   const p = resolveDeliverySalesCachePath();
   try {
@@ -202,15 +210,32 @@ function finalizeBySku(
   return out;
 }
 
-function countCacheDaysInRange(cache: DeliverySalesCacheFileV1, fromYmd: string, toYmd: string): number {
-  return Object.keys(cache.days).filter((d) => d >= fromYmd && d <= toYmd).length;
+type CachedSalesWindowPayload = {
+  bySkuEntries: Array<
+    [string, { soldByProject: Record<string, number>; totalSold: number }]
+  >;
+  meta: SkuSalesWindowAggregationMeta;
+};
+
+function serializeSalesWindowResult(
+  value: SkuSalesWindowAggregationResult
+): CachedSalesWindowPayload {
+  return {
+    bySkuEntries: Array.from(value.bySku.entries()),
+    meta: value.meta,
+  };
 }
 
-/**
- * Bedarfsprognose: ältere Tage aus Datei, Schnitt [from,to] ∩ [ANCHOR, cacheEnd];
- * Live [liveStart, min(to,today)] von Xentral.
- */
-export async function aggregateSkuSalesWithFileCache(args: {
+function deserializeSalesWindowResult(
+  payload: CachedSalesWindowPayload
+): SkuSalesWindowAggregationResult {
+  return {
+    bySku: new Map(payload.bySkuEntries),
+    meta: payload.meta,
+  };
+}
+
+async function aggregateSkuSalesWithFileCacheLive(args: {
   baseUrl: string;
   token: string;
   projectById: Map<string, string>;
@@ -218,10 +243,6 @@ export async function aggregateSkuSalesWithFileCache(args: {
   toYmd: string;
   pageSize?: number;
 }): Promise<SkuSalesWindowAggregationResult> {
-  if (process.env.XENTRAL_DELIVERY_SALES_CACHE_DISABLE === "1") {
-    return aggregateSkuSalesInBerlinWindow(args);
-  }
-
   const { baseUrl, token, projectById, fromYmd, toYmd } = args;
   const liveStart = liveWindowStartYmd();
   const cacheEnd = cacheExclusiveEndYmd();
@@ -290,6 +311,43 @@ export async function aggregateSkuSalesWithFileCache(args: {
       };
 
   return { bySku, meta };
+}
+
+function countCacheDaysInRange(cache: DeliverySalesCacheFileV1, fromYmd: string, toYmd: string): number {
+  return Object.keys(cache.days).filter((d) => d >= fromYmd && d <= toYmd).length;
+}
+
+/**
+ * Bedarfsprognose: ältere Tage aus Datei, Schnitt [from,to] ∩ [ANCHOR, cacheEnd];
+ * Live [liveStart, min(to,today)] von Xentral.
+ */
+export async function aggregateSkuSalesWithFileCache(args: {
+  baseUrl: string;
+  token: string;
+  projectById: Map<string, string>;
+  fromYmd: string;
+  toYmd: string;
+  pageSize?: number;
+}): Promise<SkuSalesWindowAggregationResult> {
+  if (process.env.XENTRAL_DELIVERY_SALES_CACHE_DISABLE === "1") {
+    return aggregateSkuSalesInBerlinWindow(args);
+  }
+  const cacheKey = `xentral:delivery-sales-window:${hashCacheInput({
+    fromYmd: args.fromYmd,
+    toYmd: args.toYmd,
+    pageSize: args.pageSize ?? 50,
+    liveStartYmd: liveWindowStartYmd(),
+    cacheEndYmd: cacheExclusiveEndYmd(),
+    todayYmd: berlinCalendarYmdNow(),
+  })}`;
+  const cached = await getIntegrationCachedOrLoad<CachedSalesWindowPayload>({
+    cacheKey,
+    source: "xentral:delivery-sales-window",
+    freshMs: SALES_WINDOW_CACHE_FRESH_MS,
+    staleMs: SALES_WINDOW_CACHE_STALE_MS,
+    loader: async () => serializeSalesWindowResult(await aggregateSkuSalesWithFileCacheLive(args)),
+  });
+  return deserializeSalesWindowResult(cached);
 }
 
 export function resolveSyncPagesPerRun(): number {

@@ -4,6 +4,7 @@ import {
   type AnalyticsMarketplaceSlug,
 } from "@/shared/lib/analytics-marketplaces";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import { readIntegrationCache } from "@/shared/lib/integrationDataCache";
 
 type XentralArticle = {
   sku: string;
@@ -29,6 +30,11 @@ type OttoOrder = {
 type OttoOrdersPayload = {
   resources?: OttoOrder[];
   links?: Array<{ href?: string; rel?: string }>;
+};
+
+type AmazonProductsCachedPayload = {
+  sellerId: string;
+  rows: Array<Record<string, unknown>>;
 };
 
 export type MarketplaceCellState = "ok" | "missing" | "no_price" | "mismatch" | "not_connected";
@@ -104,8 +110,31 @@ async function fetchAmazonProductsPriceMap(origin: string): Promise<{
   map: Map<string, number | null> | null;
   warning: string | null;
 }> {
+  const marketplaceIdsRaw =
+    process.env.AMAZON_SP_API_MARKETPLACE_IDS ??
+    process.env.AMAZON_SP_API_MARKETPLACE_ID ??
+    (await getIntegrationSecretValue("AMAZON_SP_API_MARKETPLACE_IDS")) ??
+    (await getIntegrationSecretValue("AMAZON_SP_API_MARKETPLACE_ID")) ??
+    "";
+  const marketplaceId = marketplaceIdsRaw
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean)[0];
+
+  if (marketplaceId) {
+    const cached = await readIntegrationCache<AmazonProductsCachedPayload>(
+      `amazon:products:${marketplaceId}`
+    );
+    if (cached.state !== "miss" && Array.isArray(cached.value?.rows)) {
+      const primary = skuPriceMapFromProductItems(cached.value.rows, "price");
+      if (primary.size > 0) return { map: primary, warning: null };
+      const fallback = skuPriceMapFromProductItems(cached.value.rows, "priceEur");
+      if (fallback.size > 0) return { map: fallback, warning: null };
+    }
+  }
+
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), 2200);
   try {
     const res = await fetch(`${origin}/api/amazon/products?status=all`, {
       cache: "no-store",
@@ -113,12 +142,10 @@ async function fetchAmazonProductsPriceMap(origin: string): Promise<{
     });
 
     if (res.status === 202) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      await res.json().catch(() => ({}));
       return {
         map: null,
-        warning:
-          body.error ??
-          "Amazon-Produktreport wird noch erstellt. Preisabgleich für Amazon ggf. unvollständig.",
+        warning: "Amazon Produkte werden im Hintergrund aktualisiert. Preisabgleich folgt automatisch.",
       };
     }
     if (!res.ok) {
@@ -136,7 +163,7 @@ async function fetchAmazonProductsPriceMap(origin: string): Promise<{
   } catch {
     return {
       map: null,
-      warning: "Amazon Produkte konnten nicht rechtzeitig geladen werden.",
+      warning: "Amazon Produkte werden im Hintergrund aktualisiert.",
     };
   } finally {
     clearTimeout(timeout);

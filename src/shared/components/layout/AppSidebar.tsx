@@ -620,15 +620,21 @@ export function AppSidebar() {
   // erst nach dem Client-Mount den echten Sidebar-State verwenden.
   const collapsed = isHydrated ? state === "collapsed" : false;
   const canRoleSwitch = !user.isLoading && user.roleKey === "owner" && roleTestingEnabled;
+  const effectiveHasPermission: (permission: PermissionKey) => boolean = user.isLoading
+    ? () => true
+    : hasPermission;
+  const effectiveCanAccessSidebarItem: (itemKey: SidebarItemKey) => boolean = user.isLoading
+    ? () => true
+    : canAccessSidebarItem;
 
   const filteredNavItems = useMemo(
     () =>
       navItems.filter(
         (item) =>
-          canAccessSidebarItem(item.key) &&
-          (item.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true)
+          effectiveCanAccessSidebarItem(item.key) &&
+          (item.requiredPermissions?.every((permission) => effectiveHasPermission(permission)) ?? true)
       ),
-    [canAccessSidebarItem, hasPermission]
+    [effectiveCanAccessSidebarItem, effectiveHasPermission]
   );
   const tutorialGatedNavItems = useMemo(() => {
     if (visibleSidebarKeys === null) return filteredNavItems;
@@ -723,14 +729,14 @@ export function AppSidebar() {
               <CollapsedMarketplacePopover
                 items={marketplaces}
                 pathname={pathname}
-                hasPermission={hasPermission}
+                hasPermission={effectiveHasPermission}
                 t={t}
               />
             ) : (
               <MarketplaceExpandedGroup
                 items={marketplaces}
                 pathname={pathname}
-                hasPermission={hasPermission}
+                hasPermission={effectiveHasPermission}
                 t={t}
               />
             )
@@ -740,7 +746,7 @@ export function AppSidebar() {
               key={item.key}
               item={item}
               pathname={pathname}
-              hasPermission={hasPermission}
+              hasPermission={effectiveHasPermission}
               collapsed={collapsed}
               t={t}
             />
@@ -858,15 +864,21 @@ export function MobileSidebarTrigger() {
   const { visibleSidebarKeys } = useTutorialNavGate();
   const user = useUser();
   const { hasPermission, canAccessSidebarItem, activeRole: effectiveRole } = usePermissions();
+  const effectiveHasPermission: (permission: PermissionKey) => boolean = user.isLoading
+    ? () => true
+    : hasPermission;
+  const effectiveCanAccessSidebarItem: (itemKey: SidebarItemKey) => boolean = user.isLoading
+    ? () => true
+    : canAccessSidebarItem;
 
   const filteredNavItems = useMemo(
     () =>
       navItems.filter(
         (item) =>
-          canAccessSidebarItem(item.key) &&
-          (item.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true)
+          effectiveCanAccessSidebarItem(item.key) &&
+          (item.requiredPermissions?.every((permission) => effectiveHasPermission(permission)) ?? true)
       ),
-    [canAccessSidebarItem, hasPermission]
+    [effectiveCanAccessSidebarItem, effectiveHasPermission]
   );
   const tutorialGatedNavItems = useMemo(() => {
     if (visibleSidebarKeys === null) return filteredNavItems;
@@ -937,7 +949,7 @@ export function MobileSidebarTrigger() {
             <MarketplaceExpandedGroup
               items={marketplaces}
               pathname={pathname}
-              hasPermission={hasPermission}
+              hasPermission={effectiveHasPermission}
               t={t}
             />
           ) : null}
@@ -946,7 +958,7 @@ export function MobileSidebarTrigger() {
               key={item.key}
               item={item}
               pathname={pathname}
-              hasPermission={hasPermission}
+              hasPermission={effectiveHasPermission}
               collapsed={false}
               t={t}
             />

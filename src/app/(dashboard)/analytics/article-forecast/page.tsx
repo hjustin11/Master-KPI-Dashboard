@@ -88,6 +88,7 @@ type ArticlesResponseMeta = {
 const MARKETPLACE_COLUMN_VISIBILITY_KEY = "articleForecast.marketplaceColumnVisibility";
 const WAREHOUSE_COLUMN_VISIBILITY_KEY = "articleForecast.warehouseColumnVisibility";
 const ARTICLE_FORECAST_CACHE_KEY = "article_forecast_cache_v1";
+const XENTRAL_ARTICLES_SEED_CACHE_KEY = "xentral_articles_cache_v5";
 const ARTICLE_FORECAST_RULE_SCOPE_KEY = "articleForecast.ruleScope";
 
 type ArticleForecastCachedPayload = {
@@ -97,6 +98,19 @@ type ArticleForecastCachedPayload = {
   items: ArticleForecastRow[];
   meta: ArticlesResponseMeta | null;
   procurementLines?: ProcurementLine[];
+};
+
+type XentralArticlesSeedPayload = {
+  savedAt: number;
+  items: Array<{
+    sku: string;
+    name: string;
+    stock: number;
+    stockByLocation?: Record<string, number>;
+    price?: number | null;
+    projectId?: string | null;
+    projectDisplay?: string;
+  }>;
 };
 
 type ProcurementLine = {
@@ -316,6 +330,30 @@ export default function AnalyticsArticleForecastPage() {
         }
       }
 
+      if (!forceRefresh && !silent && !hadCache) {
+        // Fallback: sofort denselben Artikel/Bestands-Stand wie "Xentral -> Artikel" anzeigen.
+        const seed = readLocalJsonCache<XentralArticlesSeedPayload>(XENTRAL_ARTICLES_SEED_CACHE_KEY);
+        if (seed && Array.isArray(seed.items) && seed.items.length > 0) {
+          const seededRows: ArticleForecastRow[] = seed.items.map((r) => ({
+            sku: r.sku ?? "",
+            name: r.name ?? "",
+            stock: Number.isFinite(r.stock) ? r.stock : 0,
+            stockByLocation: r.stockByLocation ?? {},
+            price: typeof r.price === "number" && Number.isFinite(r.price) ? r.price : null,
+            projectId: r.projectId ?? null,
+            projectDisplay: r.projectDisplay ?? "—",
+            totalSold: 0,
+            soldByProject: {},
+          }));
+          setRows(seededRows);
+          setProcurementLines([]);
+          setMeta(null);
+          hadCache = true;
+          setIsLoading(false);
+          setHasLoadedOnce(true);
+        }
+      }
+
       if (forceRefresh && !silent) {
         setIsLoading(true);
       } else if (!hadCache && !silent) {
@@ -338,41 +376,81 @@ export default function AnalyticsArticleForecastPage() {
       }
 
       try {
-        const qs = new URLSearchParams({
+        const baseQs = new URLSearchParams({
           all: "1",
           limit: "150",
+          includePrices: "0",
+          includeSales: "0",
+        });
+
+        const salesQs = new URLSearchParams({
+          all: "1",
+          limit: "150",
+          includePrices: "0",
+          includeSales: "1",
           fromYmd,
           toYmd,
         });
-        /** Xentral zuerst — Beschaffung optional, damit ein hängender Procurement-Endpoint nicht die ganze Seite blockiert. */
-        const articlesRes = await fetch(`/api/xentral/articles?${qs.toString()}`, {
+
+        // Phase 1: Basisdaten wie "Xentral -> Artikel" laden (schnell, ohne Sales-Aggregation).
+        const baseRes = await fetch(`/api/xentral/articles?${baseQs.toString()}`, {
           cache: "no-store",
         });
-        const payload = (await articlesRes.json()) as {
+        const basePayload = (await baseRes.json()) as {
           items?: ArticleForecastRow[];
           error?: string;
           meta?: ArticlesResponseMeta;
         };
-        if (!articlesRes.ok) {
-          throw new Error(payload.error ?? t("articleForecast.loadError"));
+        if (!baseRes.ok) {
+          throw new Error(basePayload.error ?? t("articleForecast.loadError"));
         }
 
         if (generation !== fetchGenerationRef.current) return;
-        const items = (payload.items ?? []).map((r) => ({
+        const baseItems = (basePayload.items ?? []).map((r) => ({
           ...r,
           stockByLocation: r.stockByLocation ?? {},
+          soldByProject: {},
+          totalSold: 0,
         }));
-        setRows(items);
-        setMeta(payload.meta ?? null);
+        setRows(baseItems);
+        setMeta(basePayload.meta ?? null);
         if (!silent) {
           setIsLoading(false);
           setHasLoadedOnce(true);
         }
 
+        // Phase 2: Verkaufsfenster + Beschaffung im Hintergrund nachziehen.
+        if (!silent) {
+          setIsBackgroundSyncing(true);
+        }
+
         let procurement: ProcurementLine[] = [];
+        let salesItems: ArticleForecastRow[] = baseItems;
+        let salesMeta: ArticlesResponseMeta | null = basePayload.meta ?? null;
+
+        try {
+          const salesRes = await fetch(`/api/xentral/articles?${salesQs.toString()}`, {
+            cache: "no-store",
+          });
+          const salesPayload = (await salesRes.json()) as {
+            items?: ArticleForecastRow[];
+            error?: string;
+            meta?: ArticlesResponseMeta;
+          };
+          if (salesRes.ok && Array.isArray(salesPayload.items)) {
+            salesItems = salesPayload.items.map((r) => ({
+              ...r,
+              stockByLocation: r.stockByLocation ?? {},
+            }));
+            salesMeta = salesPayload.meta ?? null;
+          }
+        } catch {
+          // Sales-Aggregation ist Zusatznutzen; Basisdaten sind bereits sichtbar.
+        }
+
         try {
           const ac = new AbortController();
-          const timeoutMs = 25_000;
+          const timeoutMs = 12_000;
           const tId = window.setTimeout(() => ac.abort(), timeoutMs);
           try {
             const procurementRes = await fetch("/api/procurement/lines", {
@@ -399,14 +477,16 @@ export default function AnalyticsArticleForecastPage() {
         }
 
         if (generation !== fetchGenerationRef.current) return;
+        setRows(salesItems);
+        setMeta(salesMeta);
         setProcurementLines(procurement);
         writeLocalJsonCache(ARTICLE_FORECAST_CACHE_KEY, {
           savedAt: Date.now(),
           fromYmd,
           toYmd,
-          items,
+          items: salesItems,
           procurementLines: procurement,
-          meta: payload.meta ?? null,
+          meta: salesMeta,
         } satisfies ArticleForecastCachedPayload);
       } catch (e) {
         if (generation !== fetchGenerationRef.current) return;
@@ -420,6 +500,7 @@ export default function AnalyticsArticleForecastPage() {
         if (!silent) {
           setIsLoading(false);
           setHasLoadedOnce(true);
+          setIsBackgroundSyncing(false);
         }
         if (showBackgroundIndicator) {
           setIsBackgroundSyncing(false);

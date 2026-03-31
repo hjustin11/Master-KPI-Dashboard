@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import {
   normalizeArticleForecastProjectLabel,
@@ -12,6 +13,7 @@ import {
   pickFirstString,
 } from "@/shared/lib/xentralProjectLookup";
 import { aggregateSkuSalesWithFileCache } from "@/shared/lib/xentralDeliverySalesCache";
+import { readIntegrationCache, writeIntegrationCache } from "@/shared/lib/integrationDataCache";
 
 type XentralArticle = {
   sku: string;
@@ -44,6 +46,12 @@ type XentralArticleRaw = {
   soldByProjectRaw: Record<string, number>;
 };
 
+type XentralArticlesApiPayload = {
+  items: XentralArticle[];
+  totalCount: number;
+  meta?: Record<string, unknown>;
+};
+
 const EXCLUDED_NAME_TERMS = [
   "Versandtasche",
   "Versandkarton",
@@ -66,6 +74,10 @@ const EXCLUDED_NAME_TERMS = [
 
 function env(name: string) {
   return (process.env[name] ?? "").trim();
+}
+
+function hashCacheInput(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex").slice(0, 24);
 }
 
 async function resolveXentralConfig() {
@@ -632,9 +644,31 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim() ?? "";
   const fetchAll = searchParams.get("all") === "1";
+  const includePrices = searchParams.get("includePrices") !== "0";
+  const includeSales = searchParams.get("includeSales") !== "0";
   const rawLimit = Number(searchParams.get("limit") ?? "150") || 150;
   const pageSize = Math.min(Math.max(rawLimit, 10), 150);
   const pageNumber = Math.max(Number(searchParams.get("page") ?? "1") || 1, 1);
+  const qFrom = parseForecastYmdParam(searchParams.get("fromYmd"));
+  const qTo = parseForecastYmdParam(searchParams.get("toYmd"));
+
+  const canUseForecastCache = fetchAll && Boolean(qFrom && qTo) && !query;
+  const forecastCacheKey = canUseForecastCache
+    ? `xentral:articles:forecast:${hashCacheInput({
+        pageSize,
+        fromYmd: qFrom,
+        toYmd: qTo,
+        includePrices,
+        includeSales,
+      })}`
+    : null;
+
+  if (forecastCacheKey) {
+    const cached = await readIntegrationCache<XentralArticlesApiPayload>(forecastCacheKey);
+    if (cached.state !== "miss") {
+      return NextResponse.json(cached.value);
+    }
+  }
 
   async function fetchPage(page: number) {
     const url = new URL(joinUrl(baseUrl, "api/v1/products"));
@@ -694,19 +728,17 @@ export async function GET(request: Request) {
 
   const [projectById, purchasePriceByProductId] = await Promise.all([
     fetchXentralProjectByIdLookup({ baseUrl, token }),
-    fetchPurchasePriceByProductIdMap({ baseUrl, token }),
+    includePrices ? fetchPurchasePriceByProductIdMap({ baseUrl, token }) : Promise.resolve(undefined),
   ]);
   const firstRaw = mapToArticlesRaw(first.json) ?? [];
   const firstItems = enrichArticles(firstRaw, projectById, purchasePriceByProductId);
   const totalCount = parseTotalCount(first.json) ?? firstItems.length;
 
-  const qFrom = parseForecastYmdParam(searchParams.get("fromYmd"));
-  const qTo = parseForecastYmdParam(searchParams.get("toYmd"));
-
   async function withOptionalSalesWindow(items: XentralArticle[]): Promise<{
     items: XentralArticle[];
     meta?: Record<string, unknown>;
   }> {
+    if (!includeSales) return { items };
     if (!qFrom || !qTo) return { items };
     const { fromYmd, toYmd } = clampForecastDateRange(qFrom, qTo);
     const agg = await aggregateSkuSalesWithFileCache({
@@ -751,7 +783,7 @@ export async function GET(request: Request) {
 
   if (!fetchAll) {
     const { items, meta } = await withOptionalSalesWindow(firstItems);
-    return NextResponse.json({ items, totalCount, meta });
+    return NextResponse.json({ items, totalCount, meta } satisfies XentralArticlesApiPayload);
   }
 
   const rawAccum: XentralArticleRaw[] = [...firstRaw];
@@ -769,6 +801,16 @@ export async function GET(request: Request) {
 
   const enriched = enrichArticles(rawAccum, projectById, purchasePriceByProductId);
   const { items, meta } = await withOptionalSalesWindow(enriched);
-  return NextResponse.json({ items, totalCount, meta });
+  const payload = { items, totalCount, meta } satisfies XentralArticlesApiPayload;
+  if (forecastCacheKey) {
+    await writeIntegrationCache({
+      cacheKey: forecastCacheKey,
+      source: "xentral:articles:forecast",
+      value: payload,
+      freshMs: 10 * 60 * 1000,
+      staleMs: 60 * 60 * 1000,
+    });
+  }
+  return NextResponse.json(payload);
 }
 
