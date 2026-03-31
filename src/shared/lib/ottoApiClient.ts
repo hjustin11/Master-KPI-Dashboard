@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { readIntegrationSecret } from "@/shared/lib/integrationSecrets";
+import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
 
 export type OttoAmount = { amount?: number | string; currency?: string };
 
@@ -32,6 +34,10 @@ type OttoOrdersPayload = {
 };
 
 export const OTTO_DAY_MS = 24 * 60 * 60 * 1000;
+
+function hashCacheInput(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex").slice(0, 24);
+}
 
 export function resolveOttoBaseUrl(raw: string): string {
   const trimmed = raw.trim();
@@ -170,7 +176,7 @@ async function fetchOrdersSlice(args: {
   return { resources: Array.isArray(json.resources) ? json.resources : [], nextHref };
 }
 
-export async function fetchOttoOrdersRange(args: {
+async function fetchOttoOrdersRangeLive(args: {
   baseUrl: string;
   token: string;
   startMs: number;
@@ -193,6 +199,26 @@ export async function fetchOttoOrdersRange(args: {
     nextHref = slice.nextHref;
   }
   return out;
+}
+
+export async function fetchOttoOrdersRange(args: {
+  baseUrl: string;
+  token: string;
+  startMs: number;
+  endMs: number;
+}): Promise<OttoOrder[]> {
+  const cacheKey = `otto:orders:${hashCacheInput({
+    baseUrl: args.baseUrl,
+    startMs: args.startMs,
+    endMs: args.endMs,
+  })}`;
+  return getIntegrationCachedOrLoad({
+    cacheKey,
+    source: "otto:orders",
+    freshMs: 2 * 60 * 1000,
+    staleMs: 12 * 60 * 1000,
+    loader: () => fetchOttoOrdersRangeLive(args),
+  });
 }
 
 /** Scope `products` für GET /v4/products — wird ergänzt, falls nur `orders` gesetzt ist. */
@@ -427,7 +453,7 @@ export function mapOttoProductResourcesToRows(resources: unknown[]): OttoProduct
  * Lädt alle Produktseiten (präferiert /v5/products, Fallback auf ältere Pfade).
  * Erfordert OAuth-Scope `products` (Token mit ensureOttoProductsScope).
  */
-export async function fetchOttoProductsAll(args: {
+async function fetchOttoProductsAllLive(args: {
   baseUrl: string;
   token: string;
   limit?: number;
@@ -477,4 +503,24 @@ export async function fetchOttoProductsAll(args: {
     page += 1;
   }
   return rows;
+}
+
+export async function fetchOttoProductsAll(args: {
+  baseUrl: string;
+  token: string;
+  limit?: number;
+  productsPath?: string;
+}): Promise<OttoProductListRow[]> {
+  const cacheKey = `otto:products:${hashCacheInput({
+    baseUrl: args.baseUrl,
+    limit: args.limit ?? 100,
+    productsPath: args.productsPath ?? "",
+  })}`;
+  return getIntegrationCachedOrLoad({
+    cacheKey,
+    source: "otto:products",
+    freshMs: 5 * 60 * 1000,
+    staleMs: 20 * 60 * 1000,
+    loader: () => fetchOttoProductsAllLive(args),
+  });
 }

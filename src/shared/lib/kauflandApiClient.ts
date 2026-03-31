@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
 
 export type KauflandOrderUnit = {
   id_order_unit?: number;
@@ -117,7 +118,7 @@ type CollectionResponse<T> = {
  * Lädt Order-Units über mehrere Status-Werte (API liefert pro Status-Filter nur passende Einheiten).
  * Duplikate über `id_order_unit` werden zusammengeführt.
  */
-export async function fetchKauflandOrderUnitsAllStatuses(args: {
+async function fetchKauflandOrderUnitsAllStatusesLive(args: {
   config: KauflandIntegrationConfig;
   /** Optional: z. B. de */
   storefront?: string;
@@ -169,6 +170,36 @@ export async function fetchKauflandOrderUnitsAllStatuses(args: {
     }
   }
   return out;
+}
+
+export async function fetchKauflandOrderUnitsAllStatuses(args: {
+  config: KauflandIntegrationConfig;
+  /** Optional: z. B. de */
+  storefront?: string;
+  maxPagesPerStatus?: number;
+}): Promise<KauflandOrderUnit[]> {
+  const cacheKey = [
+    "kaufland:order-units",
+    crypto
+      .createHash("sha256")
+      .update(
+        JSON.stringify({
+          baseUrl: args.config.baseUrl,
+          storefront: args.storefront ?? args.config.storefront ?? "",
+          maxPagesPerStatus: args.maxPagesPerStatus ?? null,
+        }),
+        "utf8"
+      )
+      .digest("hex")
+      .slice(0, 24),
+  ].join(":");
+  return getIntegrationCachedOrLoad({
+    cacheKey,
+    source: "kaufland:order-units",
+    freshMs: 2 * 60 * 1000,
+    staleMs: 12 * 60 * 1000,
+    loader: () => fetchKauflandOrderUnitsAllStatusesLive(args),
+  });
 }
 
 export function parseYmdParam(raw: string | null): string | null {

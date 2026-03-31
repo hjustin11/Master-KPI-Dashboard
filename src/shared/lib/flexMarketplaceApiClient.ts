@@ -1,5 +1,7 @@
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
 
 export const FLEX_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -353,6 +355,31 @@ export type FetchFlexOrdersOptions = {
   maxPages?: number;
 };
 
+function hashCacheInput(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex").slice(0, 24);
+}
+
+function flexOrdersCacheKey(
+  config: FlexIntegrationConfig,
+  options: FetchFlexOrdersOptions,
+  variant: "raw" | "normalized"
+): string {
+  return [
+    "flex-orders",
+    variant,
+    config.spec.id,
+    hashCacheInput({
+      createdFromMs: options.createdFromMs ?? null,
+      createdToMsExclusive: options.createdToMsExclusive ?? null,
+      maxPages: options.maxPages ?? null,
+      ordersPath: config.ordersPath,
+      pageSizeParam: config.pageSizeParam,
+      amountScale: config.amountScale,
+      authMode: config.authMode,
+    }),
+  ].join(":");
+}
+
 export async function flexGet(
   config: FlexIntegrationConfig,
   pathAndQuery: string
@@ -665,7 +692,7 @@ async function fetchShopifyOrdersRawPaginatedImpl(
 }
 
 /** Rohe Order-JSONs für Artikel-/Positions-Auswertung (Analytics-Dialog). */
-export async function fetchFlexOrdersRawPaginated(
+async function fetchFlexOrdersRawPaginatedLive(
   config: FlexIntegrationConfig,
   options: FetchFlexOrdersOptions = {}
 ): Promise<unknown[]> {
@@ -722,54 +749,39 @@ export async function fetchFlexOrdersPaginated(
   config: FlexIntegrationConfig,
   options: FetchFlexOrdersOptions = {}
 ): Promise<FlexNormalizedOrder[]> {
-  if (config.spec.id === "shopify") {
-    return fetchShopifyOrdersPaginatedImpl(config, options);
-  }
-  const maxPages = options.maxPages ?? 40;
-  const limit = 100;
-  const dateFilter =
-    options.createdFromMs != null && options.createdToMsExclusive != null
-      ? { fromMs: options.createdFromMs, toMsExclusive: options.createdToMsExclusive }
-      : undefined;
-
-  const out: FlexNormalizedOrder[] = [];
-  const label = config.marketplaceLabel;
-
-  for (let page = 0; page < maxPages; page += 1) {
-    if (page > 0 && config.paginationDelayMs > 0) {
-      await sleep(config.paginationDelayMs);
-    }
-    const path = buildOrdersListQuery(config, limit, page * limit, dateFilter);
-    const { res, text } = await flexGetWith429Retry(config, path);
-    let json: unknown = null;
-    try {
-      json = text ? (JSON.parse(text) as unknown) : null;
-    } catch {
-      json = null;
-    }
-    if (!res.ok || json == null) {
-      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 400);
-      const htmlHint = json == null ? nonJsonBodyHint(text, config.envPrefix) : "";
-      if (page === 0) {
-        const rateHint =
-          res.status === 429
-            ? ` Zu viele Anfragen (Rate Limit). Optional ${config.envPrefix}_PAGINATION_DELAY_MS erhöhen.`
-            : "";
-        throw new Error(
-          `${label}: orders request failed (HTTP ${res.status}).${rateHint}${htmlHint || (snippet ? ` ${snippet}` : "")}`
-        );
+  const key = flexOrdersCacheKey(config, options, "normalized");
+  return getIntegrationCachedOrLoad({
+    cacheKey: key,
+    source: `flex:${config.spec.id}:orders:normalized`,
+    freshMs: 2 * 60 * 1000,
+    staleMs: 12 * 60 * 1000,
+    loader: async () => {
+      if (config.spec.id === "shopify") {
+        return fetchShopifyOrdersPaginatedImpl(config, options);
       }
-      break;
-    }
-    const chunk = extractOrdersArray(json);
-    for (const raw of chunk) {
-      const n = normalizeFlexOrder(raw, config.amountScale);
-      if (n) out.push(n);
-    }
-    if (chunk.length < limit) break;
-  }
+      const raw = await fetchFlexOrdersRawPaginated(config, options);
+      const out: FlexNormalizedOrder[] = [];
+      for (const row of raw) {
+        const normalized = normalizeFlexOrder(row, config.amountScale);
+        if (normalized) out.push(normalized);
+      }
+      return out;
+    },
+  });
+}
 
-  return out;
+export async function fetchFlexOrdersRawPaginated(
+  config: FlexIntegrationConfig,
+  options: FetchFlexOrdersOptions = {}
+): Promise<unknown[]> {
+  const key = flexOrdersCacheKey(config, options, "raw");
+  return getIntegrationCachedOrLoad({
+    cacheKey: key,
+    source: `flex:${config.spec.id}:orders:raw`,
+    freshMs: 2 * 60 * 1000,
+    staleMs: 12 * 60 * 1000,
+    loader: () => fetchFlexOrdersRawPaginatedLive(config, options),
+  });
 }
 
 export function parseYmdParam(raw: string | null): string | null {

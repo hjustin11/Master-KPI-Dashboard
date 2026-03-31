@@ -1,6 +1,12 @@
+import { createHash } from "node:crypto";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
 
 export const FRESSNAPF_DAY_MS = 24 * 60 * 60 * 1000;
+
+function hashCacheInput(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex").slice(0, 24);
+}
 
 export function resolveFressnapfBaseUrl(raw: string): string {
   const trimmed = raw.trim();
@@ -311,7 +317,7 @@ export function normalizeFressnapfOrder(
   };
 }
 
-export async function fetchFressnapfOrdersPaginated(
+async function fetchFressnapfOrdersPaginatedLive(
   config: FressnapfIntegrationConfig,
   options: FetchFressnapfOrdersOptions = {}
 ): Promise<FressnapfNormalizedOrder[]> {
@@ -360,7 +366,7 @@ export async function fetchFressnapfOrdersPaginated(
   return out;
 }
 
-export async function fetchFressnapfOrdersRawPaginated(
+async function fetchFressnapfOrdersRawPaginatedLive(
   config: FressnapfIntegrationConfig,
   options: FetchFressnapfOrdersOptions = {}
 ): Promise<unknown[]> {
@@ -406,6 +412,46 @@ export async function fetchFressnapfOrdersRawPaginated(
   }
 
   return out;
+}
+
+export async function fetchFressnapfOrdersRawPaginated(
+  config: FressnapfIntegrationConfig,
+  options: FetchFressnapfOrdersOptions = {}
+): Promise<unknown[]> {
+  const cacheKey = `fressnapf:orders:raw:${hashCacheInput({
+    createdFromMs: options.createdFromMs ?? null,
+    createdToMsExclusive: options.createdToMsExclusive ?? null,
+    maxPages: options.maxPages ?? null,
+    ordersPath: config.ordersPath,
+    amountScale: config.amountScale,
+  })}`;
+  return getIntegrationCachedOrLoad({
+    cacheKey,
+    source: "fressnapf:orders:raw",
+    freshMs: 2 * 60 * 1000,
+    staleMs: 12 * 60 * 1000,
+    loader: () => fetchFressnapfOrdersRawPaginatedLive(config, options),
+  });
+}
+
+export async function fetchFressnapfOrdersPaginated(
+  config: FressnapfIntegrationConfig,
+  options: FetchFressnapfOrdersOptions = {}
+): Promise<FressnapfNormalizedOrder[]> {
+  const cacheKey = `fressnapf:orders:normalized:${hashCacheInput({
+    createdFromMs: options.createdFromMs ?? null,
+    createdToMsExclusive: options.createdToMsExclusive ?? null,
+    maxPages: options.maxPages ?? null,
+    ordersPath: config.ordersPath,
+    amountScale: config.amountScale,
+  })}`;
+  return getIntegrationCachedOrLoad({
+    cacheKey,
+    source: "fressnapf:orders:normalized",
+    freshMs: 2 * 60 * 1000,
+    staleMs: 12 * 60 * 1000,
+    loader: () => fetchFressnapfOrdersPaginatedLive(config, options),
+  });
 }
 
 export function parseYmdParam(raw: string | null): string | null {
