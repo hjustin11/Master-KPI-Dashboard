@@ -8,9 +8,11 @@ import {
   ymdToUtcRangeExclusiveEnd,
 } from "@/shared/lib/ottoApiClient";
 import { INTEGRATION_SECRETS_CONFIGURATION_HINT_DE } from "@/shared/lib/integrationSecrets";
+import { resolveSellerPortalOrderUrl } from "@/shared/lib/marketplaceSellerOrderLink";
 
 export type OttoOrderListRow = {
   orderId: string;
+  orderUrl?: string;
   purchaseDate: string;
   amount: number;
   currency: string;
@@ -83,6 +85,7 @@ function mapOrderToRow(order: OttoOrder): OttoOrderListRow | null {
 
   return {
     orderId: id || orderDate,
+    orderUrl: resolveSellerPortalOrderUrl("Otto", id || orderDate) ?? undefined,
     purchaseDate: orderDate,
     amount: Number(amount.toFixed(2)),
     currency,

@@ -29,6 +29,7 @@ import { toDateInputValue } from "@/shared/lib/orderDateParams";
 
 type ZooplusOrderRow = {
   orderId: string;
+  orderUrl?: string;
   purchaseDate: string;
   amount: number;
   currency: string;
@@ -133,7 +134,11 @@ export default function ZooplusOrdersPage() {
         accessorKey: "orderId",
         header: t("zooplusOrders.orderId"),
         cell: ({ row }) => (
-          <MarketplaceOrderIdLink marketplace="ZooPlus" internetNumber={row.original.orderId} />
+          <MarketplaceOrderIdLink
+            marketplace="ZooPlus"
+            internetNumber={row.original.orderId}
+            href={row.original.orderUrl}
+          />
         ),
       },
       {

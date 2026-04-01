@@ -7,9 +7,11 @@ import {
   ymdToUtcRangeExclusiveEnd,
   shopifyMissingKeysForConfig,
 } from "@/shared/lib/shopifyApiClient";
+import { resolveSellerPortalOrderUrl } from "@/shared/lib/marketplaceSellerOrderLink";
 
 export type ShopifyOrderListRow = {
   orderId: string;
+  orderUrl?: string;
   purchaseDate: string;
   amount: number;
   currency: string;
@@ -65,6 +67,7 @@ export async function GET(request: Request) {
 
     const items: ShopifyOrderListRow[] = filtered.map((o) => ({
       orderId: o.id,
+      orderUrl: resolveSellerPortalOrderUrl("Shopify", o.id) ?? undefined,
       purchaseDate: o.createdAt,
       amount: o.amount,
       currency: o.currency,

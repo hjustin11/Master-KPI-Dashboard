@@ -29,6 +29,7 @@ import { toDateInputValue } from "@/shared/lib/orderDateParams";
 
 type ShopifyOrderRow = {
   orderId: string;
+  orderUrl?: string;
   purchaseDate: string;
   amount: number;
   currency: string;
@@ -145,7 +146,11 @@ export default function ShopifyOrdersPage() {
         accessorKey: "orderId",
         header: t("shopifyOrders.orderId"),
         cell: ({ row }) => (
-          <MarketplaceOrderIdLink marketplace="Shopify" internetNumber={row.original.orderId} />
+          <MarketplaceOrderIdLink
+            marketplace="Shopify"
+            internetNumber={row.original.orderId}
+            href={row.original.orderUrl}
+          />
         ),
       },
       {

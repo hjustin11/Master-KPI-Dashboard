@@ -74,7 +74,19 @@ export const FEEDBACK_INBOX_SEEN_SIGNATURE_KEY = "dashboard_feedback_inbox_seen_
 export const FEEDBACK_INBOX_SEEN_EVENT = "dashboard:feedback-inbox-seen";
 
 export function getUpdatesSignature(entries: ChangelogEntry[] = UPDATE_CHANGELOG): string {
-  return entries.map((entry) => `${entry.date}|${entry.title}|${entry.releaseKey ?? ""}`).join("::");
+  const normalized = [...entries]
+    .map((entry) => ({
+      date: entry.date?.trim() ?? "",
+      title: entry.title?.trim() ?? "",
+      releaseKey: entry.releaseKey?.trim() ?? "",
+    }))
+    .filter((entry) => entry.date && entry.title)
+    .sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      if (a.title !== b.title) return a.title.localeCompare(b.title);
+      return a.releaseKey.localeCompare(b.releaseKey);
+    });
+  return normalized.map((entry) => `${entry.date}|${entry.title}|${entry.releaseKey}`).join("::");
 }
 
 export function readSeenUpdatesSignature(): string {

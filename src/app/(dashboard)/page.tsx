@@ -146,7 +146,7 @@ export default function DashboardHome() {
                   <CardTitle className="text-base leading-snug">
                     {t(`home.tiles.${tile.key}.title`)}
                   </CardTitle>
-                  <CardDescription className="text-pretty text-sm leading-relaxed">
+                  <CardDescription className="min-h-[2.75rem] text-pretty text-sm leading-relaxed">
                     {t(`home.tiles.${tile.key}.description`)}
                   </CardDescription>
                 </div>

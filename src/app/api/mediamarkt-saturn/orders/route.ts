@@ -7,9 +7,11 @@ import {
   parseYmdParam,
   ymdToUtcRangeExclusiveEnd,
 } from "@/shared/lib/mmsApiClient";
+import { resolveSellerPortalOrderUrl } from "@/shared/lib/marketplaceSellerOrderLink";
 
 export type MmsOrderListRow = {
   orderId: string;
+  orderUrl?: string;
   purchaseDate: string;
   amount: number;
   currency: string;
@@ -65,6 +67,7 @@ export async function GET(request: Request) {
 
     const items: MmsOrderListRow[] = filtered.map((o) => ({
       orderId: o.id,
+      orderUrl: resolveSellerPortalOrderUrl("MediaMarkt & Saturn", o.id) ?? undefined,
       purchaseDate: o.createdAt,
       amount: o.amount,
       currency: o.currency,

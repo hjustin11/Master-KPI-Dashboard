@@ -29,6 +29,7 @@ import { toDateInputValue } from "@/shared/lib/orderDateParams";
 
 type FressnapfOrderRow = {
   orderId: string;
+  orderUrl?: string;
   purchaseDate: string;
   amount: number;
   currency: string;
@@ -133,7 +134,11 @@ export default function FressnapfOrdersPage() {
         accessorKey: "orderId",
         header: t("fressnapfOrders.orderId"),
         cell: ({ row }) => (
-          <MarketplaceOrderIdLink marketplace="Fressnapf" internetNumber={row.original.orderId} />
+          <MarketplaceOrderIdLink
+            marketplace="Fressnapf"
+            internetNumber={row.original.orderId}
+            href={row.original.orderUrl}
+          />
         ),
       },
       {

@@ -7,9 +7,11 @@ import {
   ymdToUtcRangeExclusiveEnd,
   zooplusMissingKeysForConfig,
 } from "@/shared/lib/zooplusApiClient";
+import { resolveSellerPortalOrderUrl } from "@/shared/lib/marketplaceSellerOrderLink";
 
 export type ZooplusOrderListRow = {
   orderId: string;
+  orderUrl?: string;
   purchaseDate: string;
   amount: number;
   currency: string;
@@ -65,6 +67,7 @@ export async function GET(request: Request) {
 
     const items: ZooplusOrderListRow[] = filtered.map((o) => ({
       orderId: o.id,
+      orderUrl: resolveSellerPortalOrderUrl("ZooPlus", o.id) ?? undefined,
       purchaseDate: o.createdAt,
       amount: o.amount,
       currency: o.currency,

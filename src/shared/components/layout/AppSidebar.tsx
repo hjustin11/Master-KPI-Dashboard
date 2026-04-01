@@ -68,19 +68,14 @@ import { useTranslation } from "@/i18n/I18nProvider";
 import { resolveRoleLabel } from "@/i18n/resolve-role-label";
 import { useTutorialNavGate } from "@/shared/components/tutorial/TutorialNavContext";
 import type { NavAccessEditConfig } from "@/shared/lib/nav-access-edit";
-import { shouldRunBackgroundSync } from "@/shared/lib/dashboardClientCache";
 import {
   type Translate,
   wipDevTooltipForItem,
   wipLockedHintForItem,
 } from "@/shared/components/layout/sidebarWipText";
 import {
-  getFeedbackInboxSignature,
   getUpdatesSignature,
-  readSeenFeedbackInboxSignature,
   readSeenUpdatesSignature,
-  UPDATE_CHANGELOG,
-  FEEDBACK_INBOX_SEEN_EVENT,
   UPDATES_SEEN_EVENT,
 } from "@/shared/lib/updatesFeed";
 
@@ -93,7 +88,35 @@ type NavItem = {
   children?: Array<{ labelKey: string; href: string; requiredPermissions?: PermissionKey[] }>;
 };
 
-type UpdatesBellState = "none" | "updates" | "feedback";
+type UpdatesBellState = "none" | "updates";
+
+type ManagedUpdatePayloadItem = {
+  date?: string;
+  title?: string;
+  text?: string;
+  release_key?: string | null;
+};
+
+async function fetchCurrentUpdatesSignature(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/updates", { cache: "no-store" });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as { items?: ManagedUpdatePayloadItem[] };
+    if (!Array.isArray(payload.items)) return null;
+    const entries = payload.items
+      .map((item) => ({
+        date: typeof item.date === "string" ? item.date : "",
+        title: typeof item.title === "string" ? item.title : "",
+        text: typeof item.text === "string" ? item.text : "",
+        releaseKey: typeof item.release_key === "string" ? item.release_key : undefined,
+      }))
+      .filter((item) => item.date && item.title && item.text);
+    if (entries.length === 0) return null;
+    return getUpdatesSignature(entries);
+  } catch {
+    return null;
+  }
+}
 
 function NavAccessCheckbox({
   itemKey,
@@ -428,8 +451,7 @@ function SingleNavItem({
   const wipTooltip = wipDevTooltipForItem(item.key, t);
   /** Eingeklappte Sidebar (Icons): nur Hauptlink. Sonst: Unterpunkte per Zeile ein-/ausklappbar. */
   const subnavCollapsible = !collapsed && hasSubnav;
-  const bellState: UpdatesBellState =
-    item.key === "updates" ? (updatesBellState ?? "none") : "none";
+  const bellState: UpdatesBellState = item.key === "updates" ? (updatesBellState ?? "none") : "none";
   const hasBellHighlight = bellState !== "none";
   const bellActiveClass =
     bellState === "feedback"
@@ -483,7 +505,7 @@ function SingleNavItem({
         className={cn(
           "inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4",
           wipOwner && "relative",
-          item.key === "updates" && hasBellHighlight && bellActiveClass,
+          item.key === "updates" && hasBellHighlight && !active && bellActiveClass,
           item.key === "updates" &&
             hasBellHighlight &&
             "motion-safe:animate-[sidebar-bell-wiggle_1.8s_ease-in-out_infinite]"
@@ -517,7 +539,7 @@ function SingleNavItem({
       <span
         className={cn(
           "inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4",
-          item.key === "updates" && hasBellHighlight && bellActiveClass,
+          item.key === "updates" && hasBellHighlight && !active && bellActiveClass,
           item.key === "updates" &&
             hasBellHighlight &&
             "motion-safe:animate-[sidebar-bell-wiggle_1.8s_ease-in-out_infinite]"
@@ -921,23 +943,30 @@ export function AppSidebar() {
     () => partitionNavItems(tutorialGatedNavItems),
     [tutorialGatedNavItems]
   );
-  const isDeveloper = !user.isLoading && user.roleKey?.toLowerCase() === "owner";
   const [hasUnseenUpdates, setHasUnseenUpdates] = useState(false);
-  const [feedbackInboxSig, setFeedbackInboxSig] = useState("");
-  const [seenFeedbackSig, setSeenFeedbackSig] = useState("");
-  const updatesBellState: UpdatesBellState = useMemo(() => {
-    const hasNewFeedback =
-      isDeveloper && feedbackInboxSig !== "" && feedbackInboxSig !== seenFeedbackSig;
-    if (hasNewFeedback) return "feedback";
-    if (hasUnseenUpdates) return "updates";
-    return "none";
-  }, [isDeveloper, feedbackInboxSig, seenFeedbackSig, hasUnseenUpdates]);
+  const [currentUpdatesSignature, setCurrentUpdatesSignature] = useState(() => readSeenUpdatesSignature());
+  const updatesBellState: UpdatesBellState = hasUnseenUpdates ? "updates" : "none";
+
+  useEffect(() => {
+    let cancelled = false;
+    const refreshSignature = async () => {
+      const signature = await fetchCurrentUpdatesSignature();
+      if (!cancelled && signature) setCurrentUpdatesSignature(signature);
+    };
+    void refreshSignature();
+    const id = window.setInterval(() => {
+      void refreshSignature();
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     const syncSeenState = () => {
-      const current = getUpdatesSignature(UPDATE_CHANGELOG);
       const seen = readSeenUpdatesSignature();
-      setHasUnseenUpdates(current !== seen);
+      setHasUnseenUpdates(currentUpdatesSignature !== seen);
     };
     syncSeenState();
     window.addEventListener("storage", syncSeenState);
@@ -946,45 +975,7 @@ export function AppSidebar() {
       window.removeEventListener("storage", syncSeenState);
       window.removeEventListener(UPDATES_SEEN_EVENT, syncSeenState);
     };
-  }, []);
-
-  useEffect(() => {
-    const syncFeedbackSeen = () => setSeenFeedbackSig(readSeenFeedbackInboxSignature());
-    syncFeedbackSeen();
-    window.addEventListener("storage", syncFeedbackSeen);
-    window.addEventListener(FEEDBACK_INBOX_SEEN_EVENT, syncFeedbackSeen);
-    return () => {
-      window.removeEventListener("storage", syncFeedbackSeen);
-      window.removeEventListener(FEEDBACK_INBOX_SEEN_EVENT, syncFeedbackSeen);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isDeveloper) return;
-    let cancelled = false;
-    const loadFeedbackSignal = async () => {
-      if (!shouldRunBackgroundSync()) return;
-      try {
-        const res = await fetch("/api/feedback", { cache: "no-store" });
-        if (!res.ok) return;
-        const payload = (await res.json()) as {
-          items?: Array<{ id: string; status: string }>;
-        };
-        const sig = getFeedbackInboxSignature(payload.items);
-        if (!cancelled) setFeedbackInboxSig(sig);
-      } catch {
-        // ignore
-      }
-    };
-    void loadFeedbackSignal();
-    const id = window.setInterval(() => {
-      void loadFeedbackSignal();
-    }, 60_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [isDeveloper]);
+  }, [currentUpdatesSignature]);
   const cycleRole = (direction: "prev" | "next") => {
     if (!canRoleSwitch) return;
     const values = roleOptions.map((r) => r.value);
@@ -1287,23 +1278,30 @@ export function MobileSidebarTrigger() {
     () => partitionNavItems(tutorialGatedNavItems),
     [tutorialGatedNavItems]
   );
-  const isDeveloper = !user.isLoading && user.roleKey?.toLowerCase() === "owner";
   const [hasUnseenUpdates, setHasUnseenUpdates] = useState(false);
-  const [feedbackInboxSig, setFeedbackInboxSig] = useState("");
-  const [seenFeedbackSig, setSeenFeedbackSig] = useState("");
-  const updatesBellState: UpdatesBellState = useMemo(() => {
-    const hasNewFeedback =
-      isDeveloper && feedbackInboxSig !== "" && feedbackInboxSig !== seenFeedbackSig;
-    if (hasNewFeedback) return "feedback";
-    if (hasUnseenUpdates) return "updates";
-    return "none";
-  }, [isDeveloper, feedbackInboxSig, seenFeedbackSig, hasUnseenUpdates]);
+  const [currentUpdatesSignature, setCurrentUpdatesSignature] = useState(() => readSeenUpdatesSignature());
+  const updatesBellState: UpdatesBellState = hasUnseenUpdates ? "updates" : "none";
+
+  useEffect(() => {
+    let cancelled = false;
+    const refreshSignature = async () => {
+      const signature = await fetchCurrentUpdatesSignature();
+      if (!cancelled && signature) setCurrentUpdatesSignature(signature);
+    };
+    void refreshSignature();
+    const id = window.setInterval(() => {
+      void refreshSignature();
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     const syncSeenState = () => {
-      const current = getUpdatesSignature(UPDATE_CHANGELOG);
       const seen = readSeenUpdatesSignature();
-      setHasUnseenUpdates(current !== seen);
+      setHasUnseenUpdates(currentUpdatesSignature !== seen);
     };
     syncSeenState();
     window.addEventListener("storage", syncSeenState);
@@ -1312,45 +1310,7 @@ export function MobileSidebarTrigger() {
       window.removeEventListener("storage", syncSeenState);
       window.removeEventListener(UPDATES_SEEN_EVENT, syncSeenState);
     };
-  }, []);
-
-  useEffect(() => {
-    const syncFeedbackSeen = () => setSeenFeedbackSig(readSeenFeedbackInboxSignature());
-    syncFeedbackSeen();
-    window.addEventListener("storage", syncFeedbackSeen);
-    window.addEventListener(FEEDBACK_INBOX_SEEN_EVENT, syncFeedbackSeen);
-    return () => {
-      window.removeEventListener("storage", syncFeedbackSeen);
-      window.removeEventListener(FEEDBACK_INBOX_SEEN_EVENT, syncFeedbackSeen);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isDeveloper) return;
-    let cancelled = false;
-    const loadFeedbackSignal = async () => {
-      if (!shouldRunBackgroundSync()) return;
-      try {
-        const res = await fetch("/api/feedback", { cache: "no-store" });
-        if (!res.ok) return;
-        const payload = (await res.json()) as {
-          items?: Array<{ id: string; status: string }>;
-        };
-        const sig = getFeedbackInboxSignature(payload.items);
-        if (!cancelled) setFeedbackInboxSig(sig);
-      } catch {
-        // ignore
-      }
-    };
-    void loadFeedbackSignal();
-    const id = window.setInterval(() => {
-      void loadFeedbackSignal();
-    }, 60_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [isDeveloper]);
+  }, [currentUpdatesSignature]);
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
   const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
   const roleTestAccessEditMode = useAppStore((stateFromStore) => stateFromStore.roleTestAccessEditMode);

@@ -28,6 +28,7 @@ import { toDateInputValue } from "@/shared/lib/orderDateParams";
 
 type OttoOrderRow = {
   orderId: string;
+  orderUrl?: string;
   purchaseDate: string;
   amount: number;
   currency: string;
@@ -130,7 +131,11 @@ export default function OttoOrdersPage() {
         accessorKey: "orderId",
         header: t("ottoOrders.orderId"),
         cell: ({ row }) => (
-          <MarketplaceOrderIdLink marketplace="Otto" internetNumber={row.original.orderId} />
+          <MarketplaceOrderIdLink
+            marketplace="Otto"
+            internetNumber={row.original.orderId}
+            href={row.original.orderUrl}
+          />
         ),
       },
       {

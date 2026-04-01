@@ -6,9 +6,11 @@ import {
   parseYmdParam,
   ymdToUtcRangeExclusiveEnd,
 } from "@/shared/lib/fressnapfApiClient";
+import { resolveSellerPortalOrderUrl } from "@/shared/lib/marketplaceSellerOrderLink";
 
 export type FressnapfOrderListRow = {
   orderId: string;
+  orderUrl?: string;
   purchaseDate: string;
   amount: number;
   currency: string;
@@ -67,6 +69,7 @@ export async function GET(request: Request) {
 
     const items: FressnapfOrderListRow[] = filtered.map((o) => ({
       orderId: o.id,
+      orderUrl: resolveSellerPortalOrderUrl("Fressnapf", o.id) ?? undefined,
       purchaseDate: o.createdAt,
       amount: o.amount,
       currency: o.currency,

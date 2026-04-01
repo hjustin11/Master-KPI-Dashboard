@@ -29,6 +29,7 @@ import { toDateInputValue } from "@/shared/lib/orderDateParams";
 
 type MmsOrderRow = {
   orderId: string;
+  orderUrl?: string;
   purchaseDate: string;
   amount: number;
   currency: string;
@@ -136,6 +137,7 @@ export default function MmsOrdersPage() {
           <MarketplaceOrderIdLink
             marketplace="MediaMarkt & Saturn"
             internetNumber={row.original.orderId}
+            href={row.original.orderUrl}
           />
         ),
       },

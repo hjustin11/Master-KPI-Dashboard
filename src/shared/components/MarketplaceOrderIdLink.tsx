@@ -8,14 +8,22 @@ type MarketplaceOrderIdLinkProps = {
   marketplace?: string;
   /** Marktplatz-Bestellnummer (Xentral: internetNumber; APIs: orderId). */
   internetNumber?: string;
+  /** Optional: serverseitig aufgelöste Ziel-URL (hat Vorrang vor Heuristik). */
+  href?: string;
   className?: string;
 };
 
-export function MarketplaceOrderIdLink({ marketplace, internetNumber, className }: MarketplaceOrderIdLinkProps) {
+export function MarketplaceOrderIdLink({
+  marketplace,
+  internetNumber,
+  href,
+  className,
+}: MarketplaceOrderIdLinkProps) {
   const { t } = useTranslation();
   const raw = trimMarketplaceOrderId(internetNumber ?? "");
   const display = raw || "—";
-  const url = resolveSellerPortalOrderUrl(marketplace ?? "", raw);
+  const resolved = resolveSellerPortalOrderUrl(marketplace ?? "", raw);
+  const url = href?.trim() || resolved;
 
   if (!url || display === "—") {
     return (
