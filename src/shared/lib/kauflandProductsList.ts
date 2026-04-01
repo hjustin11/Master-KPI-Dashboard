@@ -76,6 +76,13 @@ function mapKauflandUnit(u: Record<string, unknown>): MarketplaceProductListRow 
   const priceRaw = u.price ?? u.fixed_price;
   const priceNum = pickNumber(priceRaw);
   const priceEur = priceNum > 0 ? Number((priceNum / 100).toFixed(2)) : null;
+  const stockRaw =
+    u.amount ??
+    u.quantity ??
+    u.stock ??
+    u.available_quantity ??
+    u.availableQuantity;
+  const stockNum = pickNumber(stockRaw);
   return {
     sku,
     secondaryId,
@@ -83,6 +90,7 @@ function mapKauflandUnit(u: Record<string, unknown>): MarketplaceProductListRow 
     statusLabel: status || "—",
     isActive,
     priceEur,
+    stockQty: Number.isFinite(stockNum) ? stockNum : null,
   };
 }
 

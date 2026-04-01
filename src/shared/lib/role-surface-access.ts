@@ -10,7 +10,9 @@ export type DashboardActionKey =
   | "updates.feedback.submit"
   | "updates.ownerInbox.status"
   | "updates.ownerInbox.reply"
-  | "xentral.orders.correctAddress";
+  | "xentral.orders.correctAddress"
+  | "analytics.marketplaces.parity.editPrice"
+  | "analytics.marketplaces.parity.editStock";
 
 export const DASHBOARD_WIDGET_CONFIG: Array<{ key: DashboardWidgetKey; label: string }> = [
   { key: "updates.changelog", label: "Updates-Kachel" },
@@ -24,6 +26,8 @@ export const DASHBOARD_ACTION_CONFIG: Array<{ key: DashboardActionKey; label: st
   { key: "updates.ownerInbox.status", label: "Owner: Status ändern" },
   { key: "updates.ownerInbox.reply", label: "Owner: Antwort speichern" },
   { key: "xentral.orders.correctAddress", label: "Xentral Bestellungen: Adresse korrigieren" },
+  { key: "analytics.marketplaces.parity.editPrice", label: "Analytics Marktplätze: Preise bearbeiten" },
+  { key: "analytics.marketplaces.parity.editStock", label: "Analytics Marktplätze: Bestand bearbeiten" },
 ];
 
 export const INITIAL_ROLE_WIDGET_VISIBILITY: Record<Role, Record<DashboardWidgetKey, boolean>> = {
@@ -61,6 +65,8 @@ export const INITIAL_ROLE_ACTION_ACCESS: Record<Role, Record<DashboardActionKey,
     "updates.ownerInbox.status": true,
     "updates.ownerInbox.reply": true,
     "xentral.orders.correctAddress": true,
+    "analytics.marketplaces.parity.editPrice": true,
+    "analytics.marketplaces.parity.editStock": true,
   },
   admin: {
     "updates.tutorial.start": true,
@@ -68,6 +74,8 @@ export const INITIAL_ROLE_ACTION_ACCESS: Record<Role, Record<DashboardActionKey,
     "updates.ownerInbox.status": false,
     "updates.ownerInbox.reply": false,
     "xentral.orders.correctAddress": true,
+    "analytics.marketplaces.parity.editPrice": true,
+    "analytics.marketplaces.parity.editStock": true,
   },
   manager: {
     "updates.tutorial.start": true,
@@ -75,6 +83,8 @@ export const INITIAL_ROLE_ACTION_ACCESS: Record<Role, Record<DashboardActionKey,
     "updates.ownerInbox.status": false,
     "updates.ownerInbox.reply": false,
     "xentral.orders.correctAddress": true,
+    "analytics.marketplaces.parity.editPrice": true,
+    "analytics.marketplaces.parity.editStock": true,
   },
   analyst: {
     "updates.tutorial.start": true,
@@ -82,6 +92,8 @@ export const INITIAL_ROLE_ACTION_ACCESS: Record<Role, Record<DashboardActionKey,
     "updates.ownerInbox.status": false,
     "updates.ownerInbox.reply": false,
     "xentral.orders.correctAddress": false,
+    "analytics.marketplaces.parity.editPrice": false,
+    "analytics.marketplaces.parity.editStock": false,
   },
   viewer: {
     "updates.tutorial.start": true,
@@ -89,6 +101,8 @@ export const INITIAL_ROLE_ACTION_ACCESS: Record<Role, Record<DashboardActionKey,
     "updates.ownerInbox.status": false,
     "updates.ownerInbox.reply": false,
     "xentral.orders.correctAddress": false,
+    "analytics.marketplaces.parity.editPrice": false,
+    "analytics.marketplaces.parity.editStock": false,
   },
 };
 

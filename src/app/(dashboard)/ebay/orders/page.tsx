@@ -23,6 +23,8 @@ import {
 } from "@/shared/lib/dashboardClientCache";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
+import { MarketplaceOrderIdLink } from "@/shared/components/MarketplaceOrderIdLink";
+import { toDateInputValue } from "@/shared/lib/orderDateParams";
 
 type EbayOrderRow = {
   orderId: string;
@@ -43,10 +45,6 @@ type CachedOrdersPayload = {
   savedAt: number;
   items: EbayOrderRow[];
 };
-
-function toDateInputValue(date: Date) {
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
 
 function statusVariantFromRaw(raw: string): "default" | "secondary" | "outline" | "destructive" {
   const n = raw.trim().toLowerCase();
@@ -145,7 +143,9 @@ export default function EbayOrdersPage() {
       {
         accessorKey: "orderId",
         header: t("ebayOrders.orderId"),
-        cell: ({ row }) => <span className="font-medium">{row.original.orderId}</span>,
+        cell: ({ row }) => (
+          <MarketplaceOrderIdLink marketplace="eBay" internetNumber={row.original.orderId} />
+        ),
       },
       {
         accessorKey: "purchaseDate",

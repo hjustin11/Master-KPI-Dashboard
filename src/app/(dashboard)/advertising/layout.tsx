@@ -9,14 +9,14 @@ import { usePermissions } from "@/shared/hooks/usePermissions";
 export default function AdvertisingLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const user = useUser();
-  const { isAdvertisingDeveloper } = usePermissions();
+  const { isSidebarItemWipLocked } = usePermissions();
 
   useEffect(() => {
     if (user.isLoading) return;
-    if (!isAdvertisingDeveloper) {
+    if (isSidebarItemWipLocked("advertising")) {
       router.replace("/");
     }
-  }, [user.isLoading, isAdvertisingDeveloper, router]);
+  }, [user.isLoading, isSidebarItemWipLocked, router]);
 
   if (user.isLoading) {
     return (
@@ -26,7 +26,7 @@ export default function AdvertisingLayout({ children }: { children: React.ReactN
     );
   }
 
-  if (!isAdvertisingDeveloper) {
+  if (isSidebarItemWipLocked("advertising")) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center gap-2 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" aria-hidden />

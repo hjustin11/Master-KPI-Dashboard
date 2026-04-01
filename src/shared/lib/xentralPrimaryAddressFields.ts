@@ -57,6 +57,28 @@ export const XENTRAL_ALTERNATE_RECIPIENT_NAME_KEYS = [
 
 export type XentralAlternateRecipientNameKey = (typeof XENTRAL_ALTERNATE_RECIPIENT_NAME_KEYS)[number];
 
+/** Felder, in denen eine Hausnummer landen kann, obwohl Straße + Hausnummer-Felder leer bleiben. */
+export const XENTRAL_HOUSE_NUMBER_HINT_SCAN_KEYS = [
+  "address2",
+  "line2",
+  "address3",
+  "line3",
+  "street2",
+  "addressSupplement",
+  "address_supplement",
+  "additionalAddressLine",
+  "company",
+] as const satisfies readonly XentralPrimaryAddressFieldKey[];
+
+/** Mögliche Xentral-Keys für die Hausnummer (Schreibziel beim Übernehmen eines Vorschlags). */
+export const XENTRAL_HOUSE_NUMBER_FIELD_KEYS = [
+  "houseNumber",
+  "house_number",
+  "houseNo",
+  "streetNumber",
+  "street_number",
+] as const satisfies readonly XentralPrimaryAddressFieldKey[];
+
 /**
  * Reihenfolge für Namens-Vorschläge: Titel/Ansprechpartner vor Abteilung/Zusatzzeilen.
  * `name` steht in der UI separat; `pickNameFromBlock` liest name vor contactPerson — bei vollem
@@ -121,6 +143,22 @@ export function resolveCityEditBinding(fields: XentralPrimaryAddressFields): {
     }
   }
   return { key: "city", value: "" };
+}
+
+/**
+ * Hausnummer: angezeigter Wert und Xentral-Key. Leer → Schreibziel `houseNumber`.
+ */
+export function resolveHouseNumberEditBinding(fields: XentralPrimaryAddressFields): {
+  key: XentralPrimaryAddressFieldKey;
+  value: string;
+} {
+  for (const k of XENTRAL_HOUSE_NUMBER_FIELD_KEYS) {
+    const raw = fields[k];
+    if (raw != null && String(raw).trim() !== "") {
+      return { key: k, value: String(raw) };
+    }
+  }
+  return { key: "houseNumber", value: "" };
 }
 
 function pickString(value: unknown): string {

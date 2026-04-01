@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Loader2 } from "lucide-react";
+import { Loader2, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -118,6 +118,8 @@ export function MarketplaceProductsView({
   const silentFetchAbortRef = useRef<AbortController | null>(null);
   const reportPendingAttemptRef = useRef(0);
   const reportPendingTimeoutRef = useRef<number | null>(null);
+  const lastLoadParamsRef = useRef<{ status: ProductStatus; pageIndex: number } | null>(null);
+  const pendingForcedRefreshRef = useRef(false);
 
   useEffect(() => {
     rowsRef.current = rows;
@@ -141,12 +143,16 @@ export function MarketplaceProductsView({
   );
 
   const buildRequestUrl = useCallback(
-    (st: ProductStatus) => {
+    (st: ProductStatus, forceRefresh = false) => {
       const base = typeof apiUrl === "function" ? apiUrl(st) : apiUrl;
-      if (!serverPagination) return base;
       const u = new URL(base, typeof window !== "undefined" ? window.location.origin : "http://localhost");
-      u.searchParams.set("limit", String(pageSizeProp));
-      u.searchParams.set("offset", String(pageIndexRef.current * pageSizeProp));
+      if (serverPagination) {
+        u.searchParams.set("limit", String(pageSizeProp));
+        u.searchParams.set("offset", String(pageIndexRef.current * pageSizeProp));
+      }
+      if (forceRefresh) {
+        u.searchParams.set("refresh", "1");
+      }
       return `${u.pathname}${u.search}`;
     },
     [apiUrl, serverPagination, pageSizeProp]
@@ -285,7 +291,7 @@ export function MarketplaceProductsView({
       }
 
       try {
-        const url = buildRequestUrl(st);
+        const url = buildRequestUrl(st, forceRefresh);
         const res = await fetch(url, { cache: "no-store", signal: ac.signal });
         const payload = (await res.json()) as ProductsApiPayload;
 
@@ -382,13 +388,22 @@ export function MarketplaceProductsView({
   }, [status, pageIndex]);
 
   useEffect(() => {
-    if (amazonStatusFilter) {
+    if (amazonStatusFilter && pageIndex !== 0) {
+      // Statuswechsel soll nach Page-Reset weiterhin mit forceRefresh laden.
+      pendingForcedRefreshRef.current = true;
       setPageIndex(0);
     }
-  }, [status, amazonStatusFilter]);
+  }, [status, amazonStatusFilter, pageIndex]);
 
   useEffect(() => {
-    void load(false, false);
+    const prev = lastLoadParamsRef.current;
+    let forceRefresh = prev == null ? false : prev.status !== status;
+    if (pendingForcedRefreshRef.current) {
+      forceRefresh = true;
+      pendingForcedRefreshRef.current = false;
+    }
+    lastLoadParamsRef.current = { status, pageIndex };
+    void load(forceRefresh, false);
   }, [status, pageIndex, load]);
 
   useEffect(() => {
@@ -428,6 +443,17 @@ export function MarketplaceProductsView({
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isLoading}
+              onClick={() => void load(true, false)}
+              className="h-8 gap-1.5"
+            >
+              <RotateCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} aria-hidden />
+              {t("priceParity.refresh")}
+            </Button>
             {!isLoading ? (
               <p className="text-sm text-muted-foreground">
                 {t("marketplaceProducts.totalCount", { count: totalArticlesLabel })}

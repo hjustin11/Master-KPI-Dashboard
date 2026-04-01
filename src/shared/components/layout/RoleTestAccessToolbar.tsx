@@ -48,6 +48,8 @@ export function RoleTestAccessToolbar() {
   const toggleRoleSidebarItem = useAppStore((s) => s.toggleRoleSidebarItem);
   const toggleRoleWidgetVisibility = useAppStore((s) => s.toggleRoleWidgetVisibility);
   const toggleRoleActionAccess = useAppStore((s) => s.toggleRoleActionAccess);
+  const wipPageLocks = useAppStore((s) => s.wipPageLocks);
+  const toggleWipPageLock = useAppStore((s) => s.toggleWipPageLock);
 
   const roleLabel = useMemo(() => {
     const keys = [...ROLE_OPTIONS.map((r) => r.value), ...customRoleKeys];
@@ -104,6 +106,33 @@ export function RoleTestAccessToolbar() {
               </SheetHeader>
               <div className="flex-1 overflow-y-auto px-4 py-4">
                 <section className="space-y-2">
+                  <h3 className="text-sm font-semibold">{t("header.wipGlobalLocksTitle")}</h3>
+                  <p className="text-xs text-muted-foreground">{t("header.wipGlobalLocksHint")}</p>
+                  <ul className="space-y-2">
+                    {SIDEBAR_ITEM_CONFIG.map((item) => {
+                      const locked = Boolean(wipPageLocks[item.key]);
+                      return (
+                        <li key={item.key}>
+                          <label className="flex cursor-pointer items-start gap-2 text-xs leading-snug">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 h-3.5 w-3.5 accent-primary"
+                              checked={locked}
+                              onChange={() => toggleWipPageLock(item.key)}
+                            />
+                            <span>
+                              <span className="font-medium">{t(`sidebarItems.${item.key}`)}</span>
+                              <span className="ml-1 text-muted-foreground">
+                                {locked ? t("header.wipGlobalLockOn") : t("header.wipGlobalLockOff")}
+                              </span>
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+                <section className="mt-6 space-y-2 border-t border-border/40 pt-4">
                   <h3 className="text-sm font-semibold">{t("settingsUsers.permissionsTitle")}</h3>
                   <p className="text-xs text-muted-foreground">{t("header.roleTestAccessPanelPermissionsHint")}</p>
                   <ul className="space-y-2">

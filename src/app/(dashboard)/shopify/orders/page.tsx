@@ -24,6 +24,8 @@ import {
 } from "@/shared/lib/dashboardClientCache";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
+import { MarketplaceOrderIdLink } from "@/shared/components/MarketplaceOrderIdLink";
+import { toDateInputValue } from "@/shared/lib/orderDateParams";
 
 type ShopifyOrderRow = {
   orderId: string;
@@ -44,10 +46,6 @@ type CachedOrdersPayload = {
   savedAt: number;
   items: ShopifyOrderRow[];
 };
-
-function toDateInputValue(date: Date) {
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
 
 function statusVariantFromRaw(raw: string): "default" | "secondary" | "outline" | "destructive" {
   const n = raw.trim().toLowerCase();
@@ -146,7 +144,9 @@ export default function ShopifyOrdersPage() {
       {
         accessorKey: "orderId",
         header: t("shopifyOrders.orderId"),
-        cell: ({ row }) => <span className="font-medium">{row.original.orderId}</span>,
+        cell: ({ row }) => (
+          <MarketplaceOrderIdLink marketplace="Shopify" internetNumber={row.original.orderId} />
+        ),
       },
       {
         accessorKey: "purchaseDate",

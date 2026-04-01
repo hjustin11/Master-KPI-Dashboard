@@ -5,7 +5,8 @@
   "common": {
     "loading": "加载中…",
     "on": "开",
-    "off": "关"
+    "off": "关",
+    "openMarketplaceOrderTitle": "在卖场卖家后台打开订单 ({id})"
   },
   "language": {
     "switch": "语言",
@@ -26,7 +27,11 @@
     "roleTestAccessPanelTitle": "权限与设置区卡片",
     "roleTestAccessPanelLead": "适用于测试角色「{role}」。开发者角色不受限制。",
     "roleTestAccessPanelPermissionsHint": "该角色在仪表盘可执行的操作。",
-    "roleTestAccessPanelSectionsHint": "在 设置 → 用户 中可见的区域（卡片）。"
+    "roleTestAccessPanelSectionsHint": "在 设置 → 用户 中可见的区域（卡片）。",
+    "wipGlobalLocksTitle": "全局 WIP 锁定",
+    "wipGlobalLocksHint": "对所有用户生效。勾选 = 仅开发者可访问（Owner 未在角色测试中，或已开启“编辑权限”）。与其余配置一并保存，约每 45 秒同步到各客户端。",
+    "wipGlobalLockOn": "（已锁）",
+    "wipGlobalLockOff": "（开放）"
   },
   "sidebar": {
     "toggleSidebar": "收起或展开侧边栏",
@@ -65,6 +70,8 @@
     "advertisingLockedHint": "该区域施工中，仅开发者可访问。",
     "advertisingWipTooltip": "广告 – 施工中（仅开发者可完整访问）",
     "myAreaLockedHint": "该区域开发中。当前仅开发者可访问。",
+    "sidebarWipLockedHint": "区域建设中，仅开发者可访问。",
+    "sidebarWipDevTooltip": "WIP – 仅开发者可见。",
     "myAreaWipTooltip": "我的区域开发中（仅开发者可完整访问）",
     "adCampaigns": "广告活动",
     "adPerformance": "成效",
@@ -650,7 +657,11 @@
     "totalTitle": "合计",
     "totalSubtitle": "已连接渠道之和 · 所选期间与等长对比期 · 亚马逊指标来自 SP-API Sales ·",
     "totalSubtitleMore": "更多渠道即将接入",
-    "amazonSyncing": "亚马逊数据…",
+    "amazonSyncing": "卖场数据…",
+    "dataQualityNoticeAria": "数据说明",
+    "dataQualityNoticeLabel": "注意",
+    "dataQualityNoticeTitle": "数据说明",
+    "dataQualityNoticeBody": "数据来自已对接的卖场接口并会持续优化，可能与卖家后台展示不一致（如延迟、时区、补录、四舍五入或筛选）。",
     "totalIncomplete": "合计不完整：{message}",
     "totalRevenue": "总销售额（{span}）",
     "trendVsPrev": "销售额环比变化 Δ",
@@ -748,7 +759,8 @@
     "removeBandAria": "移除 {label}",
     "noBandsYet": "尚无区域 — 可添加例如节假日促销的起止日期；区域将显示在图中。",
     "defaultBandLabel": "活动",
-    "tooltipOrders": "订单"
+    "tooltipOrders": "订单",
+    "tooltipDayTotalRevenue": "当日销售总额"
   },
   "priceParity": {
     "title": "商品与价格对比",
@@ -756,9 +768,18 @@
     "subtitleStrong": "不一致",
     "subtitleRest": "仅当至少两个市场有价格且某一价格与众数（出现次数最多的金额）不符时标为「不一致」。最高频次并列则不标记。",
     "loadError": "无法加载价格对比。",
+    "saveError": "无法保存修改。",
     "filterPlaceholder": "按 SKU 或商品名称筛选…",
+    "refresh": "刷新",
     "syncing": "正在同步数据…",
+    "saving": "保存中…",
     "metaLine": "{articles} 个商品 · {amazonSkus} 个亚马逊 SKU · {issues} 个待复核",
+    "editPrices": "更新价格",
+    "editStocks": "更新库存",
+    "saveEdits": "保存",
+    "cancelEdits": "取消",
+    "noPermissionPrice": "无权限：编辑价格",
+    "noPermissionStock": "无权限：编辑库存",
     "sku": "SKU",
     "stock": "库存",
     "article": "商品",
@@ -768,7 +789,8 @@
     "noListing": "无 listing",
     "priceNa": "无价格",
     "deviating": "不一致",
-    "notConnected": "计划接入"
+    "notConnected": "计划接入",
+    "priceStockCompact": "价格 / 库存"
   },
   "xentralOrders": {
     "title": "订单",
@@ -821,6 +843,10 @@
     "suggestionsHeading": "建议",
     "applySuggestionOnly": "仅采用建议",
     "applySuggestionMerged": "合并：建议 – 当前姓名",
+    "houseNumberSuggestionsTitle": "来自其他 Xentral 字段的门牌号建议",
+    "houseNumberSuggestionsAria": "门牌号建议",
+    "applyHouseNumberToField": "写入门牌号字段",
+    "applyHouseNumberToStreet": "追加到街道行",
     "nameFieldBase": "姓名（Xentral：name）",
     "nameFieldWithHint": "姓名（Xentral：name）。{hint}",
     "streetFieldBase": "街道（Xentral：street）",

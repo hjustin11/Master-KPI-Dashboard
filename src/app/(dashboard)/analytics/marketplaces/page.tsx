@@ -36,6 +36,7 @@ import {
   MarketplaceTotalRevenueLinesChart,
   type MarketplaceRevenueLineSeries,
 } from "./MarketplaceTotalRevenueLinesChart";
+import { MarketplaceAnalyticsDataQualityNotice } from "./MarketplaceAnalyticsDataQualityNotice";
 import {
   bandsForMarketplaceChart,
   bandsForTotalChart,
@@ -264,6 +265,23 @@ function formatCurrency(amount: number, currency: string, intlTag: string) {
 
 function formatInt(n: number, intlTag: string) {
   return new Intl.NumberFormat(intlTag).format(n ?? 0);
+}
+
+function safePercent(part: number, whole: number): number | null {
+  if (!Number.isFinite(part) || !Number.isFinite(whole) || whole === 0) return null;
+  return (part / whole) * 100;
+}
+
+function calcYoY(current: number, previous: number): number | null {
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
+  if (previous === 0) return current === 0 ? 0 : null;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+function formatPercent(value: number | null | undefined, intlTag: string, signed = false): string {
+  if (value == null || !Number.isFinite(value)) return PLACEHOLDER;
+  const prefix = signed && value > 0 ? "+" : "";
+  return `${prefix}${value.toLocaleString(intlTag, { maximumFractionDigits: 1 })} %`;
 }
 
 function formatTrendPct(
@@ -597,6 +615,7 @@ function TotalMarketplacesKpiStrip({
           </Button>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <MarketplaceAnalyticsDataQualityNotice t={t} />
           <PeriodRangePicker
             periodFrom={periodFrom}
             periodTo={periodTo}
@@ -686,6 +705,7 @@ function TotalMarketplacesKpiStrip({
             emptyLabel={t("analyticsMp.totalRevenueChartEmpty")}
             ordersLabel={t("analyticsChart.ordersPerDay")}
             prevPeriodLabel={t("analyticsChart.prevPeriodLine")}
+            currentPeriodDayTotalLabel={t("analyticsChart.tooltipDayTotalRevenue")}
             bands={totalChartBands}
           />
         </div>
@@ -2536,6 +2556,8 @@ function AnalyticsMarketplacesPage() {
     const sameCurrencyRows = reportRows.filter((row) => row.currency === totals.currency);
     const current = {
       revenue: sameCurrencyRows.reduce((sum, row) => sum + row.currentRevenue, 0),
+      orders: sameCurrencyRows.reduce((sum, row) => sum + row.currentOrders, 0),
+      units: sameCurrencyRows.reduce((sum, row) => sum + row.currentUnits, 0),
       returnedAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentReturned, 0),
       cancelledAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentCancelled, 0),
       returnsAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentReturns, 0),
@@ -2544,6 +2566,8 @@ function AnalyticsMarketplacesPage() {
     };
     const previous = {
       revenue: sameCurrencyRows.reduce((sum, row) => sum + row.previousRevenue, 0),
+      orders: sameCurrencyRows.reduce((sum, row) => sum + row.previousOrders, 0),
+      units: sameCurrencyRows.reduce((sum, row) => sum + row.previousUnits, 0),
       returnedAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousReturned, 0),
       cancelledAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousCancelled, 0),
       returnsAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousReturns, 0),
@@ -2697,6 +2721,85 @@ function AnalyticsMarketplacesPage() {
         </div>
         {netSummary ? (
           <div className="space-y-2">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Netto-Marge</p>
+                <p className="text-sm font-semibold tabular-nums">
+                  {formatPercent(safePercent(netSummary.currentNet, netSummary.current.revenue), intlTag)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  YoY {formatPercent(calcYoY(netSummary.currentNet, netSummary.previousNet), intlTag, true)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Retourenquote</p>
+                <p className="text-sm font-semibold tabular-nums">
+                  {formatPercent(
+                    safePercent(netSummary.current.returnsAmount, netSummary.current.revenue),
+                    intlTag
+                  )}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  YoY{" "}
+                  {formatPercent(
+                    calcYoY(
+                      safePercent(netSummary.current.returnsAmount, netSummary.current.revenue) ?? 0,
+                      safePercent(netSummary.previous.returnsAmount, netSummary.previous.revenue) ?? 0
+                    ),
+                    intlTag,
+                    true
+                  )}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">AOV (Ø Bestellwert)</p>
+                <p className="text-sm font-semibold tabular-nums">
+                  {formatCurrency(
+                    netSummary.current.orders > 0
+                      ? netSummary.current.revenue / netSummary.current.orders
+                      : 0,
+                    netSummary.currency,
+                    intlTag
+                  )}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  YoY{" "}
+                  {formatPercent(
+                    calcYoY(
+                      netSummary.current.orders > 0
+                        ? netSummary.current.revenue / netSummary.current.orders
+                        : 0,
+                      netSummary.previous.orders > 0
+                        ? netSummary.previous.revenue / netSummary.previous.orders
+                        : 0
+                    ),
+                    intlTag,
+                    true
+                  )}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Netto je Bestellung</p>
+                <p className="text-sm font-semibold tabular-nums">
+                  {formatCurrency(
+                    netSummary.current.orders > 0 ? netSummary.currentNet / netSummary.current.orders : 0,
+                    netSummary.currency,
+                    intlTag
+                  )}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  YoY{" "}
+                  {formatPercent(
+                    calcYoY(
+                      netSummary.current.orders > 0 ? netSummary.currentNet / netSummary.current.orders : 0,
+                      netSummary.previous.orders > 0 ? netSummary.previousNet / netSummary.previous.orders : 0
+                    ),
+                    intlTag,
+                    true
+                  )}
+                </p>
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -2704,6 +2807,7 @@ function AnalyticsMarketplacesPage() {
                     <TableHead>Kennzahl</TableHead>
                     <TableHead className="text-right">Aktueller Zeitraum</TableHead>
                     <TableHead className="text-right">Vorjahr</TableHead>
+                    <TableHead className="text-right">YoY</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2711,36 +2815,101 @@ function AnalyticsMarketplacesPage() {
                     <TableCell>Umsatz</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.current.revenue, netSummary.currency, intlTag)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.previous.revenue, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatPercent(calcYoY(netSummary.current.revenue, netSummary.previous.revenue), intlTag, true)}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>Retouren</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.current.returnsAmount, netSummary.currency, intlTag)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.previous.returnsAmount, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatPercent(calcYoY(netSummary.current.returnsAmount, netSummary.previous.returnsAmount), intlTag, true)}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell className="text-muted-foreground">- returned</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.current.returnedAmount, netSummary.currency, intlTag)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.previous.returnedAmount, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatPercent(calcYoY(netSummary.current.returnedAmount, netSummary.previous.returnedAmount), intlTag, true)}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell className="text-muted-foreground">- cancelled</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.current.cancelledAmount, netSummary.currency, intlTag)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.previous.cancelledAmount, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatPercent(calcYoY(netSummary.current.cancelledAmount, netSummary.previous.cancelledAmount), intlTag, true)}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>Marktplatzgebuehren</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.current.feesAmount, netSummary.currency, intlTag)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.previous.feesAmount, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatPercent(calcYoY(netSummary.current.feesAmount, netSummary.previous.feesAmount), intlTag, true)}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>Anzeigenkosten</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.current.adSpendAmount, netSummary.currency, intlTag)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(netSummary.previous.adSpendAmount, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatPercent(calcYoY(netSummary.current.adSpendAmount, netSummary.previous.adSpendAmount), intlTag, true)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Bestellungen</TableCell>
+                    <TableCell className="text-right">{formatInt(netSummary.current.orders, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatInt(netSummary.previous.orders, intlTag)}</TableCell>
+                    <TableCell className="text-right">{formatPercent(calcYoY(netSummary.current.orders, netSummary.previous.orders), intlTag, true)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Ø Bestellwert (AOV)</TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(
+                        netSummary.current.orders > 0 ? netSummary.current.revenue / netSummary.current.orders : 0,
+                        netSummary.currency,
+                        intlTag
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(
+                        netSummary.previous.orders > 0
+                          ? netSummary.previous.revenue / netSummary.previous.orders
+                          : 0,
+                        netSummary.currency,
+                        intlTag
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatPercent(
+                        calcYoY(
+                          netSummary.current.orders > 0
+                            ? netSummary.current.revenue / netSummary.current.orders
+                            : 0,
+                          netSummary.previous.orders > 0
+                            ? netSummary.previous.revenue / netSummary.previous.orders
+                            : 0
+                        ),
+                        intlTag,
+                        true
+                      )}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Netto-Marge</TableCell>
+                    <TableCell className="text-right">
+                      {formatPercent(safePercent(netSummary.currentNet, netSummary.current.revenue), intlTag)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatPercent(safePercent(netSummary.previousNet, netSummary.previous.revenue), intlTag)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatPercent(
+                        calcYoY(
+                          safePercent(netSummary.currentNet, netSummary.current.revenue) ?? 0,
+                          safePercent(netSummary.previousNet, netSummary.previous.revenue) ?? 0
+                        ),
+                        intlTag,
+                        true
+                      )}
+                    </TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-semibold">Netto</TableCell>
                     <TableCell className="text-right font-semibold">{formatCurrency(netSummary.currentNet, netSummary.currency, intlTag)}</TableCell>
                     <TableCell className="text-right font-semibold">{formatCurrency(netSummary.previousNet, netSummary.currency, intlTag)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatPercent(calcYoY(netSummary.currentNet, netSummary.previousNet), intlTag, true)}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>

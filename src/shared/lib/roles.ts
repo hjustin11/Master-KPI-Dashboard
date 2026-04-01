@@ -41,3 +41,26 @@ export function isOwnerOrAdminRole(value: unknown): boolean {
   const role = normalizeRoleKey(value);
   return role === "owner" || role === "admin";
 }
+
+export function resolveEffectiveRoleKey(args: {
+  profileRole?: unknown;
+  appRole?: unknown;
+  userRole?: unknown;
+  fallback?: Role;
+}): Role {
+  return (
+    normalizeRoleKey(args.profileRole) ??
+    normalizeRoleKey(args.appRole) ??
+    normalizeRoleKey(args.userRole) ??
+    args.fallback ??
+    "viewer"
+  );
+}
+
+export function isOwnerFromSources(args: {
+  profileRole?: unknown;
+  appRole?: unknown;
+  userRole?: unknown;
+}): boolean {
+  return resolveEffectiveRoleKey(args) === "owner";
+}

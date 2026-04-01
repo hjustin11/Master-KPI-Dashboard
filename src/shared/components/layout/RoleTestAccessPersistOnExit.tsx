@@ -26,6 +26,7 @@ export function RoleTestAccessPersistOnExit() {
   const customRoleKeys = useAppStore((s) => s.customRoleKeys);
   const textOverrides = useAppStore((s) => s.textOverrides);
   const settingsUsersSectionOrder = useAppStore((s) => s.settingsUsersSectionOrder);
+  const wipPageLocks = useAppStore((s) => s.wipPageLocks);
   const prevEdit = useRef(false);
   const prevRoleTest = useRef(false);
   const dirtyRef = useRef(false);
@@ -44,6 +45,7 @@ export function RoleTestAccessPersistOnExit() {
       customRoleKeys: s.customRoleKeys,
       textOverrides: s.textOverrides,
       settingsUsersSectionOrder: s.settingsUsersSectionOrder,
+      wipPageLocks: s.wipPageLocks,
     });
     if (!result.ok) {
       toast.error(t("settingsUsers.dashboardConfigSaveFailed", { message: result.error }));
@@ -98,6 +100,7 @@ export function RoleTestAccessPersistOnExit() {
     customRoleKeys,
     textOverrides,
     settingsUsersSectionOrder,
+    wipPageLocks,
     roleTestingEnabled,
     roleTestAccessEditMode,
     user.isLoading,

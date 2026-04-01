@@ -23,6 +23,8 @@ import {
 import type { AmazonSpApiClientError } from "@/shared/lib/amazonSpApiClientError";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
+import { MarketplaceOrderIdLink } from "@/shared/components/MarketplaceOrderIdLink";
+import { toDateInputValue } from "@/shared/lib/orderDateParams";
 
 type AmazonOrderRow = {
   orderId: string;
@@ -47,12 +49,6 @@ type CachedOrdersPayload = {
   savedAt: number;
   items: AmazonOrderRow[];
 };
-
-function toDateInputValue(date: Date) {
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 10);
-}
 
 function normalizeStatus(status: string) {
   const normalized = status.trim().toLowerCase();
@@ -129,7 +125,9 @@ export default function AmazonOrdersPage() {
       {
         accessorKey: "orderId",
         header: t("amazonOrders.orderId"),
-        cell: ({ row }) => <span className="font-medium">{row.original.orderId}</span>,
+        cell: ({ row }) => (
+          <MarketplaceOrderIdLink marketplace="Amazon" internetNumber={row.original.orderId} />
+        ),
       },
       {
         accessorKey: "purchaseDate",

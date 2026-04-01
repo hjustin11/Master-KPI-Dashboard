@@ -261,7 +261,8 @@ export default function AnalyticsProcurementPage() {
 
   const gridColsStyle = useMemo(
     (): React.CSSProperties => ({
-      gridTemplateColumns: `${leadingColCh}ch minmax(0, 1fr) 4.5rem minmax(7.5rem, 28%)`,
+      /** Muss mit <colgroup> (AMOUNT_COL) übereinstimmen, sonst Überlappung bei Alt→Neu. */
+      gridTemplateColumns: `${leadingColCh}ch minmax(0, 1fr) ${AMOUNT_COL} minmax(7.5rem, 28%)`,
     }),
     [leadingColCh]
   );
@@ -424,10 +425,10 @@ export default function AnalyticsProcurementPage() {
                             </span>
                           )}
                         </div>
-                        <div className="flex min-h-[1.75rem] min-w-0 flex-col justify-start px-2 py-1.5">
+                        <div className="flex min-h-[1.75rem] min-w-0 flex-col justify-center px-2 py-1.5 text-right">
                           {delta?.qtyDirection ? (
-                            <div className="inline-grid w-full shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-0.5 text-xs leading-none tabular-nums">
-                              <span className="min-w-0 text-right font-medium text-muted-foreground">
+                            <div className="inline-flex w-full min-w-0 flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 text-xs tabular-nums">
+                              <span className="shrink-0 font-medium whitespace-nowrap text-muted-foreground">
                                 {qtyFmt.format(delta.previousTotalQty)}
                               </span>
                               <ArrowRight
@@ -436,7 +437,7 @@ export default function AnalyticsProcurementPage() {
                               />
                               <span
                                 className={cn(
-                                  "min-w-0 text-right font-bold",
+                                  "shrink-0 font-bold whitespace-nowrap",
                                   delta.qtyDirection === "more" &&
                                     "text-green-600 dark:text-green-400",
                                   delta.qtyDirection === "less" &&
@@ -452,7 +453,7 @@ export default function AnalyticsProcurementPage() {
                               </span>
                             </div>
                           ) : (
-                            <span className="block w-full text-right text-xs font-bold leading-none tabular-nums text-foreground">
+                            <span className="block w-full text-xs font-bold tabular-nums whitespace-nowrap text-foreground">
                               {qtyFmt.format(total)}
                             </span>
                           )}

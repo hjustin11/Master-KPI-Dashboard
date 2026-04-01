@@ -4,13 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { type Role } from "@/shared/lib/invitations";
 import {
-  DASHBOARD_SECTION_CONFIG,
-  PERMISSION_CONFIG,
   ROLE_OPTIONS,
-  SIDEBAR_ITEM_CONFIG,
-  type DashboardSectionKey,
-  type PermissionKey,
-  type SidebarItemKey,
 } from "@/shared/lib/access-control";
 import { useAppStore } from "@/shared/stores/useAppStore";
 import { usePermissions } from "@/shared/hooks/usePermissions";
@@ -58,42 +52,17 @@ export default function SettingsUsersPage() {
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [memberActionMessage, setMemberActionMessage] = useState<string | null>(null);
   const [memberActionError, setMemberActionError] = useState<string | null>(null);
-  const [isPermissionEditMode, setIsPermissionEditMode] = useState(false);
   const sectionOrder = useAppStore((state) => state.settingsUsersSectionOrder);
   const setSettingsUsersSectionOrder = useAppStore((state) => state.setSettingsUsersSectionOrder);
 
-  const rolePermissions = useAppStore((state) => state.rolePermissions);
-  const roleSidebarItems = useAppStore((state) => state.roleSidebarItems);
-  const roleSectionVisibility = useAppStore((state) => state.roleSectionVisibility);
   const roleLabels = useAppStore((state) => state.roleLabels);
   const customRoleKeys = useAppStore((state) => state.customRoleKeys);
   const textOverrides = useAppStore((state) => state.textOverrides);
-  const toggleRolePermission = useAppStore((state) => state.toggleRolePermission);
-  const toggleRoleSidebarItem = useAppStore((state) => state.toggleRoleSidebarItem);
-  const toggleRoleSectionVisibility = useAppStore(
-    (state) => state.toggleRoleSectionVisibility
-  );
   const setRoleLabel = useAppStore((state) => state.setRoleLabel);
   const addCustomRole = useAppStore((state) => state.addCustomRole);
   const removeRole = useAppStore((state) => state.removeRole);
-  const setTextOverride = useAppStore((state) => state.setTextOverride);
-  const removeTextOverride = useAppStore((state) => state.removeTextOverride);
 
   const inviteRoleOptions = useMemo(() => ROLE_OPTIONS, []);
-
-  const testRoleKeys = useMemo(
-    () => [...inviteRoleOptions.map((r) => r.value), ...customRoleKeys],
-    [customRoleKeys, inviteRoleOptions]
-  );
-
-  const testRoleOptions = useMemo(
-    () =>
-      testRoleKeys.map((roleKey) => ({
-        value: roleKey,
-        label: resolveRoleLabel(roleKey, roleLabels[roleKey], locale),
-      })),
-    [testRoleKeys, roleLabels, locale]
-  );
 
   const [newCustomRoleLabel, setNewCustomRoleLabel] = useState("");
   const [newCustomRoleTemplate, setNewCustomRoleTemplate] = useState<Role>("viewer");
@@ -106,32 +75,6 @@ export default function SettingsUsersPage() {
     Object.prototype.hasOwnProperty.call(textOverrides, key)
       ? textOverrides[key]
       : fallback;
-
-  const TextEditor = ({ textKey }: { textKey: string }) =>
-    canManageRoles ? (
-      <div className="mt-2 flex items-center gap-2">
-        <input
-          value={textOverrides[textKey] ?? ""}
-          onChange={(event) => setTextOverride(textKey, event.target.value)}
-          placeholder={t("settingsUsers.textOverridePlaceholder")}
-          className="w-full rounded-md border border-border/50 bg-background px-2 py-1 text-xs outline-none focus:border-primary"
-        />
-        <button
-          type="button"
-          onClick={() => setTextOverride(textKey, "")}
-          className="rounded-md border border-border/60 px-2 py-1 text-xs hover:bg-accent/40"
-        >
-          {t("settingsUsers.removeOverride")}
-        </button>
-        <button
-          type="button"
-          onClick={() => removeTextOverride(textKey)}
-          className="rounded-md border border-border/60 px-2 py-1 text-xs hover:bg-accent/40"
-        >
-          {t("settingsUsers.resetOverride")}
-        </button>
-      </div>
-    ) : null;
 
   const parseJsonSafely = useCallback(
     async <T,>(response: Response): Promise<T> => {
@@ -255,24 +198,6 @@ export default function SettingsUsersPage() {
     }
   };
 
-  const togglePermission = (roleKey: string, permission: PermissionKey) => {
-    if (roleKey === "owner" || !canManageRoles) return;
-    toggleRolePermission(roleKey, permission);
-  };
-
-  const toggleSidebarItem = (
-    roleKey: string,
-    itemKey: SidebarItemKey
-  ) => {
-    if (roleKey === "owner" || !canManageRoles) return;
-    toggleRoleSidebarItem(roleKey, itemKey);
-  };
-
-  const toggleSectionVisibility = (roleKey: string, sectionKey: DashboardSectionKey) => {
-    if (roleKey === "owner" || !canManageRoles) return;
-    toggleRoleSectionVisibility(roleKey, sectionKey);
-  };
-
   const moveSection = (sectionId: SectionId, direction: "up" | "down") => {
     if (!canManageRoles) return;
     const prev = useAppStore.getState().settingsUsersSectionOrder;
@@ -315,8 +240,6 @@ export default function SettingsUsersPage() {
             {text("users.page.description", t("settingsUsers.pageDescription"))}
           </p>
         ) : null}
-        <TextEditor textKey="users.page.title" />
-        <TextEditor textKey="users.page.description" />
       </div>
 
       {canViewSection("roles-manage") ? (
@@ -347,9 +270,6 @@ export default function SettingsUsersPage() {
         <p className="text-sm text-muted-foreground">
           {text("users.rolesManage.description", t("settingsUsers.rolesManageDescription"))}
         </p>
-        <TextEditor textKey="users.rolesManage.title" />
-        <TextEditor textKey="users.rolesManage.description" />
-
         <div className="space-y-4">
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-foreground">{t("settingsUsers.standardRoles")}</h3>
@@ -606,188 +526,6 @@ export default function SettingsUsersPage() {
       </section>
       ) : null}
 
-      {canViewSection("permissions") ? (
-      <section className={`${SECTION_CLASS} ${getSectionOrderClass("permissions")}`}>
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="text-base font-semibold">{t("settingsUsers.permissionsTitle")}</h2>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => moveSection("permissions", "up")}
-              disabled={!canManageRoles || isFirstSection("permissions")}
-              className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
-            >
-              <ArrowUp className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => moveSection("permissions", "down")}
-              disabled={!canManageRoles || isLastSection("permissions")}
-              className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
-            >
-              <ArrowDown className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-        <p className="text-sm text-muted-foreground">{t("settingsUsers.permissionsOwnerHint")}</p>
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setIsPermissionEditMode((prev) => !prev)}
-            disabled={!canManageRoles}
-            className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs transition-colors hover:bg-accent/40"
-          >
-            {isPermissionEditMode ? t("settingsUsers.permissionEditOn") : t("settingsUsers.permissionEditOff")}
-          </button>
-        </div>
-
-        <div className={TABLE_WRAP_CLASS}>
-          <table className="w-full text-xs">
-            <thead className="bg-muted/30 text-left text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">{t("settingsUsers.permissionColumn")}</th>
-                {testRoleOptions.map((role) => (
-                  <th key={role.value} className="px-3 py-2 text-center font-medium">
-                    {role.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {PERMISSION_CONFIG.map((permission) => (
-                <tr key={permission.key} className="border-t border-border/40">
-                  <td className="px-3 py-2">{t(`permissions.${permission.key}`)}</td>
-                  {testRoleOptions.map((role) => {
-                    const checked =
-                      rolePermissions[role.value]?.includes(permission.key) ?? false;
-                    const disabled =
-                      role.value === "owner" || !isPermissionEditMode || !canManageRoles;
-                    return (
-                      <td key={role.value} className="px-3 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={disabled}
-                          onChange={() => togglePermission(role.value, permission.key)}
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {!isPermissionEditMode ? (
-          <p className="text-xs text-muted-foreground">{t("settingsUsers.permissionHintNote")}</p>
-        ) : null}
-      </section>
-      ) : null}
-
-      {canViewSection("sidebar-visibility") ? (
-      <section className={`${SECTION_CLASS} ${getSectionOrderClass("sidebar-visibility")}`}>
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="text-base font-semibold">{t("settingsUsers.sidebarVisibilityTitle")}</h2>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => moveSection("sidebar-visibility", "up")}
-              disabled={!canManageRoles || isFirstSection("sidebar-visibility")}
-              className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
-            >
-              <ArrowUp className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => moveSection("sidebar-visibility", "down")}
-              disabled={!canManageRoles || isLastSection("sidebar-visibility")}
-              className="rounded-md border border-border/70 p-1.5 text-muted-foreground transition-colors hover:bg-accent/40 disabled:opacity-40"
-            >
-              <ArrowDown className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-        <p className="text-sm text-muted-foreground">{t("settingsUsers.sidebarVisibilityDescription")}</p>
-        <div className={TABLE_WRAP_CLASS}>
-          <table className="w-full text-xs">
-            <thead className="bg-muted/30 text-left text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">{t("settingsUsers.sidebarAreaColumn")}</th>
-                {testRoleOptions.map((role) => (
-                  <th key={role.value} className="px-3 py-2 text-center font-medium">
-                    {role.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {SIDEBAR_ITEM_CONFIG.map((item) => (
-                <tr key={item.key} className="border-t border-border/40">
-                  <td className="px-3 py-2">{t(`sidebarItems.${item.key}`)}</td>
-                  {testRoleOptions.map((role) => {
-                    const checked = Boolean(roleSidebarItems[role.value]?.[item.key]);
-                    const disabled =
-                      role.value === "owner" || !isPermissionEditMode || !canManageRoles;
-                    return (
-                      <td key={role.value} className="px-3 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={disabled}
-                          onChange={() => toggleSidebarItem(role.value, item.key)}
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      ) : null}
-
-      {canManageRoles ? (
-        <section className={SECTION_CLASS}>
-          <h2 className="text-base font-semibold">{t("settingsUsers.cardVisibilityTitle")}</h2>
-          <p className="text-sm text-muted-foreground">{t("settingsUsers.cardVisibilityDescription")}</p>
-          <div className={TABLE_WRAP_CLASS}>
-            <table className="w-full text-xs">
-              <thead className="bg-muted/30 text-left text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 font-medium">{t("settingsUsers.areaColumn")}</th>
-                  {testRoleOptions.map((role) => (
-                    <th key={role.value} className="px-3 py-2 text-center font-medium">
-                      {role.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {DASHBOARD_SECTION_CONFIG.map((section) => (
-                  <tr key={section.key} className="border-t border-border/40">
-                    <td className="px-3 py-2">{t(`dashboardSections.${section.key}`)}</td>
-                    {testRoleOptions.map((role) => {
-                      const checked = Boolean(roleSectionVisibility[role.value]?.[section.key]);
-                      const disabled = role.value === "owner" || !canManageRoles;
-                      return (
-                        <td key={role.value} className="px-3 py-2 text-center">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={disabled}
-                            onChange={() => toggleSectionVisibility(role.value, section.key)}
-                          />
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
     </div>
   );
 }

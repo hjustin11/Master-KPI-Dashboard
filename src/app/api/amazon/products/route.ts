@@ -590,6 +590,8 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const statusFilter = (searchParams.get("status") ?? "active").toLowerCase();
+    const allRows = searchParams.get("all") === "1";
+    const forceRefresh = searchParams.get("refresh") === "1";
     const limit = parsePaginationParam(searchParams.get("limit"), 50, 1, 250);
     const offset = parsePaginationParam(searchParams.get("offset"), 0, 0, 200_000);
     const marketplaceId = config.marketplaceIds[0];
@@ -637,6 +639,20 @@ export async function GET(request: Request) {
         { error: "Seller-ID konnte nicht ermittelt werden. Bitte AMAZON_SP_API_SELLER_ID prüfen." },
         { status: 500 }
       );
+    }
+
+    if (!forceRefresh) {
+      const cached = await readIntegrationCache<AmazonProductsCachedPayload>(cacheKey);
+      if (cached.state !== "miss") {
+        const filtered = filterRowsByStatus(cached.value.rows, statusFilter);
+        return NextResponse.json({
+          status: statusFilter,
+          sellerId: cached.value.sellerId || effectiveSellerId,
+          source: `cache-${cached.state}`,
+          totalCount: filtered.length,
+          items: allRows ? filtered : paginateRows(filtered, offset, limit),
+        });
+      }
     }
 
     let pageToken = "";
@@ -714,13 +730,12 @@ export async function GET(request: Request) {
           const cached = await readIntegrationCache<AmazonProductsCachedPayload>(cacheKey);
           if (cached.state !== "miss") {
             const filtered = filterRowsByStatus(cached.value.rows, statusFilter);
-            const pageItems = paginateRows(filtered, offset, limit);
             return NextResponse.json({
               status: statusFilter,
               sellerId: cached.value.sellerId,
               source: `${fallback.source}:cache-${cached.state}`,
               totalCount: filtered.length,
-              items: pageItems,
+              items: allRows ? filtered : paginateRows(filtered, offset, limit),
             });
           }
           return NextResponse.json(
@@ -745,13 +760,12 @@ export async function GET(request: Request) {
           });
           const filtered =
             filterRowsByStatus(fallback.rows, statusFilter);
-          const pageItems = paginateRows(filtered, offset, limit);
           return NextResponse.json({
             status: statusFilter,
             sellerId: effectiveSellerId,
             source: fallback.source,
             totalCount: filtered.length,
-            items: pageItems,
+            items: allRows ? filtered : paginateRows(filtered, offset, limit),
           });
         }
 
@@ -805,8 +819,6 @@ export async function GET(request: Request) {
 
     const filtered =
       filterRowsByStatus(rows, statusFilter);
-    const pageItems = paginateRows(filtered, offset, limit);
-
     await writeIntegrationCache({
       cacheKey,
       source: "amazon:products",
@@ -822,7 +834,7 @@ export async function GET(request: Request) {
       status: statusFilter,
       sellerId: effectiveSellerId,
       totalCount: filtered.length,
-      items: pageItems,
+      items: allRows ? filtered : paginateRows(filtered, offset, limit),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unbekannter Fehler.";

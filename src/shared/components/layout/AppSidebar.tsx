@@ -68,6 +68,21 @@ import { useTranslation } from "@/i18n/I18nProvider";
 import { resolveRoleLabel } from "@/i18n/resolve-role-label";
 import { useTutorialNavGate } from "@/shared/components/tutorial/TutorialNavContext";
 import type { NavAccessEditConfig } from "@/shared/lib/nav-access-edit";
+import { shouldRunBackgroundSync } from "@/shared/lib/dashboardClientCache";
+import {
+  type Translate,
+  wipDevTooltipForItem,
+  wipLockedHintForItem,
+} from "@/shared/components/layout/sidebarWipText";
+import {
+  getFeedbackInboxSignature,
+  getUpdatesSignature,
+  readSeenFeedbackInboxSignature,
+  readSeenUpdatesSignature,
+  UPDATE_CHANGELOG,
+  FEEDBACK_INBOX_SEEN_EVENT,
+  UPDATES_SEEN_EVENT,
+} from "@/shared/lib/updatesFeed";
 
 type NavItem = {
   key: SidebarItemKey;
@@ -77,6 +92,8 @@ type NavItem = {
   requiredPermissions?: PermissionKey[];
   children?: Array<{ labelKey: string; href: string; requiredPermissions?: PermissionKey[] }>;
 };
+
+type UpdatesBellState = "none" | "updates" | "feedback";
 
 function NavAccessCheckbox({
   itemKey,
@@ -255,7 +272,7 @@ const navItems: NavItem[] = [
   {
     key: "settings",
     labelKey: "nav.settings",
-    href: "/settings/users",
+    href: "/settings",
     icon: Settings,
     children: [
       { labelKey: "nav.settingsUsers", href: "/settings/users" },
@@ -290,6 +307,7 @@ const NAV_PRIMARY_CHILD_KEYS = new Set<SidebarItemKey>([
   "xentral",
   "advertising",
   "analytics",
+  "settings",
 ]);
 
 function visibleNavChildren(
@@ -372,8 +390,6 @@ function isMarketplaceItemActive(
   );
 }
 
-type Translate = (key: string, params?: Record<string, string | number>) => string;
-
 function SingleNavItem({
   item,
   pathname,
@@ -384,7 +400,9 @@ function SingleNavItem({
   t,
   userIsLoading,
   isAdvertisingDeveloper,
+  wipPageLocks,
   accessEdit,
+  updatesBellState,
 }: {
   item: NavItem;
   pathname: string;
@@ -395,20 +413,33 @@ function SingleNavItem({
   t: Translate;
   userIsLoading: boolean;
   isAdvertisingDeveloper: boolean;
+  wipPageLocks: Record<SidebarItemKey, boolean>;
   accessEdit?: NavAccessEditConfig;
+  updatesBellState?: UpdatesBellState;
 }) {
   const { primaryHref, activePrefix } = resolveNavLink(item, hasPermission, canAccessPageByPath);
   const active = isActivePath(pathname, activePrefix);
   const Icon = item.icon;
   const visibleChildren = visibleNavChildren(item, hasPermission, canAccessPageByPath);
   const hasSubnav = visibleChildren.length > 0;
-  const isWipSection = item.key === "advertising" || item.key === "myArea";
-  const wipLocked = isWipSection && !userIsLoading && !isAdvertisingDeveloper;
-  const wipOwner = isWipSection && !userIsLoading && isAdvertisingDeveloper;
-  const wipLockedHint = item.key === "myArea" ? t("nav.myAreaLockedHint") : t("nav.advertisingLockedHint");
-  const wipTooltip = item.key === "myArea" ? t("nav.myAreaWipTooltip") : t("nav.advertisingWipTooltip");
+  const wipLocked = Boolean(wipPageLocks[item.key]) && !userIsLoading && !isAdvertisingDeveloper;
+  const wipOwner = Boolean(wipPageLocks[item.key]) && !userIsLoading && isAdvertisingDeveloper;
+  const wipLockedHint = wipLockedHintForItem(item.key, t);
+  const wipTooltip = wipDevTooltipForItem(item.key, t);
   /** Eingeklappte Sidebar (Icons): nur Hauptlink. Sonst: Unterpunkte per Zeile ein-/ausklappbar. */
   const subnavCollapsible = !collapsed && hasSubnav;
+  const bellState: UpdatesBellState =
+    item.key === "updates" ? (updatesBellState ?? "none") : "none";
+  const hasBellHighlight = bellState !== "none";
+  const bellActiveClass =
+    bellState === "feedback"
+      ? "text-sky-700 dark:text-sky-300"
+      : "text-amber-700 dark:text-amber-300";
+  /** Immer dunkle Schrift auf der hellen Akzentfläche — `dark:text-*` würde bei OS-Dark-Mode hellgrau erzwingen und „verschwindet“ auf Gelb. */
+  const bellAccentRowClass =
+    bellState === "feedback"
+      ? "border-sky-400/70 bg-sky-400/10 !text-black"
+      : "border-amber-400/70 bg-amber-400/10 !text-black";
 
   const childOrSelfActive = useMemo(
     () =>
@@ -430,7 +461,8 @@ function SingleNavItem({
     compact ? "py-1.5" : "py-2",
     active && "bg-primary/10 text-primary",
     active && !collapsed && "border-primary",
-    collapsed && "justify-center border-l-0 px-2"
+    collapsed && "justify-center border-l-0 px-2",
+    item.key === "updates" && hasBellHighlight && !active && !collapsed && bellAccentRowClass
   );
 
   const mainLabel =
@@ -450,7 +482,11 @@ function SingleNavItem({
       <span
         className={cn(
           "inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4",
-          wipOwner && "relative"
+          wipOwner && "relative",
+          item.key === "updates" && hasBellHighlight && bellActiveClass,
+          item.key === "updates" &&
+            hasBellHighlight &&
+            "motion-safe:animate-[sidebar-bell-wiggle_1.8s_ease-in-out_infinite]"
         )}
       >
         <Icon aria-hidden />
@@ -471,13 +507,22 @@ function SingleNavItem({
       className={cn(
         "flex w-full min-w-0 flex-1 items-center gap-3 rounded-md border-l-2 border-transparent px-3 text-left text-sm font-medium transition-all duration-200 hover:bg-accent/60",
         compact ? "py-1.5" : "py-2",
-        active && "border-primary bg-primary/10 text-primary"
+        active && "border-primary bg-primary/10 text-primary",
+        item.key === "updates" && hasBellHighlight && !active && bellAccentRowClass
       )}
       aria-expanded={subOpen}
       aria-label={`${t(item.labelKey)} — ${t("sidebar.toggleSubnav")}`}
       onClick={() => setSubOpen((o) => !o)}
     >
-      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4">
+      <span
+        className={cn(
+          "inline-flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4",
+          item.key === "updates" && hasBellHighlight && bellActiveClass,
+          item.key === "updates" &&
+            hasBellHighlight &&
+            "motion-safe:animate-[sidebar-bell-wiggle_1.8s_ease-in-out_infinite]"
+        )}
+      >
         <Icon aria-hidden />
       </span>
       {wipOwner ? (
@@ -611,7 +656,9 @@ function MarketplaceExpandedGroup({
   canAccessPageByPath,
   userIsLoading,
   isAdvertisingDeveloper,
+  wipPageLocks,
   accessEdit,
+  updatesBellState,
   t,
 }: {
   items: NavItem[];
@@ -620,7 +667,9 @@ function MarketplaceExpandedGroup({
   canAccessPageByPath: (pathname: string) => boolean;
   userIsLoading: boolean;
   isAdvertisingDeveloper: boolean;
+  wipPageLocks: Record<SidebarItemKey, boolean>;
   accessEdit?: NavAccessEditConfig;
+  updatesBellState?: UpdatesBellState;
   t: Translate;
 }) {
   const anyActive = useMemo(
@@ -670,7 +719,9 @@ function MarketplaceExpandedGroup({
               compact
               userIsLoading={userIsLoading}
               isAdvertisingDeveloper={isAdvertisingDeveloper}
+              wipPageLocks={wipPageLocks}
               accessEdit={accessEdit}
+              updatesBellState={updatesBellState}
               t={t}
             />
           ))}
@@ -685,6 +736,9 @@ function CollapsedMarketplacePopover({
   pathname,
   hasPermission,
   canAccessPageByPath,
+  userIsLoading,
+  isAdvertisingDeveloper,
+  wipPageLocks,
   accessEdit,
   t,
 }: {
@@ -692,6 +746,9 @@ function CollapsedMarketplacePopover({
   pathname: string;
   hasPermission: (permission: PermissionKey) => boolean;
   canAccessPageByPath: (pathname: string) => boolean;
+  userIsLoading: boolean;
+  isAdvertisingDeveloper: boolean;
+  wipPageLocks: Record<SidebarItemKey, boolean>;
   accessEdit?: NavAccessEditConfig;
   t: Translate;
 }) {
@@ -729,6 +786,28 @@ function CollapsedMarketplacePopover({
             {items.map((item) => {
               const Icon = item.icon;
               const visibleChildren = visibleNavChildren(item, hasPermission, canAccessPageByPath);
+              const wipLocked =
+                Boolean(wipPageLocks[item.key]) && !userIsLoading && !isAdvertisingDeveloper;
+              if (wipLocked) {
+                return (
+                  <div
+                    key={item.key}
+                    className="rounded-md border border-border/50 bg-muted/15 p-1.5 opacity-[0.65] dark:bg-muted/25"
+                  >
+                    <div
+                      className="flex cursor-not-allowed items-center gap-2 px-1.5 py-1 text-xs font-medium"
+                      title={wipLockedHintForItem(item.key, t)}
+                    >
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded border border-amber-500/40 bg-amber-500/[0.12] px-1 py-0.5 dark:border-amber-500/30 dark:bg-amber-500/10">
+                        <Construction className="h-3.5 w-3.5 text-amber-600" aria-hidden />
+                        <Icon className="h-3 w-3 text-muted-foreground" aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{t(item.labelKey)}</span>
+                      <NavAccessCheckbox itemKey={item.key} accessEdit={accessEdit} compact />
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div
                   key={item.key}
@@ -791,6 +870,7 @@ export function AppSidebar() {
   const customRoleKeys = useAppStore((stateFromStore) => stateFromStore.customRoleKeys);
   const roleLabels = useAppStore((stateFromStore) => stateFromStore.roleLabels);
   const setActiveRole = useAppStore((stateFromStore) => stateFromStore.setActiveRole);
+  const wipPageLocks = useAppStore((stateFromStore) => stateFromStore.wipPageLocks);
   const roleLabel = resolveRoleLabel(effectiveRole, roleLabels[effectiveRole], locale);
   const roleOptions = [
     ...ROLE_OPTIONS.map((item) => ({
@@ -841,7 +921,70 @@ export function AppSidebar() {
     () => partitionNavItems(tutorialGatedNavItems),
     [tutorialGatedNavItems]
   );
+  const isDeveloper = !user.isLoading && user.roleKey?.toLowerCase() === "owner";
+  const [hasUnseenUpdates, setHasUnseenUpdates] = useState(false);
+  const [feedbackInboxSig, setFeedbackInboxSig] = useState("");
+  const [seenFeedbackSig, setSeenFeedbackSig] = useState("");
+  const updatesBellState: UpdatesBellState = useMemo(() => {
+    const hasNewFeedback =
+      isDeveloper && feedbackInboxSig !== "" && feedbackInboxSig !== seenFeedbackSig;
+    if (hasNewFeedback) return "feedback";
+    if (hasUnseenUpdates) return "updates";
+    return "none";
+  }, [isDeveloper, feedbackInboxSig, seenFeedbackSig, hasUnseenUpdates]);
 
+  useEffect(() => {
+    const syncSeenState = () => {
+      const current = getUpdatesSignature(UPDATE_CHANGELOG);
+      const seen = readSeenUpdatesSignature();
+      setHasUnseenUpdates(current !== seen);
+    };
+    syncSeenState();
+    window.addEventListener("storage", syncSeenState);
+    window.addEventListener(UPDATES_SEEN_EVENT, syncSeenState);
+    return () => {
+      window.removeEventListener("storage", syncSeenState);
+      window.removeEventListener(UPDATES_SEEN_EVENT, syncSeenState);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncFeedbackSeen = () => setSeenFeedbackSig(readSeenFeedbackInboxSignature());
+    syncFeedbackSeen();
+    window.addEventListener("storage", syncFeedbackSeen);
+    window.addEventListener(FEEDBACK_INBOX_SEEN_EVENT, syncFeedbackSeen);
+    return () => {
+      window.removeEventListener("storage", syncFeedbackSeen);
+      window.removeEventListener(FEEDBACK_INBOX_SEEN_EVENT, syncFeedbackSeen);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isDeveloper) return;
+    let cancelled = false;
+    const loadFeedbackSignal = async () => {
+      if (!shouldRunBackgroundSync()) return;
+      try {
+        const res = await fetch("/api/feedback", { cache: "no-store" });
+        if (!res.ok) return;
+        const payload = (await res.json()) as {
+          items?: Array<{ id: string; status: string }>;
+        };
+        const sig = getFeedbackInboxSignature(payload.items);
+        if (!cancelled) setFeedbackInboxSig(sig);
+      } catch {
+        // ignore
+      }
+    };
+    void loadFeedbackSignal();
+    const id = window.setInterval(() => {
+      void loadFeedbackSignal();
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [isDeveloper]);
   const cycleRole = (direction: "prev" | "next") => {
     if (!canRoleSwitch) return;
     const values = roleOptions.map((r) => r.value);
@@ -949,7 +1092,9 @@ export function AppSidebar() {
               collapsed={collapsed}
               userIsLoading={user.isLoading}
               isAdvertisingDeveloper={isAdvertisingDeveloper}
+              wipPageLocks={wipPageLocks}
               accessEdit={navAccessEdit}
+              updatesBellState={updatesBellState}
               t={t}
             />
           ))}
@@ -960,6 +1105,9 @@ export function AppSidebar() {
                 pathname={pathname}
                 hasPermission={effectiveHasPermission}
                 canAccessPageByPath={canAccessPageByPath}
+                userIsLoading={user.isLoading}
+                isAdvertisingDeveloper={isAdvertisingDeveloper}
+                wipPageLocks={wipPageLocks}
                 accessEdit={navAccessEdit}
                 t={t}
               />
@@ -971,7 +1119,9 @@ export function AppSidebar() {
                 canAccessPageByPath={canAccessPageByPath}
                 userIsLoading={user.isLoading}
                 isAdvertisingDeveloper={isAdvertisingDeveloper}
+                wipPageLocks={wipPageLocks}
                 accessEdit={navAccessEdit}
+                updatesBellState={updatesBellState}
                 t={t}
               />
             )
@@ -986,7 +1136,9 @@ export function AppSidebar() {
               collapsed={collapsed}
               userIsLoading={user.isLoading}
               isAdvertisingDeveloper={isAdvertisingDeveloper}
+              wipPageLocks={wipPageLocks}
               accessEdit={navAccessEdit}
+              updatesBellState={updatesBellState}
               t={t}
             />
           ))}
@@ -1135,6 +1287,70 @@ export function MobileSidebarTrigger() {
     () => partitionNavItems(tutorialGatedNavItems),
     [tutorialGatedNavItems]
   );
+  const isDeveloper = !user.isLoading && user.roleKey?.toLowerCase() === "owner";
+  const [hasUnseenUpdates, setHasUnseenUpdates] = useState(false);
+  const [feedbackInboxSig, setFeedbackInboxSig] = useState("");
+  const [seenFeedbackSig, setSeenFeedbackSig] = useState("");
+  const updatesBellState: UpdatesBellState = useMemo(() => {
+    const hasNewFeedback =
+      isDeveloper && feedbackInboxSig !== "" && feedbackInboxSig !== seenFeedbackSig;
+    if (hasNewFeedback) return "feedback";
+    if (hasUnseenUpdates) return "updates";
+    return "none";
+  }, [isDeveloper, feedbackInboxSig, seenFeedbackSig, hasUnseenUpdates]);
+
+  useEffect(() => {
+    const syncSeenState = () => {
+      const current = getUpdatesSignature(UPDATE_CHANGELOG);
+      const seen = readSeenUpdatesSignature();
+      setHasUnseenUpdates(current !== seen);
+    };
+    syncSeenState();
+    window.addEventListener("storage", syncSeenState);
+    window.addEventListener(UPDATES_SEEN_EVENT, syncSeenState);
+    return () => {
+      window.removeEventListener("storage", syncSeenState);
+      window.removeEventListener(UPDATES_SEEN_EVENT, syncSeenState);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncFeedbackSeen = () => setSeenFeedbackSig(readSeenFeedbackInboxSignature());
+    syncFeedbackSeen();
+    window.addEventListener("storage", syncFeedbackSeen);
+    window.addEventListener(FEEDBACK_INBOX_SEEN_EVENT, syncFeedbackSeen);
+    return () => {
+      window.removeEventListener("storage", syncFeedbackSeen);
+      window.removeEventListener(FEEDBACK_INBOX_SEEN_EVENT, syncFeedbackSeen);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isDeveloper) return;
+    let cancelled = false;
+    const loadFeedbackSignal = async () => {
+      if (!shouldRunBackgroundSync()) return;
+      try {
+        const res = await fetch("/api/feedback", { cache: "no-store" });
+        if (!res.ok) return;
+        const payload = (await res.json()) as {
+          items?: Array<{ id: string; status: string }>;
+        };
+        const sig = getFeedbackInboxSignature(payload.items);
+        if (!cancelled) setFeedbackInboxSig(sig);
+      } catch {
+        // ignore
+      }
+    };
+    void loadFeedbackSignal();
+    const id = window.setInterval(() => {
+      void loadFeedbackSignal();
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [isDeveloper]);
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
   const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
   const roleTestAccessEditMode = useAppStore((stateFromStore) => stateFromStore.roleTestAccessEditMode);
@@ -1146,6 +1362,7 @@ export function MobileSidebarTrigger() {
   const customRoleKeys = useAppStore((stateFromStore) => stateFromStore.customRoleKeys);
   const roleLabels = useAppStore((stateFromStore) => stateFromStore.roleLabels);
   const setActiveRole = useAppStore((stateFromStore) => stateFromStore.setActiveRole);
+  const wipPageLocks = useAppStore((stateFromStore) => stateFromStore.wipPageLocks);
   const roleLabel = resolveRoleLabel(effectiveRole, roleLabels[effectiveRole], locale);
   const roleOptions = [
     ...ROLE_OPTIONS.map((item) => ({
@@ -1223,7 +1440,9 @@ export function MobileSidebarTrigger() {
               collapsed={false}
               userIsLoading={user.isLoading}
               isAdvertisingDeveloper={isAdvertisingDeveloper}
+              wipPageLocks={wipPageLocks}
               accessEdit={navAccessEdit}
+              updatesBellState={updatesBellState}
               t={t}
             />
           ))}
@@ -1235,7 +1454,9 @@ export function MobileSidebarTrigger() {
               canAccessPageByPath={canAccessPageByPath}
               userIsLoading={user.isLoading}
               isAdvertisingDeveloper={isAdvertisingDeveloper}
+              wipPageLocks={wipPageLocks}
               accessEdit={navAccessEdit}
+              updatesBellState={updatesBellState}
               t={t}
             />
           ) : null}
@@ -1249,7 +1470,9 @@ export function MobileSidebarTrigger() {
               collapsed={false}
               userIsLoading={user.isLoading}
               isAdvertisingDeveloper={isAdvertisingDeveloper}
+              wipPageLocks={wipPageLocks}
               accessEdit={navAccessEdit}
+              updatesBellState={updatesBellState}
               t={t}
             />
           ))}

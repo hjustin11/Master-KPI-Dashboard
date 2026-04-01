@@ -2,6 +2,9 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
+import { parseYmdParam, ymdToUtcRangeExclusiveEnd } from "@/shared/lib/orderDateParams";
+
+export { parseYmdParam, ymdToUtcRangeExclusiveEnd };
 
 export const FLEX_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -796,23 +799,6 @@ export async function fetchFlexOrdersRawPaginated(
     staleMs: 12 * 60 * 1000,
     loader: () => fetchFlexOrdersRawPaginatedLive(config, options),
   });
-}
-
-export function parseYmdParam(raw: string | null): string | null {
-  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
-  const [y, m, d] = raw.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
-  return raw;
-}
-
-export function ymdToUtcRangeExclusiveEnd(fromYmd: string, toYmd: string): { startMs: number; endMs: number } {
-  const [fy, fm, fd] = fromYmd.split("-").map(Number);
-  const [ty, tm, td] = toYmd.split("-").map(Number);
-  const startMs = Date.UTC(fy, fm - 1, fd);
-  const endDay = new Date(Date.UTC(ty, tm - 1, td));
-  endDay.setUTCDate(endDay.getUTCDate() + 1);
-  return { startMs, endMs: endDay.getTime() };
 }
 
 export function filterOrdersByCreatedRange(

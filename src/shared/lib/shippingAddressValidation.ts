@@ -4,6 +4,7 @@
  */
 
 import {
+  XENTRAL_HOUSE_NUMBER_HINT_SCAN_KEYS,
   XENTRAL_PRIMARY_ADDRESS_FIELD_LABELS,
   XENTRAL_RECIPIENT_NAME_HINT_SCAN_KEYS,
   type XentralPrimaryAddressFieldKey,
@@ -343,6 +344,7 @@ function normRecipientHint(s: string): string {
 
 /** Kurzbezeichnung für kompakte UI (ohne langen Xentral-Key-Klammerzusatz). */
 const NAME_HINT_SOURCE_SHORT: Partial<Record<XentralPrimaryAddressFieldKey, string>> = {
+  company: "Firma",
   title: "Titel",
   salutation: "Anrede",
   academicTitle: "Akad. Titel",
@@ -381,6 +383,123 @@ export type AlternateRecipientNameHint = {
   /** Kompakte Quellenbezeichnung fürs Popup. */
   sourceShort: string;
 };
+
+/** Gesamtfeld sieht wie Marktplatz-/Bestellreferenz aus — keine Hausnummer daraus ableiten. */
+function fieldLooksLikeMarketplaceReferenceOnly(text: string): boolean {
+  const t = text.trim();
+  return /^\d{1,2}-\d{4,}-\d{4,}$/.test(t);
+}
+
+function tokenLooksLikeOrderReference(token: string): boolean {
+  const t = token.trim();
+  if (/^\d{1,2}-\d{4,}-\d{4,}$/.test(t)) return true;
+  if (/^\d{6,}$/.test(t)) return true;
+  return false;
+}
+
+/**
+ * Plausible Hausnummer-Token aus Freitext (Adresszusatzzeilen o. Ä.).
+ * Bewusst max. 4 Ziffern pro Teil (kein „12280“ aus Bestellnummern).
+ */
+export function extractHouseNumberTokensFromText(text: string): string[] {
+  const raw = text.trim();
+  if (!raw || fieldLooksLikeMarketplaceReferenceOnly(raw)) return [];
+
+  const found: string[] = [];
+
+  const push = (s: string) => {
+    const v = s.trim();
+    if (v.length === 0 || tokenLooksLikeOrderReference(v)) return;
+    found.push(v);
+  };
+
+  if (/^\d{1,4}[a-zA-Z\u00C0-\u024F]?$/u.test(raw)) {
+    push(raw);
+  }
+
+  if (/^\d{1,4}\s*[-\/]\s*\d{1,4}[a-zA-Z\u00C0-\u024F]?$/u.test(raw)) {
+    push(raw.replace(/\s+/g, ""));
+  }
+
+  const nr = raw.match(
+    /(?:^|[\s,;])(?:nr\.?|no\.?|hnr\.?|haus(?:nr\.?|nummer)?)\s*[:\s]?\s*(\d{1,4}[a-zA-Z\u00C0-\u024F]?(?:\s*[-\/]\s*\d{1,4}[a-zA-Z\u00C0-\u024F]?)?)/iu
+  );
+  if (nr?.[1]) push(nr[1].replace(/\s+/g, ""));
+
+  const trail = raw.match(
+    /(?:^|[\s,;])(\d{1,4}[a-zA-Z\u00C0-\u024F]?(?:[-\/]\d{1,4}[a-zA-Z\u00C0-\u024F]?)?)\s*$/u
+  );
+  if (trail?.[1] && raw.length > trail[1].length) {
+    push(trail[1]);
+  }
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const f of found) {
+    const k = f.toLowerCase().replace(/\s+/g, "");
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(f);
+  }
+  return out;
+}
+
+export type AlternateHouseNumberHint = {
+  value: string;
+  sourceKey: XentralPrimaryAddressFieldKey;
+  sourceLabel: string;
+  sourceShort: string;
+  /** Volltext des Quellfelds zur Anzeige */
+  sourceRaw: string;
+};
+
+function normHouseNumberHintToken(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+/**
+ * Wenn die Validierung „keine Hausnummer“ meldet: in Zusatzzeilen u. Ä. nach Ziffernmustern suchen
+ * (analog zu Namensvorschlägen aus anderen Xentral-Feldern).
+ */
+export function findAlternateHouseNumberHints(
+  flat: Record<string, unknown> | undefined
+): AlternateHouseNumberHint[] {
+  if (!flat || typeof flat !== "object") return [];
+  if (!shippingFlatMissingHouseNumber(flat)) return [];
+
+  const existingHn = pickHouseNumberFromBlock(flat);
+  const existingNorm = existingHn ? normHouseNumberHintToken(existingHn) : "";
+
+  const out: AlternateHouseNumberHint[] = [];
+  const seenValueSource = new Set<string>();
+
+  for (const key of XENTRAL_HOUSE_NUMBER_HINT_SCAN_KEYS) {
+    const line = (pickFirstString(flat[key]) ?? "").trim();
+    if (line.length === 0) continue;
+    if (fieldLooksLikeMarketplaceReferenceOnly(line)) continue;
+
+    for (const token of extractHouseNumberTokensFromText(line)) {
+      const vn = normHouseNumberHintToken(token);
+      if (vn.length === 0) continue;
+      if (existingNorm && vn === existingNorm) continue;
+      const dedupeKey = `${key}:${vn}`;
+      if (seenValueSource.has(dedupeKey)) continue;
+      seenValueSource.add(dedupeKey);
+
+      const sourceLabel = XENTRAL_PRIMARY_ADDRESS_FIELD_LABELS[key];
+      out.push({
+        value: token,
+        sourceKey: key,
+        sourceLabel,
+        sourceShort: recipientNameHintShortLabel(key, sourceLabel),
+        sourceRaw: line,
+      });
+      if (out.length >= 6) return out;
+    }
+  }
+
+  return out;
+}
 
 /**
  * Werte aus Titel, Ansprechpartner, Abteilung, Adresszusatz usw., die als Liefername taugen könnten

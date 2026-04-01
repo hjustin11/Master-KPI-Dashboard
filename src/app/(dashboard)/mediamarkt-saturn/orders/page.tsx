@@ -24,6 +24,8 @@ import {
 } from "@/shared/lib/dashboardClientCache";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
+import { MarketplaceOrderIdLink } from "@/shared/components/MarketplaceOrderIdLink";
+import { toDateInputValue } from "@/shared/lib/orderDateParams";
 
 type MmsOrderRow = {
   orderId: string;
@@ -44,10 +46,6 @@ type CachedOrdersPayload = {
   savedAt: number;
   items: MmsOrderRow[];
 };
-
-function toDateInputValue(date: Date) {
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
 
 function statusVariantFromRaw(raw: string): "default" | "secondary" | "outline" | "destructive" {
   const n = raw.trim().toLowerCase();
@@ -134,7 +132,12 @@ export default function MmsOrdersPage() {
       {
         accessorKey: "orderId",
         header: t("mmsOrders.orderId"),
-        cell: ({ row }) => <span className="font-medium">{row.original.orderId}</span>,
+        cell: ({ row }) => (
+          <MarketplaceOrderIdLink
+            marketplace="MediaMarkt & Saturn"
+            internetNumber={row.original.orderId}
+          />
+        ),
       },
       {
         accessorKey: "purchaseDate",

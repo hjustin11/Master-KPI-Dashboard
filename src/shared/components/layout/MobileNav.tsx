@@ -123,7 +123,7 @@ const moreItems: Array<{
     key: "settings",
     label: "Administration",
     href: "/settings/users",
-    activePrefix: "/settings/users",
+    activePrefix: "/settings",
   },
   {
     key: "updates",
@@ -149,7 +149,9 @@ export function MobileNav() {
   const roleTestAccessEditMode = useAppStore((s) => s.roleTestAccessEditMode);
   const roleSidebarItems = useAppStore((s) => s.roleSidebarItems);
   const toggleRoleSidebarItem = useAppStore((s) => s.toggleRoleSidebarItem);
-  const isWipLocked = !user.isLoading && !isAdvertisingDeveloper;
+  const wipPageLocks = useAppStore((s) => s.wipPageLocks);
+  const isWipLockedForKey = (key: SidebarItemKey) =>
+    Boolean(wipPageLocks[key]) && !user.isLoading && !isAdvertisingDeveloper;
 
   const navAccessEdit = useMemo((): NavAccessEditConfig | undefined => {
     if (user.isLoading || user.roleKey !== "owner" || !roleTestingEnabled || !roleTestAccessEditMode) {
@@ -202,12 +204,18 @@ export function MobileNav() {
             const Icon = item.icon;
             const active = isActive(pathname, item.activeGroup ?? item.href);
 
-            if ((item.key === "advertising" || item.key === "myArea") && isWipLocked) {
+            if (isWipLockedForKey(item.key)) {
               return (
                 <span
                   key={item.key}
                   data-tutorial-nav={item.key}
-                  title={item.key === "myArea" ? t("nav.myAreaLockedHint") : t("nav.advertisingLockedHint")}
+                  title={
+                    item.key === "myArea"
+                      ? t("nav.myAreaLockedHint")
+                      : item.key === "advertising"
+                        ? t("nav.advertisingLockedHint")
+                        : t("nav.sidebarWipLockedHint")
+                  }
                   className={cn(
                     "flex min-w-[72px] shrink-0 cursor-not-allowed flex-col items-center justify-center gap-1 px-0.5 text-[10px] opacity-60 transition-colors duration-150 sm:text-[11px]",
                     "text-muted-foreground"
@@ -259,7 +267,7 @@ export function MobileNav() {
                     active ? "text-primary" : "text-muted-foreground"
                   )}
                 >
-                  {(item.key === "advertising" || item.key === "myArea") && !user.isLoading && isAdvertisingDeveloper ? (
+                  {Boolean(wipPageLocks[item.key]) && !user.isLoading && isAdvertisingDeveloper ? (
                     <span className="relative inline-flex">
                       <Icon className="h-4 w-4" />
                       <Construction
@@ -310,16 +318,25 @@ export function MobileNav() {
                       aria-label="Sidebar"
                     />
                   ) : null}
-                  <Link
-                    href={item.href}
-                    data-tutorial-subnav={item.href}
-                    className={cn(
-                      "block min-w-0 flex-1 rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent/60",
-                      isActive(pathname, item.activePrefix ?? item.href) ? "bg-primary/10 text-primary" : ""
-                    )}
-                  >
-                    {item.label}
-                  </Link>
+                  {isWipLockedForKey(item.key) ? (
+                    <span
+                      className="block min-w-0 flex-1 cursor-not-allowed rounded-md px-3 py-2 text-sm text-muted-foreground opacity-60"
+                      title={t("nav.sidebarWipLockedHint")}
+                    >
+                      {item.label}
+                    </span>
+                  ) : (
+                    <Link
+                      href={item.href}
+                      data-tutorial-subnav={item.href}
+                      className={cn(
+                        "block min-w-0 flex-1 rounded-md px-3 py-2 text-sm transition-colors duration-150 hover:bg-accent/60",
+                        isActive(pathname, item.activePrefix ?? item.href) ? "bg-primary/10 text-primary" : ""
+                      )}
+                    >
+                      {item.label}
+                    </Link>
+                  )}
                 </div>
               ))}
             </div>

@@ -224,21 +224,6 @@ function sumStockForVisibleLocations(
   return visibleLocationKeys.reduce((acc, k) => acc + (byLoc[k] ?? 0), 0);
 }
 
-/** Summe nur der eingeblendeten Marktplatz-Spalten; ohne Marktplatz-Spalten bzw. alle ausgeblendet → API-Gesamtwert. */
-function sumSoldForVisibleMarketplaces(
-  row: ArticleForecastRow,
-  visibleProjectKeys: string[],
-  allProjectKeys: string[]
-): number {
-  if (allProjectKeys.length === 0) {
-    return Number.isFinite(row.totalSold) ? row.totalSold : 0;
-  }
-  if (visibleProjectKeys.length === 0) {
-    return Number.isFinite(row.totalSold) ? row.totalSold : 0;
-  }
-  return visibleProjectKeys.reduce((acc, k) => acc + (row.soldByProject[k] ?? 0), 0);
-}
-
 export default function AnalyticsArticleForecastPage() {
   const { t, locale } = useTranslation();
   const qtyFmt = useMemo(
@@ -641,7 +626,8 @@ export default function AnalyticsArticleForecastPage() {
       const base = Object.keys(prev).length > 0 ? prev : stored;
       const next: Record<string, boolean> = { ...base };
       for (const p of projectColumns) {
-        if (next[p] === undefined) next[p] = true;
+        // Standard: Marktplatz-Spalten initial ausgeblendet, bis sie aktiv eingeblendet werden.
+        if (next[p] === undefined) next[p] = false;
       }
       if (projectColumns.length > 0) {
         for (const k of Object.keys(next)) {
@@ -732,11 +718,8 @@ export default function AnalyticsArticleForecastPage() {
   const forecastBySku = useMemo(() => {
     const out = new Map<string, ForecastResult>();
     for (const row of rows) {
-      const soldInWindow = sumSoldForVisibleMarketplaces(
-        row,
-        visibleProjectColumns,
-        projectColumns
-      );
+      /** Immer Gesamtverkauf im Zeitraum (Spalte „Verkauft“) — unabhängig von Marktplatz-Spalten-Einblendung. */
+      const soldInWindow = Number.isFinite(row.totalSold) ? row.totalSold : 0;
       const stockNow = sumStockForVisibleLocations(row, visibleWarehouseColumns, warehouseColumns);
       const inboundUntilHorizon = inboundBySkuUntilHorizon.get(normalizeSkuKey(row.sku)) ?? 0;
       const result = computeForecast({
@@ -760,16 +743,7 @@ export default function AnalyticsArticleForecastPage() {
       );
     }
     return out;
-  }, [
-    activeRules,
-    inboundBySkuUntilHorizon,
-    projectColumns,
-    rows,
-    toYmd,
-    visibleProjectColumns,
-    visibleWarehouseColumns,
-    warehouseColumns,
-  ]);
+  }, [activeRules, inboundBySkuUntilHorizon, rows, toYmd, visibleWarehouseColumns, warehouseColumns]);
 
   const rowClassBySku = useMemo(() => {
     const out = new Map<string, string>();

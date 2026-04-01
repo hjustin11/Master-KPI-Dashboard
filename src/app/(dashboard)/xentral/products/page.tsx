@@ -39,6 +39,7 @@ type XentralArticleRow = {
   name: string;
   stock: number;
   price?: number | null;
+  salesPrice?: number | null;
 };
 
 type XentralArticleTableRow = XentralArticleRow & {
@@ -505,6 +506,14 @@ export default function XentralProductsPage() {
     }, 0);
   }, [displayedRows]);
 
+  const totalSalesValue = useMemo(() => {
+    return displayedRows.reduce((sum, row) => {
+      const p = row.salesPrice ?? null;
+      if (p == null || !Number.isFinite(p)) return sum;
+      return sum + (row.stock ?? 0) * p;
+    }, 0);
+  }, [displayedRows]);
+
   const totalInventoryValueLabel = useMemo(() => {
     return new Intl.NumberFormat(intlLocaleTag(locale), {
       style: "currency",
@@ -512,6 +521,14 @@ export default function XentralProductsPage() {
       maximumFractionDigits: 2,
     }).format(totalInventoryValue);
   }, [totalInventoryValue, locale]);
+
+  const totalSalesValueLabel = useMemo(() => {
+    return new Intl.NumberFormat(intlLocaleTag(locale), {
+      style: "currency",
+      currency: "EUR",
+      maximumFractionDigits: 2,
+    }).format(totalSalesValue);
+  }, [totalSalesValue, locale]);
 
   const formatEkPrice = useCallback(
     (value: number | null | undefined) => {
@@ -830,6 +847,14 @@ export default function XentralProductsPage() {
                 </p>
                 <p className="text-sm font-medium tabular-nums tracking-tight text-muted-foreground">
                   {totalInventoryValueLabel}
+                </p>
+              </div>
+              <div className="min-w-0 text-right">
+                <p className="text-[10px] font-normal tracking-wide text-muted-foreground/85">
+                  Verkaufswert: Gesamt
+                </p>
+                <p className="text-sm font-medium tabular-nums tracking-tight text-muted-foreground">
+                  {totalSalesValueLabel}
                 </p>
               </div>
             </div>

@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAddressGeocodeSuggest } from "./AddressGeocodeSuggest";
-import { MarketplaceOrderIdLink } from "./MarketplaceOrderIdLink";
+import { MarketplaceOrderIdLink } from "@/shared/components/MarketplaceOrderIdLink";
 import { XentralBelegNumberLink } from "./XentralBelegNumberLink";
 import {
   ADDRESS_ERROR_DEMO_ID_PREFIX,
@@ -42,14 +42,17 @@ import {
   ADDRESS_ISSUE_NAME,
   ADDRESS_ISSUE_NAME_UNSUITABLE,
   computeAddressValidation,
+  findAlternateHouseNumberHints,
   findAlternateRecipientNameHints,
   shippingFlatMissingHouseNumber,
+  streetHasHouseNumber,
   shippingFlatNeedsNameOrHnSaveConfirm,
   shippingFlatRecipientNameUncertain,
 } from "@/shared/lib/shippingAddressValidation";
 import {
   emptyPrimaryAddressFields,
   resolveCityEditBinding,
+  resolveHouseNumberEditBinding,
   resolvePlzEditBinding,
   type XentralPrimaryAddressFieldKey,
   type XentralPrimaryAddressFields,
@@ -384,6 +387,11 @@ function XentralAddressErrorDialogRow({
   const nameAlternateHints = showNameAlternateHints
     ? findAlternateRecipientNameHints(flatFields, row.customer)
     : [];
+  const houseNumberAlternateHints = missingHouseNumber
+    ? findAlternateHouseNumberHints(flatFields)
+    : [];
+  const hnTarget = resolveHouseNumberEditBinding(fields);
+  const streetHasHn = streetHasHouseNumber(fields.street ?? "");
 
   if (mode === "review") {
     return (
@@ -616,27 +624,100 @@ function XentralAddressErrorDialogRow({
           beforeFrom={sh?.from}
           showGeocodeLoading={geo.loading}
         >
-          <Input
-            id={`${row.id}-street`}
-            className={cn(
-              AF_INPUT_BASE,
-              missingHouseNumber
-                ? AF_INPUT_UNCERTAIN
-                : streetMatchesSuggestion
-                  ? AF_INPUT_CORRECTED
-                  : null
-            )}
-            value={fields.street}
-            onChange={(e) => patch("street", e.target.value)}
-            autoComplete="street-address"
-            aria-invalid={missingHouseNumber}
-            title={missingHouseNumber ? ADDRESS_ISSUE_HN : undefined}
-            aria-label={
-              missingHouseNumber
-                ? t("xentralOrders.streetFieldWithHn", { hint: ADDRESS_ISSUE_HN })
-                : t("xentralOrders.streetFieldBase")
-            }
-          />
+          <div className="flex w-full min-w-0 max-w-full items-center gap-1">
+            <Input
+              id={`${row.id}-street`}
+              className={cn(
+                AF_INPUT_BASE,
+                "min-w-0 flex-1",
+                missingHouseNumber
+                  ? AF_INPUT_UNCERTAIN
+                  : streetMatchesSuggestion
+                    ? AF_INPUT_CORRECTED
+                    : null
+              )}
+              value={fields.street}
+              onChange={(e) => patch("street", e.target.value)}
+              autoComplete="street-address"
+              aria-invalid={missingHouseNumber}
+              title={missingHouseNumber ? ADDRESS_ISSUE_HN : undefined}
+              aria-label={
+                missingHouseNumber
+                  ? t("xentralOrders.streetFieldWithHn", { hint: ADDRESS_ISSUE_HN })
+                  : t("xentralOrders.streetFieldBase")
+              }
+            />
+            {houseNumberAlternateHints.length > 0 ? (
+              <Popover>
+                <PopoverTrigger
+                  className={cn(
+                    "inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-amber-600 outline-none transition-colors hover:bg-amber-500/10 hover:text-amber-800 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 dark:text-amber-400 dark:hover:bg-amber-500/15 dark:hover:text-amber-200"
+                  )}
+                  title={t("xentralOrders.houseNumberSuggestionsTitle")}
+                  aria-label={t("xentralOrders.houseNumberSuggestionsAria")}
+                >
+                  <Sparkles className="size-4" aria-hidden />
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="left"
+                  sideOffset={6}
+                  className="w-[min(calc(100vw-2rem),18.5rem)] border-amber-500/20 p-2.5 shadow-md"
+                >
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("xentralOrders.suggestionsHeading")}
+                  </p>
+                  <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                    {houseNumberAlternateHints.map((h) => (
+                      <li key={`${row.id}-hn-${h.sourceKey}-${addressFieldNorm(h.value)}`}>
+                        <div className="rounded-md border border-border/60 bg-muted/30 px-2 py-1.5">
+                          <p className="text-[10px] font-medium text-amber-800 dark:text-amber-300/95">
+                            {h.sourceShort}
+                          </p>
+                          <p className="mt-0.5 text-xs font-medium text-foreground" title={h.value}>
+                            {h.value}
+                          </p>
+                          {addressFieldNorm(h.sourceRaw) !== addressFieldNorm(h.value) ? (
+                            <p
+                              className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground"
+                              title={h.sourceRaw}
+                            >
+                              {h.sourceRaw}
+                            </p>
+                          ) : null}
+                          <div className="mt-1.5 flex flex-col gap-1">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="h-7 w-full text-[11px]"
+                              onClick={() => patch(hnTarget.key, h.value)}
+                            >
+                              {t("xentralOrders.applyHouseNumberToField")}
+                            </Button>
+                            {!streetHasHn ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-auto min-h-7 w-full whitespace-normal py-1.5 text-left text-[11px] leading-snug"
+                                title={`${fields.street} ${h.value}`.trim()}
+                                onClick={() =>
+                                  patch("street", `${(fields.street ?? "").trim()} ${h.value}`.trim())
+                                }
+                              >
+                                {t("xentralOrders.applyHouseNumberToStreet")}
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </PopoverContent>
+              </Popover>
+            ) : null}
+          </div>
         </AddressEditStack>
         </div>
       </TableCell>

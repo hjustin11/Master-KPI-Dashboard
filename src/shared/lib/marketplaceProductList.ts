@@ -7,6 +7,8 @@ export type MarketplaceProductListRow = {
   isActive: boolean;
   /** Brutto EUR, falls die Quelle einen Preis liefert (Preisübersicht / Analytics). */
   priceEur?: number | null;
+  /** Marktplatz-Bestand (falls Quelle vorhanden). */
+  stockQty?: number | null;
 };
 
 export type MarketplaceProductsListResponse = {

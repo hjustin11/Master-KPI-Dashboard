@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Paperclip, PlayCircle, Send } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Lightbulb, Loader2, Paperclip, PlayCircle, Send, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useUser } from "@/shared/hooks/useUser";
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
@@ -9,9 +12,15 @@ import {
   shouldRunBackgroundSync,
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
-import { DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboardUi";
 import { dispatchStartTutorialEvent } from "@/shared/components/tutorial/TutorialRuntimeController";
 import { usePermissions } from "@/shared/hooks/usePermissions";
+import {
+  getFeedbackInboxSignature,
+  getUpdatesSignature,
+  markFeedbackInboxAsSeen,
+  markUpdatesAsSeen,
+  type ChangelogEntry,
+} from "@/shared/lib/updatesFeed";
 
 type FeedbackAttachmentMeta = {
   path: string;
@@ -34,6 +43,10 @@ type FeatureRequestItem = {
 };
 
 const FEEDBACK_OWNER_INBOX_CACHE_KEY = "dashboard_feedback_inbox_owner_v2";
+const SECTION_CARD_CLASS =
+  "space-y-3 rounded-xl border border-border/50 bg-card/80 p-4 shadow-sm backdrop-blur-sm md:p-5";
+const SECTION_HEAD_ACCENT_CLASS =
+  "border-b border-border/50 bg-gradient-to-r from-primary/[0.08] via-transparent to-accent/[0.06]";
 
 type CachedFeedbackInboxPayload = {
   savedAt: number;
@@ -52,13 +65,16 @@ type UpdateTutorialItem = {
   dismissed: boolean;
 };
 
-type ChangelogEntry = {
+type ManagedUpdateItem = {
+  id: string;
   date: string;
   title: string;
   text: string;
-  /** Entspricht `release_key` eines veröffentlichten Update-Tutorials (optional). */
-  releaseKey?: string;
+  release_key: string | null;
+  created_at: string;
 };
+
+type UpdateDisplayEntry = ChangelogEntry & { id?: string };
 
 /** Kuratierte Dashboard-Pfade für „Bezug“ (API validiert weiterhin nur sichere Pfade). */
 const FEEDBACK_PAGE_OPTIONS: Array<{ path: string; label: string; group: string }> = [
@@ -140,6 +156,7 @@ function normalizeInboxItem(raw: Record<string, unknown>): FeatureRequestItem {
 }
 
 export default function UpdatesPage() {
+  const pathname = usePathname();
   const user = useUser();
   const { canViewWidget, canUseAction } = usePermissions();
   const isOwner = user.roleKey?.toLowerCase() === "owner";
@@ -158,23 +175,78 @@ export default function UpdatesPage() {
   const [ownerInboxMounted, setOwnerInboxMounted] = useState(false);
   const [updateTutorials, setUpdateTutorials] = useState<UpdateTutorialItem[]>([]);
   const [tutorialsLoading, setTutorialsLoading] = useState(false);
+  const [managedUpdates, setManagedUpdates] = useState<ManagedUpdateItem[]>([]);
+  const [managedLoading, setManagedLoading] = useState(false);
+  const [managedError, setManagedError] = useState<string | null>(null);
+  const [newUpdateDate, setNewUpdateDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newUpdateTitle, setNewUpdateTitle] = useState("");
+  const [newUpdateText, setNewUpdateText] = useState("");
+  const [newUpdateReleaseKey, setNewUpdateReleaseKey] = useState("");
+  const [isSavingManagedUpdate, setIsSavingManagedUpdate] = useState(false);
+  const [isAddUpdateOpen, setIsAddUpdateOpen] = useState(false);
 
-  const updates = useMemo<ChangelogEntry[]>(
-    () => [
-      {
-        date: "2026-03-27",
-        title: "Update & Feedback gestartet",
-        text: "Updates & Vorschläge sind jetzt zentral gebündelt. Wo nötig, kannst du ein passendes Release-Tutorial direkt hier starten.",
-        releaseKey: "2026-04-release-1",
-      },
-      {
-        date: "2026-03-26",
-        title: "Einladungs-Flow verbessert",
-        text: "Einladung akzeptieren, Passwort setzen und Rolle übernehmen.",
-      },
-    ],
-    []
+  const updates = useMemo<UpdateDisplayEntry[]>(
+    () =>
+      managedUpdates.map((item) => ({
+        id: item.id,
+        date: item.date,
+        title: item.title,
+        text: item.text,
+        releaseKey: item.release_key ?? undefined,
+      })).sort((a, b) => b.date.localeCompare(a.date)),
+    [managedUpdates]
   );
+
+  /** Gleiche Reihenfolge wie im Changelog, gruppiert nach Datum für eine kompakte Übersicht. */
+  const changelogByDate = useMemo(() => {
+    const byDate = new Map<string, UpdateDisplayEntry[]>();
+    const dateOrder: string[] = [];
+    for (const u of updates) {
+      if (!byDate.has(u.date)) {
+        byDate.set(u.date, []);
+        dateOrder.push(u.date);
+      }
+      byDate.get(u.date)!.push(u);
+    }
+    return dateOrder.map((date) => ({ date, items: byDate.get(date)! }));
+  }, [updates]);
+
+  const loadManagedUpdates = useCallback(async () => {
+    setManagedLoading(true);
+    setManagedError(null);
+    try {
+      const res = await fetch("/api/updates", { cache: "no-store" });
+      const payload = await parseJsonFromResponse<{
+        items?: ManagedUpdateItem[];
+        error?: string;
+        tableMissing?: boolean;
+      }>(res);
+      if (!res.ok) throw new Error(payload.error ?? "Updates konnten nicht geladen werden.");
+      setManagedUpdates(payload.items ?? []);
+      if (payload.tableMissing && isOwner) {
+        setManagedError("Update-Tabelle fehlt noch. Bitte DB-Migration ausführen.");
+      }
+    } catch (e) {
+      setManagedError(e instanceof Error ? e.message : "Unbekannter Fehler.");
+    } finally {
+      setManagedLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadManagedUpdates();
+  }, [loadManagedUpdates]);
+
+  useEffect(() => {
+    const signature = getUpdatesSignature(updates);
+    markUpdatesAsSeen(signature);
+  }, [updates]);
+
+  /** Auf dieser Seite: Changelog + offene Vorschläge (Owner) als „gelesen“ für die Seitenleiste. */
+  useEffect(() => {
+    if (pathname !== "/updates" || !isOwner) return;
+    markFeedbackInboxAsSeen(getFeedbackInboxSignature(items));
+  }, [pathname, isOwner, items]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -316,9 +388,17 @@ export default function UpdatesPage() {
               page_path: pagePath.trim() || undefined,
             }),
           });
-      const payload = await parseJsonFromResponse<{ item?: FeatureRequestItem; error?: string }>(res);
+      const payload = await parseJsonFromResponse<{
+        item?: FeatureRequestItem;
+        error?: string;
+        attachments_skipped?: boolean;
+      }>(res);
       if (!res.ok) throw new Error(payload.error ?? "Vorschlag konnte nicht gesendet werden.");
-      setSubmitMessage("Danke! Dein Vorschlag wurde an den Owner weitergeleitet.");
+      setSubmitMessage(
+        payload.attachments_skipped
+          ? "Danke! Dein Text wurde gespeichert. Dateianhänge konnten in diesem Fall nicht mitgeschickt werden – versuche es ggf. ohne Anhänge oder melde dich beim Support."
+          : "Danke! Dein Vorschlag wurde an den Owner weitergeleitet."
+      );
       setTitle("");
       setMessage("");
       setPagePath("");
@@ -368,86 +448,248 @@ export default function UpdatesPage() {
     });
   };
 
+  const deleteItem = async (id: string) => {
+    if (!isOwner) return;
+    const res = await fetch(`/api/feedback?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    const payload = await parseJsonFromResponse<{ ok?: boolean; error?: string }>(res);
+    if (!res.ok || !payload.ok) throw new Error(payload.error ?? "Löschen fehlgeschlagen.");
+    setItems((prev) => {
+      const next = prev.filter((x) => x.id !== id);
+      writeLocalJsonCache(FEEDBACK_OWNER_INBOX_CACHE_KEY, {
+        savedAt: Date.now(),
+        items: next,
+      } satisfies CachedFeedbackInboxPayload);
+      return next;
+    });
+  };
+
+  const createManagedUpdate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!isOwner) return;
+    setIsSavingManagedUpdate(true);
+    setManagedError(null);
+    try {
+      const res = await fetch("/api/updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: newUpdateDate,
+          title: newUpdateTitle.trim(),
+          text: newUpdateText.trim(),
+          releaseKey: newUpdateReleaseKey.trim() || null,
+        }),
+      });
+      const payload = await parseJsonFromResponse<{ item?: ManagedUpdateItem; error?: string }>(res);
+      if (!res.ok || !payload.item) throw new Error(payload.error ?? "Update konnte nicht gespeichert werden.");
+      setManagedUpdates((prev) => [payload.item!, ...prev]);
+      setNewUpdateTitle("");
+      setNewUpdateText("");
+      setNewUpdateReleaseKey("");
+      setIsAddUpdateOpen(false);
+    } catch (e) {
+      setManagedError(e instanceof Error ? e.message : "Unbekannter Fehler.");
+    } finally {
+      setIsSavingManagedUpdate(false);
+    }
+  };
+
+  const deleteManagedUpdate = async (id: string) => {
+    if (!isOwner) return;
+    try {
+      const res = await fetch(`/api/updates?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const payload = await parseJsonFromResponse<{ ok?: boolean; error?: string }>(res);
+      if (!res.ok || !payload.ok) throw new Error(payload.error ?? "Update konnte nicht gelöscht werden.");
+      setManagedUpdates((prev) => prev.filter((u) => u.id !== id));
+    } catch (e) {
+      setManagedError(e instanceof Error ? e.message : "Unbekannter Fehler.");
+    }
+  };
+
   return (
     <div className="flex w-full max-w-none flex-col gap-6">
-      <div className="space-y-1">
-        <h1 className={DASHBOARD_PAGE_TITLE}>Update & Feedback</h1>
-        <p className="text-sm text-muted-foreground">
-          Updates, Neuerungen und Vorschläge für Verbesserungen.
-        </p>
-      </div>
-
       {canViewWidget("updates.changelog") ? (
+      /* Texte: UPDATE_CHANGELOG in updatesFeed.ts — nur endnutzerrelevante Funktionsneuerungen (Redaktionsregeln dort). */
       <section
         data-tutorial-target="updates-card"
-        className="space-y-3 rounded-xl border border-border/50 bg-card/80 p-4 backdrop-blur-sm md:p-5"
+        className="overflow-hidden rounded-xl border border-border/50 bg-card/80 shadow-sm backdrop-blur-sm"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold">Updates</h2>
-          <button
-            type="button"
-            onClick={() => void loadUpdateTutorials()}
-            className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs transition-colors hover:bg-accent/40"
-          >
-            Tutorials neu laden
-          </button>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Neuigkeiten zum Produkt. Ist zu einem Eintrag ein Tutorial hinterlegt (gleicher Release wie in den
-          Einstellungen), erscheint ein Button zum Starten – nur wenn für deine Rolle ein Tutorial existiert.
-        </p>
-        {tutorialsLoading ? (
-          <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Tutorials werden geladen…
+        <div className={cn(SECTION_HEAD_ACCENT_CLASS, "px-4 py-3 md:px-5")}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold tracking-tight text-foreground">Updates</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {updates.length} {updates.length === 1 ? "Eintrag" : "Einträge"} · nach Datum gruppiert
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {isOwner ? (
+                <button
+                  type="button"
+                  onClick={() => setIsAddUpdateOpen(true)}
+                  className="shrink-0 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-primary/20"
+                >
+                  Update Hinzufügen
+                </button>
+              ) : null}
+              {canUseAction("updates.tutorial.start") ? (
+                <button
+                  type="button"
+                  onClick={() => void loadUpdateTutorials()}
+                  className="shrink-0 rounded-md border border-border/70 bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent/40"
+                >
+                  Tutorials neu laden
+                </button>
+              ) : null}
+            </div>
           </div>
-        ) : null}
+        </div>
 
-        <div className="space-y-3">
-          {updates.map((u) => {
-            const tutorial = u.releaseKey ? resolveTutorialForChangelog(u.releaseKey) : undefined;
-            return (
-              <div
-                key={u.date + u.title}
-                className="flex overflow-hidden rounded-lg border border-border/60 bg-muted/20 shadow-sm dark:bg-muted/15"
-              >
-                <div className="w-1 shrink-0 bg-amber-400/50 dark:bg-amber-500/35" aria-hidden />
-                <div className="min-w-0 flex-1 px-3 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium text-foreground">{u.title}</p>
-                    <p className="text-xs tabular-nums text-muted-foreground">{u.date}</p>
-                  </div>
-                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{u.text}</p>
-                  {tutorial ? (
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        onClick={() => dispatchStartTutorialEvent(tutorial.tour.id)}
-                        disabled={!canUseAction("updates.tutorial.start")}
-                        className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40"
-                      >
-                        <PlayCircle className="h-4 w-4 shrink-0" aria-hidden />
-                        {tutorial.completed ? "Tutorial erneut ansehen" : "Zum Tutorial"}
-                      </button>
-                      <span className="ml-2 text-[11px] text-muted-foreground">
-                        {tutorial.completed ? "Abgeschlossen" : tutorial.dismissed ? "Abgebrochen" : "Neu"}
-                      </span>
-                    </div>
-                  ) : null}
+        <div className="space-y-0 px-4 py-3 md:px-5 md:py-4">
+          {managedLoading ? (
+            <div className="mb-2 text-xs text-muted-foreground">Lade gespeicherte Updates…</div>
+          ) : null}
+          {managedError ? (
+            <div className="mb-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700">
+              {managedError}
+            </div>
+          ) : null}
+          {tutorialsLoading ? (
+            <div className="mb-3 inline-flex items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              Tutorials werden geladen…
+            </div>
+          ) : null}
+
+          <div className="space-y-4">
+            {changelogByDate.map(({ date, items }) => (
+              <div key={date}>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 px-2.5 py-1 text-xs font-semibold tabular-nums text-foreground">
+                    {date}
+                  </span>
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {items.length} {items.length === 1 ? "Neuerung" : "Neuerungen"}
+                  </span>
                 </div>
+                <ul className="m-0 list-none space-y-2 p-0">
+                  {items.map((u) => {
+                    const tutorial = u.releaseKey
+                      ? resolveTutorialForChangelog(u.releaseKey)
+                      : undefined;
+                    return (
+                      <li
+                        key={u.id ?? `${u.date}-${u.title}`}
+                        className="overflow-hidden rounded-lg border border-border/50 bg-background/80 shadow-sm"
+                      >
+                        <div className="min-w-0 px-3 py-2.5 md:px-3.5 md:py-3">
+                            <div className="mb-1.5 flex items-start justify-between gap-2">
+                              <span />
+                              {isOwner && u.id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void deleteManagedUpdate(u.id!)}
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded-sm border border-red-500/35 bg-red-500/10 text-red-700 hover:bg-red-500/20"
+                                  aria-label="Update entfernen"
+                                  title="Update entfernen"
+                                >
+                                  <X className="h-3.5 w-3.5" aria-hidden />
+                                </button>
+                              ) : null}
+                            </div>
+                            <p className="text-sm font-semibold leading-snug text-foreground">{u.title}</p>
+                            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{u.text}</p>
+                            {tutorial ? (
+                              <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-border/40 pt-2.5">
+                                <button
+                                  type="button"
+                                  onClick={() => dispatchStartTutorialEvent(tutorial.tour.id)}
+                                  disabled={!canUseAction("updates.tutorial.start")}
+                                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40"
+                                >
+                                  <PlayCircle className="h-4 w-4 shrink-0" aria-hidden />
+                                  {tutorial.completed ? "Tutorial erneut ansehen" : "Zum Tutorial"}
+                                </button>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {tutorial.completed
+                                    ? "Abgeschlossen"
+                                    : tutorial.dismissed
+                                      ? "Abgebrochen"
+                                      : "Neu"}
+                                </span>
+                              </div>
+                            ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       </section>
       ) : null}
+      {isOwner ? (
+        <Dialog open={isAddUpdateOpen} onOpenChange={setIsAddUpdateOpen}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Update Hinzufügen</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={createManagedUpdate} className="grid gap-2 md:grid-cols-[160px_1fr]">
+              <input
+                type="date"
+                value={newUpdateDate}
+                onChange={(e) => setNewUpdateDate(e.target.value)}
+                className="rounded-md border border-border/60 bg-background px-2.5 py-1.5 text-xs outline-none focus:border-primary"
+              />
+              <input
+                value={newUpdateTitle}
+                onChange={(e) => setNewUpdateTitle(e.target.value)}
+                placeholder="Neuer Update-Titel"
+                className="rounded-md border border-border/60 bg-background px-2.5 py-1.5 text-xs outline-none focus:border-primary"
+                required
+              />
+              <textarea
+                value={newUpdateText}
+                onChange={(e) => setNewUpdateText(e.target.value)}
+                placeholder="Kurze Beschreibung der Neuerung"
+                className="md:col-span-2 min-h-[90px] rounded-md border border-border/60 bg-background px-2.5 py-1.5 text-xs outline-none focus:border-primary"
+                required
+              />
+              <input
+                value={newUpdateReleaseKey}
+                onChange={(e) => setNewUpdateReleaseKey(e.target.value)}
+                placeholder="Release-Key (optional)"
+                className="rounded-md border border-border/60 bg-background px-2.5 py-1.5 text-xs outline-none focus:border-primary"
+              />
+              <button
+                type="submit"
+                disabled={isSavingManagedUpdate}
+                className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-primary/15 disabled:opacity-50"
+              >
+                {isSavingManagedUpdate ? "Speichert..." : "Update eintragen"}
+              </button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
       {canViewWidget("updates.feedbackForm") ? (
-      <section className="space-y-3 rounded-xl border border-border/50 bg-card/80 p-4 backdrop-blur-sm md:p-5">
-        <h2 className="text-base font-semibold">Vorschlag / Wunschfunktion</h2>
-        <p className="text-sm text-muted-foreground">
-          Sende Verbesserungen oder Feature-Wünsche.
-        </p>
+      <section className={SECTION_CARD_CLASS}>
+        <div className="rounded-lg border border-primary/20 bg-gradient-to-r from-primary/[0.1] via-background/60 to-accent/[0.06] px-3 py-2.5">
+          <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary/90">
+            <Lightbulb className="h-3.5 w-3.5" aria-hidden />
+            Deine Idee verbessert das Dashboard
+          </p>
+          <p className="mt-1 text-base font-semibold text-foreground">
+            Vorschlag / Wunschfunktion
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            Teile kurz, was dir fehlt oder nervt. Kleine Hinweise helfen oft am meisten.
+          </p>
+        </div>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
@@ -459,7 +701,7 @@ export default function UpdatesPage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                placeholder="z.B. Export als CSV pro Zeitraum"
+                placeholder="z.B. Schnellfilter für fehlende Artikel"
                 required
               />
             </div>
@@ -508,7 +750,7 @@ export default function UpdatesPage() {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               className="min-h-[110px] w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-              placeholder="Was soll verbessert werden und warum?"
+              placeholder="Was genau sollte besser laufen? (1-3 Saetze reichen)"
               required
             />
           </div>
@@ -560,15 +802,15 @@ export default function UpdatesPage() {
             className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Vorschlag senden
+            Idee jetzt senden
           </button>
         </form>
       </section>
       ) : null}
 
       {isOwner && !user.isLoading && canViewWidget("updates.ownerInbox") ? (
-        <section className="space-y-3 rounded-xl border border-border/50 bg-card/80 p-4 backdrop-blur-sm md:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+        <section className={SECTION_CARD_CLASS}>
+          <div className={cn("flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/50 px-3 py-2", SECTION_HEAD_ACCENT_CLASS)}>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-semibold">Verbesserung und Wünsche</h2>
               {inboxBackgroundSyncing ? (
@@ -665,18 +907,47 @@ export default function UpdatesPage() {
                       className="min-h-[70px] w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                       placeholder="Antwort an den Nutzer..."
                     />
-                    <button
-                      type="button"
-                      disabled={!canUseAction("updates.ownerInbox.reply")}
-                      onClick={() => {
-                        void updateItem(item.id, { owner_reply: item.owner_reply ?? "" }).catch((err) =>
-                          setInboxError(err instanceof Error ? err.message : "Unbekannter Fehler.")
-                        );
-                      }}
-                      className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs transition-colors hover:bg-accent/40 disabled:opacity-40"
-                    >
-                      Antwort speichern
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={!canUseAction("updates.ownerInbox.reply")}
+                        onClick={() => {
+                          void updateItem(item.id, { owner_reply: item.owner_reply ?? "" }).catch((err) =>
+                            setInboxError(err instanceof Error ? err.message : "Unbekannter Fehler.")
+                          );
+                        }}
+                        className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs transition-colors hover:bg-accent/40 disabled:opacity-40"
+                      >
+                        Antwort speichern
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!canUseAction("updates.ownerInbox.status") || item.status === "done"}
+                        onClick={() => {
+                          void updateItem(item.id, { status: "done" }).catch((err) =>
+                            setInboxError(err instanceof Error ? err.message : "Unbekannter Fehler.")
+                          );
+                        }}
+                        className="rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs text-amber-900 transition-colors hover:bg-amber-400/20 disabled:opacity-40 dark:text-amber-200"
+                      >
+                        Archivieren
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const ok = window.confirm(
+                            "Diesen Wunsch wirklich löschen? Anhänge werden ebenfalls entfernt."
+                          );
+                          if (!ok) return;
+                          void deleteItem(item.id).catch((err) =>
+                            setInboxError(err instanceof Error ? err.message : "Unbekannter Fehler.")
+                          );
+                        }}
+                        className="rounded-md border border-red-500/35 bg-red-500/10 px-3 py-1.5 text-xs text-red-700 transition-colors hover:bg-red-500/20 dark:text-red-300"
+                      >
+                        Löschen
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

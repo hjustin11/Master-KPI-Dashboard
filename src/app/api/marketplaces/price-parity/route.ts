@@ -3,6 +3,7 @@ import {
   ANALYTICS_MARKETPLACES,
   type AnalyticsMarketplaceSlug,
 } from "@/shared/lib/analytics-marketplaces";
+import { createAdminClient } from "@/shared/lib/supabase/admin";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import { getIntegrationCachedOrLoad, readIntegrationCache } from "@/shared/lib/integrationDataCache";
 
@@ -52,12 +53,19 @@ type AmazonProductsCachedPayload = {
 
 export type MarketplaceCellState = "ok" | "missing" | "no_price" | "mismatch" | "not_connected";
 
+export type PriceParityCell = {
+  price: number | null;
+  state: MarketplaceCellState;
+  stock: number | null;
+  stockState: MarketplaceCellState;
+};
+
 export type PriceParityRow = {
   sku: string;
   name: string;
   stock: number;
-  amazon: { price: number | null; state: MarketplaceCellState };
-  otherMarketplaces: Record<string, { price: number | null; state: MarketplaceCellState }>;
+  amazon: PriceParityCell;
+  otherMarketplaces: Record<string, PriceParityCell>;
   needsReview: boolean;
 };
 
@@ -89,27 +97,40 @@ const ANALYTICS_PRODUCTS_API: Partial<Record<AnalyticsMarketplaceSlug, string>> 
   shopify: "/api/shopify/products",
 };
 
+type SkuSnapshot = { price: number | null; stock: number | null };
+
+function parseNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
 /**
- * SKU → Preis aus der jeweiligen `/api/.../products`-Antwort.
+ * SKU → Preis/Bestand aus der jeweiligen `/api/.../products`-Antwort.
  * `priceEur` (Mirakl & Co.) bzw. `price` (Amazon-Listings/Reports).
  */
-function skuPriceMapFromProductItems(
+function skuSnapshotMapFromProductItems(
   items: Array<Record<string, unknown>>,
   priceKey: "priceEur" | "price"
-): Map<string, number | null> {
-  const map = new Map<string, number | null>();
+): Map<string, SkuSnapshot> {
+  const map = new Map<string, SkuSnapshot>();
   for (const it of items) {
     const sku = typeof it.sku === "string" ? it.sku : "";
     const k = normSku(sku);
     if (!k) continue;
-    const raw = it[priceKey];
-    const p =
-      typeof raw === "number" && Number.isFinite(raw)
-        ? raw
-        : typeof raw === "string" && Number.isFinite(Number(raw))
-          ? Number(raw)
-          : null;
-    map.set(k, p);
+    const p = parseNumber(it[priceKey]);
+    const stock =
+      parseNumber(it.stockQty) ??
+      parseNumber(it.stock) ??
+      parseNumber(it.quantity) ??
+      parseNumber(it.availableQuantity) ??
+      parseNumber(it.inventoryQuantity) ??
+      parseNumber(it.available) ??
+      null;
+    map.set(k, { price: p, stock });
   }
   return map;
 }
@@ -118,12 +139,12 @@ async function fetchSkuPriceMapFromProductsApi(
   origin: string,
   path: string,
   initHeaders: HeadersInit
-): Promise<Map<string, number | null> | null> {
+): Promise<Map<string, SkuSnapshot> | null> {
   try {
     const res = await fetch(`${origin}${path}`, { cache: "no-store", headers: initHeaders });
     if (!res.ok) return null;
     const json = (await res.json()) as { items?: Array<Record<string, unknown>> };
-    return skuPriceMapFromProductItems(json.items ?? [], "priceEur");
+    return skuSnapshotMapFromProductItems(json.items ?? [], "priceEur");
   } catch {
     return null;
   }
@@ -137,7 +158,7 @@ async function fetchAmazonProductsPriceMap(
   origin: string,
   initHeaders: HeadersInit
 ): Promise<{
-  map: Map<string, number | null> | null;
+  map: Map<string, SkuSnapshot> | null;
   warning: string | null;
 }> {
   const marketplaceIdsRaw =
@@ -156,9 +177,9 @@ async function fetchAmazonProductsPriceMap(
       `amazon:products:${marketplaceId}`
     );
     if (cached.state !== "miss" && Array.isArray(cached.value?.rows)) {
-      const primary = skuPriceMapFromProductItems(cached.value.rows, "price");
+      const primary = skuSnapshotMapFromProductItems(cached.value.rows, "price");
       if (primary.size > 0) return { map: primary, warning: null };
-      const fallback = skuPriceMapFromProductItems(cached.value.rows, "priceEur");
+      const fallback = skuSnapshotMapFromProductItems(cached.value.rows, "priceEur");
       if (fallback.size > 0) return { map: fallback, warning: null };
     }
   }
@@ -166,7 +187,7 @@ async function fetchAmazonProductsPriceMap(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2200);
   try {
-    const res = await fetch(`${origin}/api/amazon/products?status=all`, {
+    const res = await fetch(`${origin}/api/amazon/products?status=all&all=1`, {
       cache: "no-store",
       signal: controller.signal,
       headers: initHeaders,
@@ -185,11 +206,11 @@ async function fetchAmazonProductsPriceMap(
     }
     const json = (await res.json()) as { items?: Array<Record<string, unknown>> };
     // Amazon liefert je nach Quelle `price` (Listings/Report) oder `priceEur`.
-    const primary = skuPriceMapFromProductItems(json.items ?? [], "price");
+    const primary = skuSnapshotMapFromProductItems(json.items ?? [], "price");
     if (primary.size > 0) {
       return { map: primary, warning: null };
     }
-    const fallback = skuPriceMapFromProductItems(json.items ?? [], "priceEur");
+    const fallback = skuSnapshotMapFromProductItems(json.items ?? [], "priceEur");
     return { map: fallback, warning: null };
   } catch {
     return {
@@ -406,16 +427,16 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
   ]);
 
   const amazonWarning = amazonFetch.warning;
-  const amazonBySku = new Map<string, { price: number | null }>();
+  const amazonBySku = new Map<string, SkuSnapshot>();
   if (amazonFetch.map) {
-    for (const [k, price] of amazonFetch.map) {
-      amazonBySku.set(k, { price });
+    for (const [k, snapshot] of amazonFetch.map) {
+      amazonBySku.set(k, snapshot);
     }
   }
 
   const ottoBySku = otto.bySku;
 
-  const productMaps: Partial<Record<AnalyticsMarketplaceSlug, Map<string, number | null> | null>> =
+  const productMaps: Partial<Record<AnalyticsMarketplaceSlug, Map<string, SkuSnapshot> | null>> =
     {};
   for (const [slug, map] of productMapEntries) {
     if (slug === "otto") continue;
@@ -426,28 +447,41 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
     const key = normSku(a.sku);
     const amz = key ? amazonBySku.get(key) : undefined;
     const amazonPrice = amz?.price ?? null;
+    const amazonStock = amz?.stock ?? null;
     const ottoPrice = key ? (ottoBySku.get(key) ?? null) : null;
 
     const flat: Record<string, MutableCell> = {};
+    const stockFlat: Record<string, { stock: number | null; state: MarketplaceCellState }> = {};
 
     let amazonProv: MarketplaceCellState = "ok";
     if (!amz) amazonProv = "missing";
     else if (amazonPrice == null) amazonProv = "no_price";
+    let amazonStockState: MarketplaceCellState = "ok";
+    if (!amz) amazonStockState = "missing";
+    else if (amazonStock == null) amazonStockState = "not_connected";
     flat.amazon = { price: amazonPrice, state: amazonProv };
+    stockFlat.amazon = { stock: amazonStock, state: amazonStockState };
 
     for (const m of ANALYTICS_MARKETPLACES) {
       if (m.slug === "otto") continue;
       const pmap = productMaps[m.slug];
       if (pmap == null) {
         flat[m.slug] = { price: null, state: "not_connected" };
+        stockFlat[m.slug] = { stock: null, state: "not_connected" };
         continue;
       }
       const hasSku = Boolean(key && pmap.has(key));
-      const price = hasSku ? (pmap.get(key) ?? null) : null;
+      const snap = hasSku ? (pmap.get(key) ?? { price: null, stock: null }) : { price: null, stock: null };
+      const price = snap.price;
+      const stock = snap.stock;
       let ms: MarketplaceCellState = "ok";
       if (!key || !hasSku) ms = "missing";
       else if (price == null) ms = "no_price";
+      let mStockState: MarketplaceCellState = "ok";
+      if (!key || !hasSku) mStockState = "missing";
+      else if (stock == null) mStockState = "not_connected";
       flat[m.slug] = { price, state: ms };
+      stockFlat[m.slug] = { stock, state: mStockState };
     }
 
     if (ottoBySku.size > 0) {
@@ -455,22 +489,40 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
       if (!key || !ottoBySku.has(key)) ottoState = "missing";
       else if (ottoPrice == null) ottoState = "no_price";
       flat.otto = { price: ottoPrice, state: ottoState };
+      stockFlat.otto = { stock: null, state: "not_connected" };
     } else {
       flat.otto = { price: null, state: "not_connected" };
+      stockFlat.otto = { stock: null, state: "not_connected" };
     }
 
     const afterDeviation = applyMajorityDeviation(flat);
-    const amazon = afterDeviation.amazon ?? { price: amazonPrice, state: amazonProv };
-    const otherMarketplaces: Record<string, { price: number | null; state: MarketplaceCellState }> =
+    const amazon = {
+      price: (afterDeviation.amazon ?? { price: amazonPrice, state: amazonProv }).price,
+      state: (afterDeviation.amazon ?? { price: amazonPrice, state: amazonProv }).state,
+      stock: stockFlat.amazon?.stock ?? null,
+      stockState: stockFlat.amazon?.state ?? "not_connected",
+    };
+    const otherMarketplaces: Record<string, PriceParityCell> =
       {};
     for (const m of ANALYTICS_MARKETPLACES) {
-      otherMarketplaces[m.slug] =
-        afterDeviation[m.slug] ?? flat[m.slug] ?? { price: null, state: "not_connected" };
+      const p = afterDeviation[m.slug] ?? flat[m.slug] ?? { price: null, state: "not_connected" };
+      const s = stockFlat[m.slug] ?? { stock: null, state: "not_connected" };
+      otherMarketplaces[m.slug] = {
+        price: p.price,
+        state: p.state,
+        stock: s.stock,
+        stockState: s.state,
+      };
     }
 
     const needsReview =
       amazon.state !== "ok" ||
-      Object.values(otherMarketplaces).some((c) => c.state !== "ok" && c.state !== "not_connected");
+      amazon.stockState !== "ok" ||
+      Object.values(otherMarketplaces).some(
+        (c) =>
+          (c.state !== "ok" && c.state !== "not_connected") ||
+          (c.stockState !== "ok" && c.stockState !== "not_connected")
+      );
 
     return {
       sku: a.sku,
@@ -481,6 +533,69 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
       needsReview,
     };
   });
+
+  try {
+    const admin = createAdminClient();
+    const { data: overrides } = await admin
+      .from("marketplace_price_stock_overrides")
+      .select("sku, marketplace_slug, price_eur, stock_qty");
+    const byKey = new Map<
+      string,
+      { price_eur: number | null; stock_qty: number | null }
+    >();
+    for (const o of overrides ?? []) {
+      const sku = typeof o.sku === "string" ? o.sku.trim().toLowerCase() : "";
+      const slug = typeof o.marketplace_slug === "string" ? o.marketplace_slug.trim() : "";
+      if (!sku || !slug) continue;
+      byKey.set(`${sku}::${slug}`, {
+        price_eur: o.price_eur == null ? null : Number(o.price_eur),
+        stock_qty: o.stock_qty == null ? null : Number(o.stock_qty),
+      });
+    }
+
+    for (const row of rows) {
+      const sku = row.sku.trim().toLowerCase();
+      if (!sku) continue;
+      const amazonOverride = byKey.get(`${sku}::amazon`);
+      if (amazonOverride) {
+        if (amazonOverride.price_eur != null) {
+          row.amazon.price = amazonOverride.price_eur;
+          row.amazon.state = "ok";
+        }
+        if (amazonOverride.stock_qty != null) {
+          row.amazon.stock = amazonOverride.stock_qty;
+          row.amazon.stockState = "ok";
+        }
+      }
+      for (const m of ANALYTICS_MARKETPLACES) {
+        const ov = byKey.get(`${sku}::${m.slug}`);
+        if (!ov) continue;
+        const c = row.otherMarketplaces[m.slug];
+        if (!c) continue;
+        if (ov.price_eur != null) {
+          c.price = ov.price_eur;
+          c.state = "ok";
+        }
+        if (ov.stock_qty != null) {
+          c.stock = ov.stock_qty;
+          c.stockState = "ok";
+        }
+      }
+    }
+  } catch {
+    // Overrides optional: table might be missing in older environments.
+  }
+
+  for (const r of rows) {
+    r.needsReview =
+      r.amazon.state !== "ok" ||
+      r.amazon.stockState !== "ok" ||
+      Object.values(r.otherMarketplaces).some(
+        (c) =>
+          (c.state !== "ok" && c.state !== "not_connected") ||
+          (c.stockState !== "ok" && c.stockState !== "not_connected")
+      );
+  }
 
   const issueCount = rows.filter((r) => r.needsReview).length;
 

@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { isOwnerFromSources } from "@/shared/lib/roles";
 
 const MAX_FEEDBACK_FILES = 8;
 const MAX_FEEDBACK_FILE_BYTES = 5 * 1024 * 1024;
-
-function roleIsOwner(value: unknown): boolean {
-  return typeof value === "string" && value.toLowerCase() === "owner";
-}
 
 async function isOwnerUser(args: {
   user: { id: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> };
@@ -19,10 +16,11 @@ async function isOwnerUser(args: {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  if (roleIsOwner(profile?.role)) return true;
-  const appRole = user.app_metadata?.role;
-  const userRole = user.user_metadata?.role;
-  return roleIsOwner(appRole) || roleIsOwner(userRole);
+  return isOwnerFromSources({
+    profileRole: profile?.role,
+    appRole: user.app_metadata?.role,
+    userRole: user.user_metadata?.role,
+  });
 }
 
 type FeedbackAttachmentMeta = {
@@ -61,6 +59,12 @@ function sanitizeFilename(name: string): string {
 
 type LegacyFeatureRequestRow = Omit<FeatureRequestRow, "page_path" | "attachments">;
 
+function isLegacyFeatureRequestColumnError(err: { message?: string; code?: string } | null | undefined) {
+  if (!err) return false;
+  const msg = err.message ?? "";
+  return /column|page_path|attachments|does not exist/i.test(msg) || err.code === "42703";
+}
+
 export async function GET() {
   try {
     const supabase = await createServerSupabase();
@@ -91,8 +95,7 @@ export async function GET() {
     }
 
     const msg = full.error.message ?? "";
-    const legacyMissingColumn =
-      /column|page_path|attachments|does not exist/i.test(msg) || full.error.code === "42703";
+    const legacyMissingColumn = isLegacyFeatureRequestColumnError(full.error);
 
     if (!legacyMissingColumn) {
       return NextResponse.json(
@@ -187,35 +190,78 @@ export async function POST(request: Request) {
     }
   }
 
-  const admin = createAdminClient();
-  const { data: inserted, error: insertError } = await admin
-    .from("feature_requests")
-    .insert({
-      user_id: user.id,
-      user_email: user.email ?? "",
-      title,
-      message,
-      page_path: pagePath,
-      attachments: [],
-      status: "open",
-      owner_reply: null,
-    })
-    .select(
-      "id,created_at,user_id,user_email,title,message,status,owner_reply,page_path,attachments"
-    )
-    .maybeSingle();
-
-  if (insertError || !inserted) {
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch (e) {
+    console.error("[POST /api/feedback] admin client", e);
     return NextResponse.json(
       { error: "Vorschlag konnte nicht gespeichert werden." },
       { status: 500 }
     );
   }
 
+  const baseRow = {
+    user_id: user.id,
+    user_email: user.email ?? "",
+    title,
+    message,
+    status: "open" as const,
+    owner_reply: null as null,
+  };
+
+  let inserted: FeatureRequestRow;
+  let legacySchemaNoAttachments = false;
+
+  const fullInsert = await admin
+    .from("feature_requests")
+    .insert({
+      ...baseRow,
+      page_path: pagePath,
+      attachments: [],
+    })
+    .select(
+      "id,created_at,user_id,user_email,title,message,status,owner_reply,page_path,attachments"
+    )
+    .maybeSingle();
+
+  if (!fullInsert.error && fullInsert.data) {
+    inserted = fullInsert.data as FeatureRequestRow;
+  } else if (isLegacyFeatureRequestColumnError(fullInsert.error)) {
+    const legacyInsert = await admin
+      .from("feature_requests")
+      .insert(baseRow)
+      .select("id,created_at,user_id,user_email,title,message,status,owner_reply")
+      .maybeSingle();
+
+    if (legacyInsert.error || !legacyInsert.data) {
+      console.error("[POST /api/feedback] legacy insert", legacyInsert.error);
+      return NextResponse.json(
+        { error: "Vorschlag konnte nicht gespeichert werden." },
+        { status: 500 }
+      );
+    }
+    legacySchemaNoAttachments = true;
+    const leg = legacyInsert.data as LegacyFeatureRequestRow;
+    inserted = { ...leg, page_path: null, attachments: [] };
+  } else {
+    console.error("[POST /api/feedback] insert", fullInsert.error);
+    return NextResponse.json(
+      { error: "Vorschlag konnte nicht gespeichert werden." },
+      { status: 500 }
+    );
+  }
+
+  if (legacySchemaNoAttachments && files.length > 0) {
+    console.warn(
+      "[POST /api/feedback] feature_requests ohne page_path/attachments — Anhänge werden übersprungen."
+    );
+  }
+
   const requestId = inserted.id as string;
   const uploaded: FeedbackAttachmentMeta[] = [];
 
-  for (let i = 0; i < files.length; i++) {
+  for (let i = 0; i < files.length && !legacySchemaNoAttachments; i++) {
     const file = files[i];
     const safeName = `${Date.now()}-${i}-${sanitizeFilename(file.name)}`;
     const objectPath = `${user.id}/${requestId}/${safeName}`;
@@ -254,7 +300,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ item: updated as FeatureRequestRow });
   }
 
-  return NextResponse.json({ item: inserted as FeatureRequestRow });
+  return NextResponse.json({
+    item: inserted as FeatureRequestRow,
+    ...(legacySchemaNoAttachments && files.length > 0 ? { attachments_skipped: true } : {}),
+  });
 }
 
 export async function PATCH(request: Request) {
@@ -349,4 +398,66 @@ export async function PATCH(request: Request) {
   return NextResponse.json({
     item: { ...row, page_path: null, attachments: [] } satisfies FeatureRequestRow,
   });
+}
+
+export async function DELETE(request: Request) {
+  const supabase = await createServerSupabase();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
+  }
+
+  if (!(await isOwnerUser({ user, supabase }))) {
+    return NextResponse.json({ error: "Nur Owner." }, { status: 403 });
+  }
+
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id")?.trim() ?? "";
+  if (!id) {
+    return NextResponse.json({ error: "id ist erforderlich." }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+
+  let attachments: FeedbackAttachmentMeta[] = [];
+  const full = await admin
+    .from("feature_requests")
+    .select("attachments")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!full.error && full.data) {
+    attachments = Array.isArray(full.data.attachments)
+      ? (full.data.attachments as FeedbackAttachmentMeta[])
+      : [];
+  } else if (full.error) {
+    const msg = full.error.message ?? "";
+    const legacyMissingColumn =
+      /column|attachments|does not exist/i.test(msg) || full.error.code === "42703";
+    if (!legacyMissingColumn) {
+      return NextResponse.json({ error: "Vorschlag konnte nicht gelöscht werden." }, { status: 500 });
+    }
+  }
+
+  if (attachments.length > 0) {
+    const paths = attachments.map((att) => att.path).filter(Boolean);
+    if (paths.length > 0) {
+      await admin.storage.from("feedback-attachments").remove(paths);
+    }
+  }
+
+  const { error: deleteError } = await admin
+    .from("feature_requests")
+    .delete()
+    .eq("id", id);
+
+  if (deleteError) {
+    return NextResponse.json({ error: "Vorschlag konnte nicht gelöscht werden." }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, id });
 }

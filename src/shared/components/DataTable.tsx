@@ -11,7 +11,7 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowUpDown, ChevronDown, ChevronUp, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,6 +76,11 @@ type ColumnMeta = {
   headerLabelClassName?: string;
 };
 
+const CORE_ROW_MODEL = getCoreRowModel();
+const SORTED_ROW_MODEL = getSortedRowModel();
+const FILTERED_ROW_MODEL = getFilteredRowModel();
+const PAGINATION_ROW_MODEL = getPaginationRowModel();
+
 export function DataTable<TData, TValue>({
   columns,
   data,
@@ -111,22 +116,22 @@ export function DataTable<TData, TValue>({
     initialState: {
       pagination: { pageSize: defaultPageSize, pageIndex: 0 },
     },
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    ...(paginate ? { getPaginationRowModel: getPaginationRowModel() } : {}),
+    getCoreRowModel: CORE_ROW_MODEL,
+    getSortedRowModel: SORTED_ROW_MODEL,
+    getFilteredRowModel: FILTERED_ROW_MODEL,
+    ...(paginate ? { getPaginationRowModel: PAGINATION_ROW_MODEL } : {}),
   });
 
   const rows = paginate ? table.getRowModel().rows : table.getPrePaginationRowModel().rows;
-  const visibleRowData = rows.map((r) => r.original);
+  const visibleRowData = useMemo(() => rows.map((r) => r.original), [rows]);
+  const rowSignature = useMemo(() => rows.map((row) => row.id).join("|"), [rows]);
 
   useEffect(() => {
     if (!onDisplayedRowsChange) return;
-    const signature = rows.map((row) => row.id).join("|");
-    if (signature === lastSignatureRef.current) return;
-    lastSignatureRef.current = signature;
-    onDisplayedRowsChange(rows.map((row) => row.original));
-  }, [onDisplayedRowsChange, rows]);
+    if (rowSignature === lastSignatureRef.current) return;
+    lastSignatureRef.current = rowSignature;
+    onDisplayedRowsChange(visibleRowData);
+  }, [onDisplayedRowsChange, rowSignature, visibleRowData]);
 
   const rootLayoutClass = compact
     ? DASHBOARD_COMPACT_CARD

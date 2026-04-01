@@ -5,7 +5,8 @@
   "common": {
     "loading": "Loading…",
     "on": "ON",
-    "off": "OFF"
+    "off": "OFF",
+    "openMarketplaceOrderTitle": "Open order in marketplace seller portal ({id})"
   },
   "language": {
     "switch": "Language",
@@ -26,7 +27,11 @@
     "roleTestAccessPanelTitle": "Permissions and settings tiles",
     "roleTestAccessPanelLead": "Applies to test role “{role}”. The developer role stays fully unrestricted.",
     "roleTestAccessPanelPermissionsHint": "What this role is allowed to do in the dashboard.",
-    "roleTestAccessPanelSectionsHint": "Visible sections on Settings → Users (tiles)."
+    "roleTestAccessPanelSectionsHint": "Visible sections on Settings → Users (tiles).",
+    "wipGlobalLocksTitle": "Global WIP locks",
+    "wipGlobalLocksHint": "Applies to everyone. On = section is developer-only (owner not in role test, or with “Edit access” enabled). Saved with the rest of the config and refreshed for all clients about every 45 seconds.",
+    "wipGlobalLockOn": "(locked)",
+    "wipGlobalLockOff": "(open)"
   },
   "sidebar": {
     "toggleSidebar": "Collapse or expand sidebar",
@@ -65,6 +70,8 @@
     "advertisingLockedHint": "This area is under construction. Only developers have access.",
     "advertisingWipTooltip": "Advertising – work in progress (full access for developers only)",
     "myAreaLockedHint": "Section in progress. Developers only for now.",
+    "sidebarWipLockedHint": "Section in progress. Developers only.",
+    "sidebarWipDevTooltip": "WIP – developer access only.",
     "myAreaWipTooltip": "My area – work in progress (full access for developers only)",
     "adCampaigns": "Campaigns",
     "adPerformance": "Performance",
@@ -674,7 +681,11 @@
     "totalTitle": "Total",
     "totalSubtitle": "Sum of connected channels · selected period and prior period of equal length · Amazon metrics via SP-API Sales ·",
     "totalSubtitleMore": "more channels coming",
-    "amazonSyncing": "Amazon data…",
+    "amazonSyncing": "Marketplace data…",
+    "dataQualityNoticeAria": "Data quality note",
+    "dataQualityNoticeLabel": "Notice",
+    "dataQualityNoticeTitle": "Data quality note",
+    "dataQualityNoticeBody": "Figures come from connected marketplace APIs and are refined over time. They may differ from what seller portals show (e.g. delays, time zones, late postings, rounding, filters).",
     "totalIncomplete": "Total incomplete: {message}",
     "totalRevenue": "Total revenue ({span})",
     "trendVsPrev": "Δ revenue vs. prior period",
@@ -772,7 +783,8 @@
     "removeBandAria": "Remove {label}",
     "noBandsYet": "No bands yet — e.g. add a holiday deal from–to; the area shows in the chart.",
     "defaultBandLabel": "Promotion",
-    "tooltipOrders": "Orders"
+    "tooltipOrders": "Orders",
+    "tooltipDayTotalRevenue": "Total revenue (day)"
   },
   "priceParity": {
     "title": "Articles & price comparison",
@@ -780,9 +792,18 @@
     "subtitleStrong": "Deviating",
     "subtitleRest": "“Deviating” only when at least two marketplaces have a price and one price does not match the plurality (most common amount). Tie for the top count → no tag.",
     "loadError": "Could not load price comparison.",
+    "saveError": "Could not save changes.",
     "filterPlaceholder": "Filter by SKU or article name…",
+    "refresh": "Refresh",
     "syncing": "Syncing data…",
+    "saving": "Saving…",
     "metaLine": "{articles} articles · {amazonSkus} Amazon SKUs · {issues} review cases",
+    "editPrices": "Update prices",
+    "editStocks": "Update stock",
+    "saveEdits": "Save",
+    "cancelEdits": "Cancel",
+    "noPermissionPrice": "No permission: edit prices",
+    "noPermissionStock": "No permission: edit stock",
     "sku": "SKU",
     "stock": "Stock",
     "article": "Article",
@@ -792,7 +813,8 @@
     "noListing": "no listing",
     "priceNa": "Price n/a",
     "deviating": "deviating",
-    "notConnected": "Connection planned"
+    "notConnected": "Connection planned",
+    "priceStockCompact": "Price / Stock"
   },
   "xentralOrders": {
     "title": "Orders",
@@ -845,6 +867,10 @@
     "suggestionsHeading": "Suggestions",
     "applySuggestionOnly": "Use suggestion only",
     "applySuggestionMerged": "Combined: suggestion – current name",
+    "houseNumberSuggestionsTitle": "House number suggestions from other Xentral fields",
+    "houseNumberSuggestionsAria": "House number suggestions",
+    "applyHouseNumberToField": "Apply to house number field",
+    "applyHouseNumberToStreet": "Append to street line",
     "nameFieldBase": "Name (Xentral: name)",
     "nameFieldWithHint": "Name (Xentral: name). {hint}",
     "streetFieldBase": "Street (Xentral: street)",

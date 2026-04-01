@@ -4,7 +4,7 @@ import { createClient as createServerSupabase } from "@/shared/lib/supabase/serv
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 import { confirmAuthUserEmail } from "@/shared/lib/supabase/confirm-invited-email";
 import { type Role } from "@/shared/lib/invitations";
-import { normalizeRoleKey } from "@/shared/lib/roles";
+import { isOwnerFromSources, normalizeRoleKey } from "@/shared/lib/roles";
 
 type InvitationInsert = {
   email: string;
@@ -50,12 +50,11 @@ async function isOwnerRole(args: {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  if (profile?.role === "owner") return true;
-
-  // Fallback: falls profiles noch nicht existiert
-  const appRole = user.app_metadata?.role;
-  const userRole = user.user_metadata?.role;
-  return appRole === "owner" || userRole === "owner";
+  return isOwnerFromSources({
+    profileRole: profile?.role,
+    appRole: user.app_metadata?.role,
+    userRole: user.user_metadata?.role,
+  });
 }
 
 export async function GET() {

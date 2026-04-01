@@ -2,14 +2,17 @@
 
 import { resolveSellerPortalOrderUrl, trimMarketplaceOrderId } from "@/shared/lib/marketplaceSellerOrderLink";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/i18n/I18nProvider";
 
 type MarketplaceOrderIdLinkProps = {
   marketplace?: string;
+  /** Marktplatz-Bestellnummer (Xentral: internetNumber; APIs: orderId). */
   internetNumber?: string;
   className?: string;
 };
 
 export function MarketplaceOrderIdLink({ marketplace, internetNumber, className }: MarketplaceOrderIdLinkProps) {
+  const { t } = useTranslation();
   const raw = trimMarketplaceOrderId(internetNumber ?? "");
   const display = raw || "—";
   const url = resolveSellerPortalOrderUrl(marketplace ?? "", raw);
@@ -34,7 +37,7 @@ export function MarketplaceOrderIdLink({ marketplace, internetNumber, className 
         "tabular-nums font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         className
       )}
-      title={`Auftrag im Seller-Portal öffnen (${display})`}
+      title={t("common.openMarketplaceOrderTitle", { id: display })}
     >
       {display}
     </a>

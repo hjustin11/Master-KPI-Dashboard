@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { useTranslation } from "@/i18n/I18nProvider";
+import { isSectionRootPath } from "@/shared/lib/navSectionRoots";
 
 export function Breadcrumbs() {
   const pathname = usePathname();
@@ -33,6 +34,8 @@ export function Breadcrumbs() {
             {index > 0 ? <ChevronRight className="h-3.5 w-3.5" /> : null}
             {isLast ? (
               <span className="font-medium text-foreground">{item.label}</span>
+            ) : isSectionRootPath(item.href) ? (
+              <span className="text-muted-foreground">{item.label}</span>
             ) : (
               <Link href={item.href} className="transition-colors duration-150 hover:text-foreground">
                 {item.label}

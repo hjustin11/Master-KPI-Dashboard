@@ -29,6 +29,22 @@ function mapInventoryItem(item: Record<string, unknown>): MarketplaceProductList
   const title = String(product.title ?? "").trim();
   const availability = String(item.availability ?? "").trim();
   const isActive = availability ? !/out_of_stock|deleted/i.test(availability) : true;
+  const availabilityObj =
+    (item.availability as Record<string, unknown> | undefined) ??
+    (item.availabilitySummary as Record<string, unknown> | undefined);
+  const qtyRaw =
+    availabilityObj?.quantity ??
+    availabilityObj?.availableQuantity ??
+    availabilityObj?.shipToLocationAvailability;
+  const qtyNum =
+    typeof qtyRaw === "number"
+      ? qtyRaw
+      : typeof qtyRaw === "string"
+        ? Number(qtyRaw)
+        : typeof qtyRaw === "object" && qtyRaw !== null
+          ? Number((qtyRaw as Record<string, unknown>).quantity ?? NaN)
+          : NaN;
+  const stockQty = Number.isFinite(qtyNum) ? qtyNum : null;
   return {
     sku: sku || "—",
     secondaryId: sku || "—",
@@ -36,6 +52,7 @@ function mapInventoryItem(item: Record<string, unknown>): MarketplaceProductList
     statusLabel: availability || "—",
     isActive,
     priceEur: inventoryPriceEur(item),
+    stockQty,
   };
 }
 

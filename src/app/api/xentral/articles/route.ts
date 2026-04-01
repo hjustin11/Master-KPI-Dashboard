@@ -23,6 +23,8 @@ type XentralArticle = {
   stockByLocation: Record<string, number>;
   /** Verkaufspreis aus Xentral, falls im API-Objekt vorhanden (Referenz für Preisgleichheit). */
   price: number | null;
+  /** Verkaufswert-Basis (VK/UVP etc.) für KPI "Verkaufswert gesamt". */
+  salesPrice: number | null;
   /** Xentral-Projekt-ID, falls am Artikel gesetzt. */
   projectId: string | null;
   /** Aufgelöster Projekt-/Marktplatzname (wie bei Bestellungen). */
@@ -39,6 +41,7 @@ type XentralArticleRaw = {
   stock: number;
   stockByLocation: Record<string, number>;
   price: number | null;
+  salesPrice: number | null;
   /** JSON:API `data[].id` — für Join mit GET /api/v1/purchasePrices */
   xentralProductId: string | null;
   projectId: string | null;
@@ -511,14 +514,10 @@ function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
       asMoneyAmount((raw.calculatedPurchasePrice as Record<string, unknown> | undefined)?.price) ??
       null;
 
-    // In der UI nutzen wir dieses Feld als EK-Preis.
-    // Falls Xentral kein eindeutiges Einkaufspreis-Feld liefert, fallbacken wir auf bereits vorhandene Preisfelder.
-    const price =
-      ekPrice ??
+    const salesPrice =
       asNumber((raw as Record<string, unknown>).verkaufspreis) ??
       asNumber(raw.salesPrice) ??
       asNumber((raw.sales as Record<string, unknown> | undefined)?.price) ??
-      asNumber(raw.price) ??
       asNumber(raw.listPrice) ??
       asNumber(raw.listprice) ??
       asNumber(raw.uvp) ??
@@ -529,6 +528,10 @@ function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
       asMoneyAmount(raw.salesPriceNet) ??
       asMoneyAmount(raw.salesPriceGross) ??
       null;
+
+    // In der UI nutzen wir dieses Feld als EK-Preis.
+    // Falls Xentral keinen eindeutigen EK liefert, fallbacken wir auf price/raw.price.
+    const price = ekPrice ?? asNumber(raw.price) ?? salesPrice;
 
     const projectRef = a.project;
     const projectIdFromRef =
@@ -553,6 +556,7 @@ function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
       stock,
       stockByLocation,
       price,
+      salesPrice,
       xentralProductId,
       projectId,
       totalSold,
@@ -578,6 +582,7 @@ function enrichArticles(
       const p = purchasePriceByProductId.get(r.xentralProductId);
       if (p != null && Number.isFinite(p)) price = p;
     }
+    const salesPrice = r.salesPrice ?? r.price;
 
     let projectDisplay = "—";
     if (r.projectId) {
@@ -609,6 +614,7 @@ function enrichArticles(
       stock: r.stock,
       stockByLocation: { ...r.stockByLocation },
       price,
+      salesPrice,
       projectId: r.projectId,
       projectDisplay,
       totalSold,

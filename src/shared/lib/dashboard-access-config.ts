@@ -1,4 +1,9 @@
-import type { DashboardSectionKey, PermissionKey, SidebarItemKey } from "@/shared/lib/access-control";
+import {
+  SIDEBAR_ITEM_CONFIG,
+  type DashboardSectionKey,
+  type PermissionKey,
+  type SidebarItemKey,
+} from "@/shared/lib/access-control";
 import {
   isValidSettingsUsersSectionOrder,
   type SettingsUsersSectionId,
@@ -28,10 +33,33 @@ export type DashboardAccessConfigV1 = {
   customRoleKeys: string[];
   textOverrides: Record<string, string>;
   settingsUsersSectionOrder: SettingsUsersSectionId[];
+  /** true = Sidebar-Bereich nur für Entwickler (Owner ohne Rollen-Test bzw. Zugriffs-Editor). */
+  wipPageLocks: Record<SidebarItemKey, boolean>;
 };
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+export function createDefaultWipPageLocks(): Record<SidebarItemKey, boolean> {
+  return SIDEBAR_ITEM_CONFIG.reduce(
+    (acc, { key }) => {
+      acc[key] = key === "myArea" || key === "advertising";
+      return acc;
+    },
+    {} as Record<SidebarItemKey, boolean>
+  );
+}
+
+export function mergeWipPageLocks(raw: unknown): Record<SidebarItemKey, boolean> {
+  const defaults = createDefaultWipPageLocks();
+  if (!isPlainObject(raw)) return defaults;
+  const out = { ...defaults };
+  for (const { key } of SIDEBAR_ITEM_CONFIG) {
+    const v = raw[key];
+    if (typeof v === "boolean") out[key] = v;
+  }
+  return out;
 }
 
 export function parseDashboardAccessConfig(raw: unknown): DashboardAccessConfigV1 | null {
@@ -114,6 +142,7 @@ export function parseDashboardAccessConfig(raw: unknown): DashboardAccessConfigV
     customRoleKeys,
     textOverrides: raw.textOverrides as Record<string, string>,
     settingsUsersSectionOrder: raw.settingsUsersSectionOrder,
+    wipPageLocks: mergeWipPageLocks(raw.wipPageLocks),
   };
 }
 
@@ -128,6 +157,7 @@ export type DashboardAccessStoreSlice = {
   customRoleKeys: string[];
   textOverrides: Record<string, string>;
   settingsUsersSectionOrder: SettingsUsersSectionId[];
+  wipPageLocks: Record<SidebarItemKey, boolean>;
 };
 
 export function buildDashboardAccessPayloadFromSlice(
@@ -145,6 +175,7 @@ export function buildDashboardAccessPayloadFromSlice(
     customRoleKeys: slice.customRoleKeys,
     textOverrides: slice.textOverrides,
     settingsUsersSectionOrder: slice.settingsUsersSectionOrder,
+    wipPageLocks: slice.wipPageLocks,
   };
 }
 

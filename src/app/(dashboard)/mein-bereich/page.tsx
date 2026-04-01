@@ -7,9 +7,9 @@ import { useTranslation } from "@/i18n/I18nProvider";
 
 export default function MyAreaPage() {
   const { t } = useTranslation();
-  const { isAdvertisingDeveloper } = usePermissions();
+  const { isSidebarItemWipLocked } = usePermissions();
 
-  if (!isAdvertisingDeveloper) {
+  if (isSidebarItemWipLocked("myArea")) {
     return (
       <div className={DASHBOARD_PAGE_SHELL}>
         <section className="rounded-xl border border-border/60 bg-card/80 p-6">

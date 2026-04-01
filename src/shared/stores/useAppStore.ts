@@ -11,7 +11,11 @@ import {
   type SidebarItemKey,
 } from "@/shared/lib/access-control";
 import type { Role } from "@/shared/lib/invitations";
-import type { DashboardAccessConfigV1 } from "@/shared/lib/dashboard-access-config";
+import {
+  createDefaultWipPageLocks,
+  mergeWipPageLocks,
+  type DashboardAccessConfigV1,
+} from "@/shared/lib/dashboard-access-config";
 import {
   DEFAULT_SETTINGS_USERS_SECTION_ORDER,
   type SettingsUsersSectionId,
@@ -65,6 +69,7 @@ type AppState = {
   customRoleKeys: string[];
   textOverrides: Record<string, string>;
   settingsUsersSectionOrder: SettingsUsersSectionId[];
+  wipPageLocks: Record<SidebarItemKey, boolean>;
   setSidebarOpen: (open: boolean) => void;
   setDashboardEditMode: (enabled: boolean) => void;
   setRoleTestingEnabled: (enabled: boolean) => void;
@@ -82,6 +87,7 @@ type AppState = {
   setTextOverride: (key: string, value: string) => void;
   removeTextOverride: (key: string) => void;
   setSettingsUsersSectionOrder: (order: SettingsUsersSectionId[]) => void;
+  toggleWipPageLock: (itemKey: SidebarItemKey) => void;
   hydrateDashboardAccessFromRemote: (config: DashboardAccessConfigV1) => void;
 };
 
@@ -129,6 +135,7 @@ export const useAppStore = create<AppState>()(
       customRoleKeys: [],
       textOverrides: {},
       settingsUsersSectionOrder: [...DEFAULT_SETTINGS_USERS_SECTION_ORDER],
+      wipPageLocks: createDefaultWipPageLocks(),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setDashboardEditMode: (enabled) => set({ dashboardEditMode: enabled }),
       setRoleTestingEnabled: (enabled) =>
@@ -317,6 +324,13 @@ export const useAppStore = create<AppState>()(
           return { textOverrides: next };
         }),
       setSettingsUsersSectionOrder: (order) => set({ settingsUsersSectionOrder: order }),
+      toggleWipPageLock: (itemKey) =>
+        set((state) => ({
+          wipPageLocks: {
+            ...state.wipPageLocks,
+            [itemKey]: !state.wipPageLocks[itemKey],
+          },
+        })),
       hydrateDashboardAccessFromRemote: (config) =>
         set({
           rolePermissions: config.rolePermissions,
@@ -329,11 +343,21 @@ export const useAppStore = create<AppState>()(
           customRoleKeys: config.customRoleKeys,
           textOverrides: config.textOverrides,
           settingsUsersSectionOrder: config.settingsUsersSectionOrder,
+          wipPageLocks: mergeWipPageLocks(config.wipPageLocks),
         }),
     }),
     {
       name: "master-dashboard-app-store-v2",
       storage: createJSONStorage(() => localStorage),
+      merge: (persisted, current) => {
+        const p = persisted as Partial<AppState> | undefined;
+        if (!p) return current as AppState;
+        return {
+          ...(current as AppState),
+          ...p,
+          wipPageLocks: mergeWipPageLocks(p.wipPageLocks as unknown),
+        };
+      },
     }
   )
 );

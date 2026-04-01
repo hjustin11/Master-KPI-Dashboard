@@ -17,6 +17,10 @@ import {
   pageAccessForRole,
 } from "@/shared/lib/role-page-access";
 
+const PAGE_ACCESS_PATH_ENTRIES = Object.entries(PAGE_ACCESS_BY_PATH).sort(
+  (a, b) => b[0].length - a[0].length
+);
+
 /**
  * Persistenz (localStorage) kann ältere Einträge ohne neuere Sidebar-Keys enthalten.
  * Fehlende Keys sollen die Standardwerte aus `INITIAL_ROLE_SIDEBAR_ITEMS` nutzen,
@@ -55,6 +59,7 @@ export function usePermissions() {
   const rolePageAccess = useAppStore((state) => state.rolePageAccess);
   const roleWidgetVisibility = useAppStore((state) => state.roleWidgetVisibility);
   const roleActionAccess = useAppStore((state) => state.roleActionAccess);
+  const wipPageLocks = useAppStore((state) => state.wipPageLocks);
 
   return useMemo(() => {
     const userRoleKey = user.roleKey || "viewer";
@@ -108,9 +113,10 @@ export function usePermissions() {
     };
     const canAccessPageByPath = (pathname: string) => {
       if (editingAccessInRoleTest) return true;
-      const knownEntries = Object.entries(PAGE_ACCESS_BY_PATH).sort((a, b) => b[0].length - a[0].length);
-      const hit = knownEntries.find(([path]) => pathname === path || pathname.startsWith(`${path}/`));
-      if (!hit) return true;
+      const hit = PAGE_ACCESS_PATH_ENTRIES.find(
+        ([path]) => pathname === path || pathname.startsWith(`${path}/`)
+      );
+      if (!hit) return false;
       return Boolean(pageAccess[hit[1]]);
     };
     const canViewWidget = (widgetKey: DashboardWidgetKey) => {
@@ -127,6 +133,12 @@ export function usePermissions() {
       userRoleKey === "owner" &&
       (effectiveRoleKey === "owner" || editingAccessInRoleTest);
 
+    const isSidebarItemWipLocked = (itemKey: SidebarItemKey) =>
+      !user.isLoading && Boolean(wipPageLocks[itemKey]) && !isAdvertisingDeveloper;
+
+    const isSidebarItemWipDevBadge = (itemKey: SidebarItemKey) =>
+      !user.isLoading && Boolean(wipPageLocks[itemKey]) && isAdvertisingDeveloper;
+
     return {
       activeRole: effectiveRoleKey,
       permissions,
@@ -141,6 +153,9 @@ export function usePermissions() {
       canManageUsers: hasPermission("manage_users"),
       isAdvertisingDeveloper,
       editingAccessInRoleTest,
+      wipPageLocks,
+      isSidebarItemWipLocked,
+      isSidebarItemWipDevBadge,
     };
   }, [
     activeRole,
@@ -152,6 +167,8 @@ export function usePermissions() {
     rolePageAccess,
     roleWidgetVisibility,
     roleActionAccess,
+    wipPageLocks,
     user.roleKey,
+    user.isLoading,
   ]);
 }

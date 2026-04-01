@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
 import { parseDashboardAccessConfig } from "@/shared/lib/dashboard-access-config";
+import { isOwnerFromSources } from "@/shared/lib/roles";
 
 async function getCurrentUser() {
   const supabase = await createServerSupabase();
@@ -22,10 +23,11 @@ async function isOwnerUser(args: {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  if (profile?.role === "owner") return true;
-  const appRole = user.app_metadata?.role;
-  const userRole = user.user_metadata?.role;
-  return appRole === "owner" || userRole === "owner";
+  return isOwnerFromSources({
+    profileRole: profile?.role,
+    appRole: user.app_metadata?.role,
+    userRole: user.user_metadata?.role,
+  });
 }
 
 /** Jede eingeloggte Rolle lädt dieselben UI-Grundregeln (Sidebar, Karten, Rechte). */
@@ -38,16 +40,19 @@ export async function GET() {
   const { supabase } = currentUser;
   const { data, error } = await supabase
     .from("dashboard_access_config")
-    .select("config")
+    .select("config, updated_at")
     .eq("id", "default")
     .maybeSingle();
 
   if (error) {
-    return NextResponse.json({
-      config: null,
-      unavailable: true,
-      message: error.message,
-    });
+    return NextResponse.json(
+      {
+        config: null,
+        unavailable: true,
+        message: error.message,
+      },
+      { status: 503 }
+    );
   }
 
   const raw = data?.config as unknown;
@@ -60,7 +65,10 @@ export async function GET() {
     return NextResponse.json({ config: null, invalid: true });
   }
 
-  return NextResponse.json({ config: parsed });
+  return NextResponse.json({
+    config: parsed,
+    updatedAt: data?.updated_at ?? null,
+  });
 }
 
 /** Nur Owner: Speichern beim Beenden von „Dashboard bearbeiten“. */

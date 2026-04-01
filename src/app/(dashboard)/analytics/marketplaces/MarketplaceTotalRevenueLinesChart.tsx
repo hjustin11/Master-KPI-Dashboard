@@ -42,6 +42,8 @@ export const MARKETPLACE_REVENUE_LINE_COLORS: Record<string, string> = {
 };
 
 const PREV_PERIOD_STROKE = "#64748b";
+/** Tooltip „Gesamtumsatz (Tag)“ — optisch an die kombinierte Umsatzlinie angelehnt. */
+const CURRENT_DAY_TOTAL_STROKE = "hsl(210 100% 52%)";
 const BAR_FILL = "#cbd5e1";
 
 function buildMergedRows(
@@ -86,6 +88,7 @@ function TotalComboTooltip({
   formatInt,
   dfLocale,
   ordersLabel,
+  currentPeriodDayTotalLabel,
 }: {
   active?: boolean;
   payload?: TooltipPayload[];
@@ -95,6 +98,7 @@ function TotalComboTooltip({
   formatInt: (n: number) => string;
   dfLocale: DateFnsLocale;
   ordersLabel: string;
+  currentPeriodDayTotalLabel: string;
 }) {
   if (!active || !payload?.length) return null;
   const dateRaw =
@@ -108,14 +112,27 @@ function TotalComboTooltip({
     }
   }
 
-  const monetary = payload.filter((e) => {
+  const revenueSeries = payload.filter((e) => {
     const k = String(e.dataKey ?? "");
-    return k !== "orders" && k !== "prevTotal" && e.value != null && Number(e.value) > 0;
+    return k !== "orders" && k !== "prevTotal";
   });
+  const currentDayTotalRevenue = revenueSeries.reduce(
+    (acc, e) => acc + Number(e.value ?? 0),
+    0
+  );
+  const monetaryPositive = revenueSeries.filter(
+    (e) => e.value != null && Number(e.value) > 0
+  );
   const ordersEntry = payload.find((e) => e.dataKey === "orders");
   const prevEntry = payload.find((e) => e.dataKey === "prevTotal");
 
-  const sortedMoney = [...monetary].sort((a, b) => Number(b.value ?? 0) - Number(a.value ?? 0));
+  const sortedMoney = [...monetaryPositive].sort(
+    (a, b) => Number(b.value ?? 0) - Number(a.value ?? 0)
+  );
+
+  const showSummaryFooter =
+    (prevEntry && prevEntry.value != null && Number(prevEntry.value) > 0) ||
+    Number.isFinite(currentDayTotalRevenue);
 
   return (
     <div className="max-h-[min(60vh,340px)] overflow-y-auto rounded-lg border border-border/50 bg-background/98 px-3 py-2.5 text-xs shadow-md">
@@ -128,19 +145,6 @@ function TotalComboTooltip({
               <span>{ordersLabel}</span>
             </span>
             <span className="font-medium text-foreground">{formatInt(Number(ordersEntry.value))}</span>
-          </li>
-        ) : null}
-        {prevEntry && prevEntry.value != null && Number(prevEntry.value) > 0 ? (
-          <li className="flex justify-between gap-6">
-            <span className="flex items-center gap-2">
-              <span className="relative h-0.5 w-5 shrink-0" aria-hidden>
-                <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-[#64748b]" />
-              </span>
-              <span>{prevEntry.name}</span>
-            </span>
-            <span className="font-medium text-foreground">
-              {formatCurrency(Number(prevEntry.value), displayCurrency)}
-            </span>
           </li>
         ) : null}
         {sortedMoney.map((entry) => {
@@ -163,6 +167,37 @@ function TotalComboTooltip({
           );
         })}
       </ul>
+      {showSummaryFooter ? (
+        <div className="mt-2 space-y-1.5 border-t border-border/45 pt-2 tabular-nums text-muted-foreground">
+          {prevEntry && prevEntry.value != null && Number(prevEntry.value) > 0 ? (
+            <div className="flex justify-between gap-6">
+              <span className="flex items-center gap-2">
+                <span className="relative h-0.5 w-5 shrink-0" aria-hidden>
+                  <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-[#64748b]" />
+                </span>
+                <span>{prevEntry.name}</span>
+              </span>
+              <span className="font-medium text-foreground">
+                {formatCurrency(Number(prevEntry.value), displayCurrency)}
+              </span>
+            </div>
+          ) : null}
+          <div className="flex justify-between gap-6">
+            <span className="flex items-center gap-2">
+              <span className="relative h-0.5 w-5 shrink-0" aria-hidden>
+                <span
+                  className="absolute inset-x-0 top-1/2 h-0.5 rounded-full"
+                  style={{ backgroundColor: CURRENT_DAY_TOTAL_STROKE }}
+                />
+              </span>
+              <span>{currentPeriodDayTotalLabel}</span>
+            </span>
+            <span className="font-medium text-foreground">
+              {formatCurrency(currentDayTotalRevenue, displayCurrency)}
+            </span>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -224,6 +259,7 @@ export function MarketplaceTotalRevenueLinesChart({
   emptyLabel,
   ordersLabel,
   prevPeriodLabel,
+  currentPeriodDayTotalLabel,
   bands = [],
 }: {
   periodFrom: string;
@@ -239,6 +275,8 @@ export function MarketplaceTotalRevenueLinesChart({
   emptyLabel: string;
   ordersLabel: string;
   prevPeriodLabel: string;
+  /** Tooltip: Summe aller Marktplatz-Umsätze am Hover-Tag (lokalisierter Name). */
+  currentPeriodDayTotalLabel: string;
   /** Farbflächen (nur „alle Marktplätze“-Deals) */
   bands?: MarketplaceActionBand[];
 }) {
@@ -441,6 +479,7 @@ export function MarketplaceTotalRevenueLinesChart({
                     formatInt={formatInt}
                     dfLocale={dfLocale}
                     ordersLabel={ordersLabel}
+                    currentPeriodDayTotalLabel={currentPeriodDayTotalLabel}
                   />
                 }
               />

@@ -33,12 +33,19 @@ function mapShopifyProduct(p: Record<string, unknown>): MarketplaceProductListRo
   const sku = String(first?.sku ?? "").trim();
   const isActive = status === "active";
   const rawPrice = first?.price;
+  const rawStock = first?.inventory_quantity ?? first?.inventoryQuantity;
   let priceEur: number | null = null;
   if (typeof rawPrice === "string") {
     const n = Number(rawPrice);
     if (Number.isFinite(n) && n > 0) priceEur = Number(n.toFixed(2));
   } else if (typeof rawPrice === "number" && Number.isFinite(rawPrice) && rawPrice > 0) {
     priceEur = Number(rawPrice.toFixed(2));
+  }
+  let stockQty: number | null = null;
+  if (typeof rawStock === "number" && Number.isFinite(rawStock)) {
+    stockQty = rawStock;
+  } else if (typeof rawStock === "string" && Number.isFinite(Number(rawStock))) {
+    stockQty = Number(rawStock);
   }
   return {
     sku: sku || `—`,
@@ -47,6 +54,7 @@ function mapShopifyProduct(p: Record<string, unknown>): MarketplaceProductListRo
     statusLabel: status || "—",
     isActive,
     priceEur,
+    stockQty,
   };
 }
 
