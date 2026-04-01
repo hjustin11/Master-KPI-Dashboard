@@ -56,7 +56,6 @@ export function useUser() {
      */
     const hydrateFromSession = async (session: Session | null) => {
       const gen = ++hydrateGen;
-      setUser((prev) => ({ ...prev, isLoading: true }));
 
       const authUser = session?.user ?? null;
       if (!authUser) {
@@ -74,6 +73,23 @@ export function useUser() {
         normalizeRoleKey(authUser.user_metadata?.role) ??
         normalizeRoleKey(authUser.app_metadata?.role) ??
         "viewer";
+
+      // Sofort aus Session-Metadaten — ohne auf `profiles` zu warten (schnelleres Willkommen).
+      // Bei erneutem Hydrate (z. B. Token-Refresh) Anzeigename nicht zurück auf Metadaten setzen.
+      if (cancelled || gen !== hydrateGen) return;
+      setUser((prev) => {
+        if (prev.id === authUser.id) {
+          return { ...prev, isLoading: false };
+        }
+        return {
+          id: authUser.id,
+          email,
+          fullName: fallbackFullName,
+          roleKey: fallbackRoleKey,
+          initials: buildInitials(fallbackFullName, email),
+          isLoading: false,
+        };
+      });
 
       const { data: profile } = await supabase
         .from("profiles")

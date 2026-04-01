@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   BarChart3,
@@ -18,6 +19,8 @@ import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/comp
 import { useTranslation } from "@/i18n/I18nProvider";
 import { DASHBOARD_PAGE_SHELL } from "@/shared/lib/dashboardUi";
 import { useUser } from "@/shared/hooks/useUser";
+
+const HOME_ONBOARDING_TUTORIAL_DONE_KEY = "dashboard.home.onboardingTutorial.v1";
 
 type HomeTileKey =
   | "analyticsMarketplaces"
@@ -89,11 +92,41 @@ const HOME_TILES: HomeTile[] = [
 export default function DashboardHome() {
   const { t } = useTranslation();
   const user = useUser();
-  const firstName = user.isLoading ? null : (user.fullName.split(" ")[0] || user.fullName);
+  const welcomeLoading = user.isLoading && !user.id;
+  const firstName = user.id
+    ? (user.fullName.split(" ")[0] || user.fullName).trim() || user.fullName
+    : null;
+
+  const [onboardingReady, setOnboardingReady] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const done = localStorage.getItem(HOME_ONBOARDING_TUTORIAL_DONE_KEY) === "1";
+      setOnboardingOpen(!done);
+    } catch {
+      setOnboardingOpen(true);
+    } finally {
+      setOnboardingReady(true);
+    }
+  }, []);
+
+  const dismissOnboardingTutorial = useCallback(() => {
+    try {
+      localStorage.setItem(HOME_ONBOARDING_TUTORIAL_DONE_KEY, "1");
+    } catch {
+      // ignore
+    }
+    setOnboardingOpen(false);
+  }, []);
 
   return (
     <div className={cn(DASHBOARD_PAGE_SHELL, "gap-8")}>
-      {firstName ? (
+      {welcomeLoading ? (
+        <section className="rounded-2xl border border-border/70 bg-card/60 px-5 py-7 text-sm text-muted-foreground">
+          {t("common.loading")}
+        </section>
+      ) : firstName ? (
         <WelcomeHero firstName={firstName} />
       ) : (
         <section className="rounded-2xl border border-border/70 bg-card/60 px-5 py-7 text-sm text-muted-foreground">
@@ -101,29 +134,39 @@ export default function DashboardHome() {
         </section>
       )}
 
-      <section className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-5 shadow-sm">
-        <div className="space-y-1.5">
-          <p className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden />
-            Onboarding
-          </p>
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">{t("home.onboardingTitle")}</h2>
-          <p className="text-sm text-foreground/80">{t("home.onboardingLead")}</p>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
+      {onboardingReady && onboardingOpen ? (
+        <section className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-5 shadow-sm">
           <div className="space-y-1.5">
+            <p className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden />
+              Onboarding
+            </p>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">{t("home.onboardingTitle")}</h2>
+            <p className="text-sm text-foreground/80">{t("home.onboardingLead")}</p>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
             <Link
               href="https://drive.google.com/drive/folders/1h09BZ7mfMXb4Zh0ADhhZFu4RCC4qNzW_"
               target="_blank"
               rel="noopener noreferrer"
               className={cn(buttonVariants({ size: "lg", variant: "default" }), "h-11 px-6 text-base")}
             >
-              Onbaording-Tutorial
+              {t("home.onboardingDriveCta")}
             </Link>
+            <button
+              type="button"
+              onClick={dismissOnboardingTutorial}
+              className={cn(
+                buttonVariants({ size: "lg", variant: "secondary" }),
+                "h-11 border border-border/80 bg-muted px-6 text-base text-foreground hover:bg-muted/90",
+              )}
+            >
+              {t("home.onboardingMarkDone")}
+            </button>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       <section className="space-y-4" aria-labelledby="home-tiles-heading">
         <div className="flex items-center gap-2.5">
