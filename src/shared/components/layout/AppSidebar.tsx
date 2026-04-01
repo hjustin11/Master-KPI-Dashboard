@@ -453,15 +453,9 @@ function SingleNavItem({
   const subnavCollapsible = !collapsed && hasSubnav;
   const bellState: UpdatesBellState = item.key === "updates" ? (updatesBellState ?? "none") : "none";
   const hasBellHighlight = bellState !== "none";
-  const bellActiveClass =
-    bellState === "feedback"
-      ? "text-sky-700 dark:text-sky-300"
-      : "text-amber-700 dark:text-amber-300";
+  const bellActiveClass = "text-amber-700 dark:text-amber-300";
   /** Immer dunkle Schrift auf der hellen Akzentfläche — `dark:text-*` würde bei OS-Dark-Mode hellgrau erzwingen und „verschwindet“ auf Gelb. */
-  const bellAccentRowClass =
-    bellState === "feedback"
-      ? "border-sky-400/70 bg-sky-400/10 !text-black"
-      : "border-amber-400/70 bg-amber-400/10 !text-black";
+  const bellAccentRowClass = "border-amber-400/70 bg-amber-400/10 !text-black";
 
   const childOrSelfActive = useMemo(
     () =>

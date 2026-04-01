@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Loader2, RotateCw } from "lucide-react";
+import { Loader2, PencilLine, Plus, RotateCw, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -12,6 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/shared/components/DataTable";
 import {
@@ -33,6 +43,21 @@ import {
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
 import type { MarketplaceProductListRow } from "@/shared/lib/marketplaceProductList";
+import { useUser } from "@/shared/hooks/useUser";
+import {
+  type AmazonProductDraftMode,
+  type AmazonProductDraftRecord,
+  type AmazonProductDraftValues,
+  deriveDraftStatus,
+  draftValuesFromSource,
+  emptyDraftValues,
+  sourceSnapshotFromRow,
+} from "@/shared/lib/amazonProductDraft";
+import {
+  getAmazonProductTypeOptions,
+  getAmazonProductTypeSchema,
+  getMissingAmazonRequiredFields,
+} from "@/shared/lib/amazonProductTypeSchema";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
 
@@ -51,6 +76,20 @@ type CachedProductsPayload = {
   savedAt: number;
   items: MarketplaceProductListRow[];
   totalCount?: number;
+};
+
+type DraftApiPayload = {
+  item?: AmazonProductDraftRecord | null;
+  items?: AmazonProductDraftRecord[];
+  tableMissing?: boolean;
+  error?: string;
+};
+
+type AmazonProductDetailPayload = {
+  sourceSnapshot?: ReturnType<typeof sourceSnapshotFromRow>;
+  draftValues?: AmazonProductDraftValues;
+  draft?: AmazonProductDraftRecord | null;
+  error?: string;
 };
 
 export type MarketplaceProductsViewProps = {
@@ -78,10 +117,36 @@ export type MarketplaceProductsViewProps = {
    * Hintergrund-Abgleich (Standard 5 Min). Für schwere Listen (z. B. Amazon SP-API) ggf. höher setzen.
    */
   backgroundSyncIntervalMs?: number;
+  /** Vorbereitung Produkteditor (Owner) – aktuell nur für Amazon vorgesehen. */
+  enableAmazonEditor?: boolean;
 };
 
 const REPORT_PENDING_MAX_ATTEMPTS = 36;
 const REPORT_PENDING_DELAY_CAP_MS = 45_000;
+const AMAZON_DRAFT_IMAGE_MAX_FILES_PER_DROP = 8;
+const AMAZON_DRAFT_IMAGE_MAX_MB = 8;
+
+function isLikelyImageUrl(value: string): boolean {
+  const v = value.trim();
+  if (!v) return false;
+  if (/^data:image\//i.test(v)) return true;
+  try {
+    const url = new URL(v);
+    if (!/^https?:$/i.test(url.protocol)) return false;
+    return /\.(png|jpe?g|webp|gif|avif|bmp|svg)(\?|#|$)/i.test(url.pathname) || url.searchParams.has("image");
+  } catch {
+    return false;
+  }
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.readAsDataURL(file);
+  });
+}
 
 export function MarketplaceProductsView({
   apiUrl,
@@ -95,8 +160,12 @@ export function MarketplaceProductsView({
   serverPagination = false,
   pageSize: pageSizeProp = 50,
   backgroundSyncIntervalMs = DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
+  enableAmazonEditor = false,
 }: MarketplaceProductsViewProps) {
   const { t, locale } = useTranslation();
+  const user = useUser();
+  const isOwner = !user.isLoading && user.roleKey?.toLowerCase() === "owner";
+  const canEditProducts = enableAmazonEditor && isOwner;
   const [status, setStatus] = useState<ProductStatus>("active");
   const [pageIndex, setPageIndex] = useState(0);
   const [totalCount, setTotalCount] = useState<number | null>(null);
@@ -108,7 +177,28 @@ export function MarketplaceProductsView({
   );
   const [pendingInfo, setPendingInfo] = useState<string | null>(null);
   const [hasMounted, setHasMounted] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<AmazonProductDraftMode>("edit_existing");
+  const [editorSource, setEditorSource] = useState<MarketplaceProductListRow | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [draftValues, setDraftValues] = useState<AmazonProductDraftValues>(() => emptyDraftValues());
+  const [draftStatus, setDraftStatus] = useState<"draft" | "ready">("draft");
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [draftTableMissing, setDraftTableMissing] = useState(false);
+  const [imageDropActive, setImageDropActive] = useState(false);
   const statusRef = useRef(status);
+  const selectedProductTypeSchema = useMemo(
+    () => getAmazonProductTypeSchema(draftValues.productType),
+    [draftValues.productType]
+  );
+  const missingRequiredFields = useMemo(
+    () => (editorMode === "create_new" ? getMissingAmazonRequiredFields(draftValues) : []),
+    [editorMode, draftValues]
+  );
+  const productTypeOptions = useMemo(() => getAmazonProductTypeOptions(), []);
+
   const pageIndexRef = useRef(pageIndex);
   const rowsRef = useRef(rows);
   /** Nur für nicht-stille Loads — stille Polls erhöhen das nicht, damit Hintergrund-Sync keinen Nutzer-Fetch abbricht. */
@@ -163,6 +253,193 @@ export function MarketplaceProductsView({
     return new Intl.NumberFormat(intlLocaleTag(locale)).format(n);
   }, [serverPagination, totalCount, rows.length, locale]);
 
+  const saveDraft = useCallback(async () => {
+    const mode = editorMode;
+    const values = {
+      ...draftValues,
+      bulletPoints: draftValues.bulletPoints.map((x) => x.trim()).filter(Boolean),
+      images: draftValues.images.map((x) => x.trim()).filter(Boolean),
+    };
+    const sourceBase = editorSource
+      ? sourceSnapshotFromRow(editorSource)
+      : sourceSnapshotFromRow({
+          sku: values.sku,
+          secondaryId: values.asin,
+          title: values.title,
+          statusLabel: "",
+          isActive: true,
+        });
+    const source = {
+      ...sourceBase,
+      sku: values.sku || sourceBase.sku,
+      asin: values.asin || sourceBase.asin,
+      title: values.title || sourceBase.title,
+      description: values.description,
+      bulletPoints: values.bulletPoints,
+      images: values.images,
+      productType: values.productType,
+      brand: values.brand,
+      conditionType: values.conditionType,
+      externalProductId: values.externalProductId,
+      externalProductIdType: values.externalProductIdType,
+      listPriceEur: values.listPriceEur ? Number(values.listPriceEur) : null,
+      quantity: values.quantity ? Number(values.quantity) : null,
+      attributes: values.attributes,
+    };
+    const statusOut = deriveDraftStatus(values, mode);
+    setDraftSaving(true);
+    setDraftError(null);
+    try {
+      const method = mode === "create_new" && !draftId ? "POST" : "PUT";
+      const res = await fetch("/api/amazon/products/drafts", {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: draftId ?? undefined,
+          mode,
+          sku: values.sku || editorSource?.sku || undefined,
+          sourceSnapshot: source,
+          draftValues: values,
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as DraftApiPayload;
+      if (!res.ok) throw new Error(payload.error ?? "Entwurf konnte nicht gespeichert werden.");
+      const item = payload.item ?? null;
+      if (item?.id) setDraftId(item.id);
+      setDraftStatus(statusOut);
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : t("commonUi.unknownError"));
+    } finally {
+      setDraftSaving(false);
+    }
+  }, [draftId, draftValues, editorMode, editorSource, t]);
+
+  const loadDraft = useCallback(
+    async (sku: string, mode: AmazonProductDraftMode) => {
+      setDraftLoading(true);
+      setDraftError(null);
+      setDraftTableMissing(false);
+      try {
+        if (mode === "edit_existing" && sku) {
+          const detailRes = await fetch(`/api/amazon/products/${encodeURIComponent(sku)}`, {
+            cache: "no-store",
+          });
+          const detailPayload = (await detailRes.json().catch(() => ({}))) as AmazonProductDetailPayload;
+          if (!detailRes.ok) {
+            throw new Error(detailPayload.error ?? "Produktdetails konnten nicht geladen werden.");
+          }
+          const nextValues = detailPayload.draftValues ?? draftValuesFromSource(detailPayload.sourceSnapshot ?? sourceSnapshotFromRow({
+            sku,
+            secondaryId: "",
+            title: "",
+            statusLabel: "",
+            isActive: true,
+          }));
+          setDraftValues(nextValues);
+          if (detailPayload.draft?.id) {
+            setDraftId(detailPayload.draft.id);
+            setDraftStatus(
+              detailPayload.draft.status ??
+                deriveDraftStatus(detailPayload.draft.draft_values ?? nextValues, mode)
+            );
+          } else {
+            setDraftId(null);
+            setDraftStatus(deriveDraftStatus(nextValues, mode));
+          }
+          return;
+        }
+
+        const q = new URLSearchParams();
+        if (sku) q.set("sku", sku);
+        q.set("mode", mode);
+        const res = await fetch(`/api/amazon/products/drafts?${q.toString()}`, { cache: "no-store" });
+        const payload = (await res.json().catch(() => ({}))) as DraftApiPayload;
+        if (payload.tableMissing) {
+          setDraftTableMissing(true);
+          return;
+        }
+        if (!res.ok) throw new Error(payload.error ?? "Entwurf konnte nicht geladen werden.");
+        const item = payload.item ?? null;
+        if (!item) {
+          setDraftId(null);
+          return;
+        }
+        setDraftId(item.id);
+        setDraftValues(item.draft_values ?? emptyDraftValues());
+        setDraftStatus(item.status ?? deriveDraftStatus(item.draft_values ?? emptyDraftValues(), mode));
+      } catch (e) {
+        setDraftError(e instanceof Error ? e.message : t("commonUi.unknownError"));
+      } finally {
+        setDraftLoading(false);
+      }
+    },
+    [t]
+  );
+
+  const openEditorForRow = useCallback(
+    (row: MarketplaceProductListRow) => {
+      const source = sourceSnapshotFromRow(row);
+      setEditorMode("edit_existing");
+      setEditorSource(row);
+      setDraftId(null);
+      const initial = draftValuesFromSource(source);
+      setDraftValues(initial);
+      setDraftStatus(deriveDraftStatus(initial, "edit_existing"));
+      setEditorOpen(true);
+      void loadDraft(row.sku, "edit_existing");
+    },
+    [loadDraft]
+  );
+
+  const openCreateEditor = useCallback(() => {
+    setEditorMode("create_new");
+    setEditorSource(null);
+    setDraftId(null);
+    const initial = emptyDraftValues();
+    setDraftValues(initial);
+    setDraftStatus("draft");
+    setDraftError(null);
+    setDraftTableMissing(false);
+    setEditorOpen(true);
+  }, []);
+
+  const handleImageDrop = useCallback(
+    async (dataTransfer: DataTransfer) => {
+      const droppedUrls = [
+        dataTransfer.getData("text/uri-list"),
+        dataTransfer.getData("text/plain"),
+      ]
+        .join("\n")
+        .split("\n")
+        .map((x) => x.trim())
+        .filter(isLikelyImageUrl);
+      const files = Array.from(dataTransfer.files ?? [])
+        .filter((file) => file.type.startsWith("image/"))
+        .slice(0, AMAZON_DRAFT_IMAGE_MAX_FILES_PER_DROP);
+      const tooLarge = files.find((file) => file.size > AMAZON_DRAFT_IMAGE_MAX_MB * 1024 * 1024);
+      if (tooLarge) {
+        setDraftError(`Bild zu groß: ${tooLarge.name}. Maximal ${AMAZON_DRAFT_IMAGE_MAX_MB} MB pro Datei.`);
+        return;
+      }
+      let fileDataUrls: string[] = [];
+      if (files.length > 0) {
+        try {
+          fileDataUrls = (await Promise.all(files.map((file) => readFileAsDataUrl(file)))).filter(Boolean);
+        } catch (e) {
+          setDraftError(e instanceof Error ? e.message : "Bilder konnten nicht verarbeitet werden.");
+          return;
+        }
+      }
+      if (droppedUrls.length === 0 && fileDataUrls.length === 0) return;
+      setDraftValues((prev) => ({
+        ...prev,
+        images: [...prev.images, ...droppedUrls, ...fileDataUrls].slice(0, 20),
+      }));
+      setDraftError(null);
+    },
+    []
+  );
+
   const columns = useMemo<Array<ColumnDef<MarketplaceProductListRow>>>(
     () => [
       {
@@ -199,8 +476,8 @@ export function MarketplaceProductsView({
         accessorKey: "title",
         header: t("marketplaceProducts.articleName"),
         meta: {
-          thClassName: MARKETPLACE_PRODUCTS_COL_TITLE,
-          tdClassName: MARKETPLACE_PRODUCTS_COL_TITLE,
+          thClassName: canEditProducts ? "w-[46%] min-w-0" : MARKETPLACE_PRODUCTS_COL_TITLE,
+          tdClassName: canEditProducts ? "w-[46%] min-w-0" : MARKETPLACE_PRODUCTS_COL_TITLE,
           headerLabelClassName: "truncate",
           headerButtonClassName: "min-w-0 max-w-full",
         },
@@ -228,8 +505,33 @@ export function MarketplaceProductsView({
           </Badge>
         ),
       },
+      ...(canEditProducts
+        ? ([
+            {
+              id: "editorAction",
+              enableSorting: false,
+              header: "",
+              meta: {
+                thClassName: "w-[12%] min-w-0 text-right",
+                tdClassName: "w-[12%] min-w-0 text-right",
+              },
+              cell: ({ row }: { row: { original: MarketplaceProductListRow } }) => (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-[10px]"
+                  onClick={() => openEditorForRow(row.original)}
+                >
+                  <PencilLine className="mr-1 h-3.5 w-3.5" aria-hidden />
+                  Bearbeiten
+                </Button>
+              ),
+            },
+          ] satisfies Array<ColumnDef<MarketplaceProductListRow>>)
+        : []),
     ],
-    [t]
+    [t, canEditProducts, openEditorForRow]
   );
 
   const load = useCallback(
@@ -443,6 +745,12 @@ export function MarketplaceProductsView({
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            {canEditProducts ? (
+              <Button type="button" variant="outline" size="sm" onClick={openCreateEditor} className="h-8 gap-1.5">
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+                Artikel anlegen
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -523,7 +831,7 @@ export function MarketplaceProductsView({
             getRowId={(row) => `${row.sku}\u0000${row.secondaryId}`}
             compact
             className="flex-1 min-h-0"
-            tableWrapClassName="min-h-0"
+            tableWrapClassName="min-h-0 [&_[data-slot=table-head]]:!h-5 [&_[data-slot=table-head]]:!px-0.5 [&_[data-slot=table-head]]:!py-0 [&_[data-slot=table-head]]:!text-[9px] [&_[data-slot=table-cell]]:!px-0.5 [&_[data-slot=table-cell]]:!py-0 [&_[data-slot=table-cell]]:!text-[10px]"
             tableClassName={MARKETPLACE_PRODUCTS_TABLE_CLASS}
           />
           {serverPagination && totalCount != null && totalCount > pageSizeProp ? (
@@ -558,6 +866,336 @@ export function MarketplaceProductsView({
           ) : null}
         </>
       )}
+      <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
+        <DialogContent className="max-h-[96vh] w-[min(96rem,calc(100vw-1.25rem))] max-w-[calc(100%-1rem)] overflow-y-auto sm:max-w-none">
+          <DialogHeader>
+            <DialogTitle>
+              {editorMode === "create_new" ? "Neuen Amazon-Artikel vorbereiten" : "Amazon-Artikel bearbeiten"}
+            </DialogTitle>
+            <DialogDescription>
+              Entwurf im Dashboard. Es wird noch nichts an Amazon übertragen.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+              Pflichtfelder bei Amazon sind je Kategorie/Produkttyp unterschiedlich. Diese Maske deckt die
+              allgemeinen Kernfelder ab; kategoriespezifische Attribute folgen im nächsten Schritt.
+            </div>
+            {draftTableMissing ? (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700">
+                Tabelle für Produkt-Entwürfe fehlt. Bitte Supabase-Migration ausführen.
+              </div>
+            ) : null}
+            {draftError ? (
+              <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700">
+                {draftError}
+              </div>
+            ) : null}
+            {editorMode === "create_new" && missingRequiredFields.length > 0 ? (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800">
+                <p className="font-medium">Für Amazon fehlen noch Pflichtfelder:</p>
+                <p className="mt-1 text-xs">{missingRequiredFields.map((x) => x.label).join(" • ")}</p>
+              </div>
+            ) : null}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">SKU</span>
+                <Input
+                  value={draftValues.sku}
+                  onChange={(e) => setDraftValues((prev) => ({ ...prev, sku: e.target.value }))}
+                  placeholder="z. B. ASTRO-123"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">ASIN</span>
+                <Input
+                  value={draftValues.asin}
+                  onChange={(e) => setDraftValues((prev) => ({ ...prev, asin: e.target.value }))}
+                  placeholder="z. B. B0..."
+                />
+              </label>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">Produkttyp (Amazon)</span>
+                <Select
+                  value={draftValues.productType || "__none__"}
+                  onValueChange={(value) =>
+                    setDraftValues((prev) => ({
+                      ...prev,
+                      productType: !value || value === "__none__" ? "" : value,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Produkttyp wählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nicht gewählt</SelectItem>
+                    {productTypeOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.value} - {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">Marke</span>
+                <Input
+                  value={draftValues.brand}
+                  onChange={(e) => setDraftValues((prev) => ({ ...prev, brand: e.target.value }))}
+                  placeholder="Brand"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">Zustand</span>
+                <Select
+                  value={draftValues.conditionType || "new_new"}
+                  onValueChange={(value) =>
+                    setDraftValues((prev) => ({ ...prev, conditionType: value ?? "new_new" }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new_new">Neu</SelectItem>
+                    <SelectItem value="used_like_new">Gebraucht – Wie neu</SelectItem>
+                    <SelectItem value="used_very_good">Gebraucht – Sehr gut</SelectItem>
+                    <SelectItem value="used_good">Gebraucht – Gut</SelectItem>
+                    <SelectItem value="used_acceptable">Gebraucht – Akzeptabel</SelectItem>
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">Externe Produkt-ID</span>
+                <Input
+                  value={draftValues.externalProductId}
+                  onChange={(e) => setDraftValues((prev) => ({ ...prev, externalProductId: e.target.value }))}
+                  placeholder="EAN/UPC/GTIN/ISBN"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">ID-Typ</span>
+                <Select
+                  value={draftValues.externalProductIdType}
+                  onValueChange={(value) =>
+                    setDraftValues((prev) => ({
+                      ...prev,
+                      externalProductIdType: value as "ean" | "upc" | "gtin" | "isbn" | "none",
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ean">EAN</SelectItem>
+                    <SelectItem value="upc">UPC</SelectItem>
+                    <SelectItem value="gtin">GTIN</SelectItem>
+                    <SelectItem value="isbn">ISBN</SelectItem>
+                    <SelectItem value="none">Keine (GTIN exemption)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">Preis (EUR)</span>
+                <Input
+                  value={draftValues.listPriceEur}
+                  onChange={(e) => setDraftValues((prev) => ({ ...prev, listPriceEur: e.target.value }))}
+                  placeholder="z. B. 29.99"
+                  inputMode="decimal"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted-foreground">Bestand</span>
+                <Input
+                  value={draftValues.quantity}
+                  onChange={(e) => setDraftValues((prev) => ({ ...prev, quantity: e.target.value }))}
+                  placeholder="z. B. 120"
+                  inputMode="numeric"
+                />
+              </label>
+            </div>
+            {selectedProductTypeSchema ? (
+              <div className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3">
+                <p className="text-sm font-medium">
+                  Kategorieattribute ({selectedProductTypeSchema.label})
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {selectedProductTypeSchema.attributes.map((field) => (
+                    <label key={field.key} className="space-y-1 text-sm">
+                      <span className="text-muted-foreground">
+                        {field.label}
+                        {field.required ? " *" : ""}
+                      </span>
+                      <Input
+                        value={draftValues.attributes[field.key] ?? ""}
+                        onChange={(e) =>
+                          setDraftValues((prev) => ({
+                            ...prev,
+                            attributes: {
+                              ...prev.attributes,
+                              [field.key]: e.target.value,
+                            },
+                          }))
+                        }
+                        placeholder={field.placeholder}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <label className="space-y-1 text-sm">
+              <span className="text-muted-foreground">Titel</span>
+              <Input
+                value={draftValues.title}
+                onChange={(e) => setDraftValues((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Produkttitel"
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-muted-foreground">Beschreibung</span>
+              <Textarea
+                value={draftValues.description}
+                onChange={(e) => setDraftValues((prev) => ({ ...prev, description: e.target.value }))}
+                className="min-h-[120px]"
+                placeholder="Lange Beschreibung"
+              />
+            </label>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Bulletpoints</p>
+              {[0, 1, 2, 3, 4].map((idx) => (
+                <Input
+                  key={`bp-${idx}`}
+                  value={draftValues.bulletPoints[idx] ?? ""}
+                  onChange={(e) =>
+                    setDraftValues((prev) => {
+                      const next = [...prev.bulletPoints];
+                      next[idx] = e.target.value;
+                      return { ...prev, bulletPoints: next };
+                    })
+                  }
+                  placeholder={`Bulletpoint ${idx + 1}`}
+                />
+              ))}
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm text-muted-foreground">Bilder (URLs)</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setDraftValues((prev) => ({ ...prev, images: [...prev.images, ""] }))
+                  }
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" aria-hidden />
+                  Bild hinzufügen
+                </Button>
+              </div>
+              <div
+                className={cn(
+                  "rounded-md border border-dashed p-4 text-center text-sm transition-colors",
+                  imageDropActive
+                    ? "border-primary/70 bg-primary/5 text-foreground"
+                    : "border-border/70 bg-muted/20 text-muted-foreground"
+                )}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setImageDropActive(true);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!imageDropActive) setImageDropActive(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setImageDropActive(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setImageDropActive(false);
+                  void handleImageDrop(e.dataTransfer);
+                }}
+              >
+                <Upload className="mx-auto mb-2 h-5 w-5" aria-hidden />
+                Bilder hier hineinziehen (Dateien oder Bild-URLs). Max. {AMAZON_DRAFT_IMAGE_MAX_MB} MB pro Datei.
+              </div>
+              {(draftValues.images.length ? draftValues.images : [""]).map((url, idx) => (
+                <div key={`img-${idx}`} className="flex items-center gap-2">
+                  <Input
+                    value={url}
+                    onChange={(e) =>
+                      setDraftValues((prev) => {
+                        const next = [...prev.images];
+                        next[idx] = e.target.value;
+                        return { ...prev, images: next };
+                      })
+                    }
+                    placeholder="https://..."
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() =>
+                      setDraftValues((prev) => ({
+                        ...prev,
+                        images: prev.images.filter((_, imageIdx) => imageIdx !== idx),
+                      }))
+                    }
+                    aria-label="Bild entfernen"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                  </Button>
+                </div>
+              ))}
+              {draftValues.images.filter(Boolean).length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {draftValues.images
+                    .filter(Boolean)
+                    .slice(0, 8)
+                    .map((img) => (
+                      <a
+                        key={img}
+                        href={img}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block overflow-hidden rounded-md border border-border/60"
+                      >
+                        <img src={img} alt="Produktbild" className="h-24 w-full object-cover" loading="lazy" />
+                      </a>
+                    ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <DialogFooter className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">
+              Status: {draftLoading ? "lädt..." : draftStatus === "ready" ? "bereit" : "Entwurf"}
+              {editorMode === "create_new" && missingRequiredFields.length > 0
+                ? ` • ${missingRequiredFields.length} Pflichtfeld(er) fehlen`
+                : ""}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>
+                Schließen
+              </Button>
+              <Button type="button" onClick={() => void saveDraft()} disabled={draftSaving || draftLoading}>
+                {draftSaving ? "Speichert..." : "Entwurf speichern"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

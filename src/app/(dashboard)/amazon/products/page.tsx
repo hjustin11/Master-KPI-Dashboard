@@ -10,6 +10,7 @@ export default function AmazonProductsPage() {
       logoSrc="https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg"
       brandAlt="Amazon"
       amazonStatusFilter
+      enableAmazonEditor
       serverPagination
       pageSize={50}
       backgroundSyncIntervalMs={15 * 60 * 1000}
