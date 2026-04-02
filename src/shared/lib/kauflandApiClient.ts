@@ -1,6 +1,10 @@
 import crypto from "node:crypto";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
+import {
+  marketplaceIntegrationFreshMs,
+  marketplaceIntegrationStaleMs,
+} from "@/shared/lib/integrationCacheTtl";
 import { parseYmdParam, ymdToUtcRangeExclusiveEnd } from "@/shared/lib/orderDateParams";
 
 export { parseYmdParam, ymdToUtcRangeExclusiveEnd };
@@ -199,8 +203,8 @@ export async function fetchKauflandOrderUnitsAllStatuses(args: {
   return getIntegrationCachedOrLoad({
     cacheKey,
     source: "kaufland:order-units",
-    freshMs: 2 * 60 * 1000,
-    staleMs: 12 * 60 * 1000,
+    freshMs: marketplaceIntegrationFreshMs(),
+    staleMs: marketplaceIntegrationStaleMs(),
     loader: () => fetchKauflandOrderUnitsAllStatusesLive(args),
   });
 }

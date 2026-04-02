@@ -1,7 +1,14 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
-import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
+import {
+  getIntegrationCachedOrLoad,
+  writeIntegrationCache,
+} from "@/shared/lib/integrationDataCache";
+import {
+  marketplaceIntegrationFreshMs,
+  marketplaceIntegrationStaleMs,
+} from "@/shared/lib/integrationCacheTtl";
 import { parseYmdParam, ymdToUtcRangeExclusiveEnd } from "@/shared/lib/orderDateParams";
 
 export { parseYmdParam, ymdToUtcRangeExclusiveEnd };
@@ -786,11 +793,13 @@ export async function fetchFlexOrdersPaginated(
   options: FetchFlexOrdersOptions = {}
 ): Promise<FlexNormalizedOrder[]> {
   const key = flexOrdersCacheKey(config, options, "normalized");
+  const freshMs = marketplaceIntegrationFreshMs();
+  const staleMs = marketplaceIntegrationStaleMs();
   return getIntegrationCachedOrLoad({
     cacheKey: key,
     source: `flex:${config.spec.id}:orders:normalized`,
-    freshMs: 2 * 60 * 1000,
-    staleMs: 12 * 60 * 1000,
+    freshMs,
+    staleMs,
     loader: async () => {
       if (config.spec.id === "shopify") {
         return fetchShopifyOrdersPaginatedImpl(config, options);
@@ -811,13 +820,50 @@ export async function fetchFlexOrdersRawPaginated(
   options: FetchFlexOrdersOptions = {}
 ): Promise<unknown[]> {
   const key = flexOrdersCacheKey(config, options, "raw");
+  const freshMs = marketplaceIntegrationFreshMs();
+  const staleMs = marketplaceIntegrationStaleMs();
   return getIntegrationCachedOrLoad({
     cacheKey: key,
     source: `flex:${config.spec.id}:orders:raw`,
-    freshMs: 2 * 60 * 1000,
-    staleMs: 12 * 60 * 1000,
+    freshMs,
+    staleMs,
     loader: () => fetchFlexOrdersRawPaginatedLive(config, options),
   });
+}
+
+/**
+ * Cron/Prewarm: einmal Live-Fetch, dann raw + normalized Cache in einem Schritt füllen
+ * (vermeidet doppelte Marktplatz-Requests pro Zeitraum).
+ */
+export async function primeFlexOrdersCaches(
+  config: FlexIntegrationConfig,
+  options: FetchFlexOrdersOptions = {}
+): Promise<{ rawCount: number; normalizedCount: number }> {
+  const freshMs = marketplaceIntegrationFreshMs();
+  const staleMs = marketplaceIntegrationStaleMs();
+  const raw = await fetchFlexOrdersRawPaginatedLive(config, options);
+  const keyRaw = flexOrdersCacheKey(config, options, "raw");
+  await writeIntegrationCache({
+    cacheKey: keyRaw,
+    source: `flex:${config.spec.id}:orders:raw`,
+    value: raw,
+    freshMs,
+    staleMs,
+  });
+  const normalized: FlexNormalizedOrder[] = [];
+  for (const row of raw) {
+    const n = normalizeFlexOrder(row, config.amountScale);
+    if (n) normalized.push(n);
+  }
+  const keyNorm = flexOrdersCacheKey(config, options, "normalized");
+  await writeIntegrationCache({
+    cacheKey: keyNorm,
+    source: `flex:${config.spec.id}:orders:normalized`,
+    value: normalized,
+    freshMs,
+    staleMs,
+  });
+  return { rawCount: raw.length, normalizedCount: normalized.length };
 }
 
 export function filterOrdersByCreatedRange(

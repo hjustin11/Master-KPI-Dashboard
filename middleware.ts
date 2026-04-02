@@ -22,6 +22,8 @@ export async function middleware(request: NextRequest) {
     "/api/invitations/register-init",
     "/api/invitations/lookup",
     "/api/invitations/complete",
+    // Cron (Bearer CRON_SECRET / INTEGRATION_CACHE_WARM_SECRET) — kein User-Cookie.
+    "/api/integration-cache/warm",
   ];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)

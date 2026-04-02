@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { readIntegrationSecret } from "@/shared/lib/integrationSecrets";
 import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
+import {
+  marketplaceIntegrationFreshMs,
+  marketplaceIntegrationStaleMs,
+} from "@/shared/lib/integrationCacheTtl";
 import { parseYmdParam, ymdToUtcRangeExclusiveEnd } from "@/shared/lib/orderDateParams";
 
 export { parseYmdParam, ymdToUtcRangeExclusiveEnd };
@@ -201,8 +205,8 @@ export async function fetchOttoOrdersRange(args: {
   return getIntegrationCachedOrLoad({
     cacheKey,
     source: "otto:orders",
-    freshMs: 2 * 60 * 1000,
-    staleMs: 12 * 60 * 1000,
+    freshMs: marketplaceIntegrationFreshMs(),
+    staleMs: marketplaceIntegrationStaleMs(),
     loader: () => fetchOttoOrdersRangeLive(args),
   });
 }
@@ -505,8 +509,8 @@ export async function fetchOttoProductsAll(args: {
   return getIntegrationCachedOrLoad({
     cacheKey,
     source: "otto:products",
-    freshMs: 5 * 60 * 1000,
-    staleMs: 20 * 60 * 1000,
+    freshMs: marketplaceIntegrationFreshMs(),
+    staleMs: marketplaceIntegrationStaleMs(),
     loader: () => fetchOttoProductsAllLive(args),
   });
 }
