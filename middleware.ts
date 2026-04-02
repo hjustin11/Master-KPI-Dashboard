@@ -3,6 +3,15 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (process.env.NEXT_PHASE === "phase-production-build") {
+      return NextResponse.next({ request });
+    }
+    return new NextResponse("Konfigurationsfehler: NEXT_PUBLIC_SUPABASE_URL / Anon-Key fehlen.", {
+      status: 500,
+    });
+  }
+
   const publicPaths = [
     "/login",
     "/register",

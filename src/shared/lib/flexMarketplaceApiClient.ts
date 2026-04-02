@@ -28,6 +28,17 @@ export function resolveFlexBaseUrl(raw: string): string {
   }
 }
 
+/** Shopify Admin REST: nur `https://{shop}.myshopify.com` — Pfade würden zu doppelten `/admin/api/...` führen. */
+function shopifyAdminApiOriginOnly(resolvedBaseUrl: string): string {
+  const trimmed = resolvedBaseUrl.replace(/\/+$/, "");
+  try {
+    const u = new URL(trimmed);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return trimmed;
+  }
+}
+
 export type FlexAuthKind = "single_key" | "client_secret";
 
 /** `mirakl` = Authorization nur API-Key; `basic` = Basic client:secret (TikTok u. Ä.). */
@@ -128,7 +139,10 @@ export type FlexIntegrationConfig = {
 
 export async function getFlexIntegrationConfig(spec: FlexMarketplaceSpec): Promise<FlexIntegrationConfig> {
   const p = spec.envPrefix;
-  const baseUrl = resolveFlexBaseUrl(await readEnv(p, "API_BASE_URL"));
+  let baseUrl = resolveFlexBaseUrl(await readEnv(p, "API_BASE_URL"));
+  if (spec.id === "shopify" && baseUrl) {
+    baseUrl = shopifyAdminApiOriginOnly(baseUrl);
+  }
   const accessToken = await readEnv(p, "ACCESS_TOKEN");
   const apiKeyRaw = await readEnv(p, "API_KEY");
   const clientKeyRaw = await readEnv(p, "CLIENT_KEY");
@@ -154,6 +168,10 @@ export async function getFlexIntegrationConfig(spec: FlexMarketplaceSpec): Promi
   else if (authRaw === "basic") authMode = "basic";
   else if (authRaw === "shopify") authMode = "shopify";
   else authMode = "bearer";
+  // Admin REST erwartet X-Shopify-Access-Token — Bearer führt zu HTTP 401.
+  if (spec.id === "shopify") {
+    authMode = "shopify";
+  }
 
   const scaleRaw = await readEnv(p, "AMOUNT_SCALE");
   const amountScale = Math.max(1, Number(scaleRaw) || 1);

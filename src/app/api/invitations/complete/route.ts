@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 import { confirmAuthUserEmail } from "@/shared/lib/supabase/confirm-invited-email";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/shared/lib/supabase/env";
+import { assertSupabasePublicEnv, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/shared/lib/supabase/env";
 import { type Role } from "@/shared/lib/invitations";
 import { normalizeRoleKey } from "@/shared/lib/roles";
 
@@ -148,6 +148,7 @@ export async function POST(request: Request) {
 
   // Sitzung serverseitig mit Anon-Key erzeugen und an den Client übergeben — zuverlässiger als
   // nur clientseitiges signInWithPassword direkt nach dem Passwort-Update (Timing/Confirm).
+  assertSupabasePublicEnv();
   const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
