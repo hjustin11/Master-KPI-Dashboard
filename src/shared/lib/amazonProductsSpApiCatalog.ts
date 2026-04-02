@@ -177,10 +177,12 @@ export async function loadAmazonSpApiProductsConfig() {
   };
 }
 
+export type AmazonSpApiProductsConfig = Awaited<ReturnType<typeof loadAmazonSpApiProductsConfig>>;
+
 /** Prozess-lokal: weniger LWA-Roundtrips bei parallelen Dashboard-Requests. */
 let lwaAccessTokenCache: { token: string; expiresAtMs: number } | null = null;
 
-export async function getLwaAccessToken(args: {
+async function getLwaAccessToken(args: {
   refreshToken: string;
   lwaClientId: string;
   lwaClientSecret: string;
@@ -224,6 +226,14 @@ export async function getLwaAccessToken(args: {
     expiresAtMs: now + expiresInSec * 1000,
   };
   return token;
+}
+
+export async function getAmazonProductsLwaToken(config: AmazonSpApiProductsConfig): Promise<string> {
+  return getLwaAccessToken({
+    refreshToken: config.refreshToken,
+    lwaClientId: config.lwaClientId,
+    lwaClientSecret: config.lwaClientSecret,
+  });
 }
 
 async function spApiGet(args: {
@@ -567,8 +577,6 @@ function isActiveStatus(statuses: string[]) {
   const normalized = statuses.map((s) => s.toUpperCase());
   return normalized.includes("BUYABLE") || normalized.includes("DISCOVERABLE");
 }
-
-export type AmazonSpApiProductsConfig = Awaited<ReturnType<typeof loadAmazonSpApiProductsConfig>>;
 
 export async function resolveEffectiveAmazonSellerId(
   config: AmazonSpApiProductsConfig,

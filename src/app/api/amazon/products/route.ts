@@ -3,7 +3,7 @@ import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import { readIntegrationCache } from "@/shared/lib/integrationDataCache";
 import {
   filterRowsByStatus,
-  getLwaAccessToken,
+  getAmazonProductsLwaToken,
   loadAmazonSpApiProductsConfig,
   paginateRows,
   parsePaginationParam,
@@ -42,11 +42,7 @@ export async function GET(request: Request) {
     const marketplaceId = config.marketplaceIds[0];
     const cacheKey = `amazon:products:${marketplaceId}`;
 
-    const lwaAccessToken = await getLwaAccessToken({
-      refreshToken: config.refreshToken,
-      lwaClientId: config.lwaClientId,
-      lwaClientSecret: config.lwaClientSecret,
-    });
+    const lwaAccessToken = await getAmazonProductsLwaToken(config);
 
     const effectiveSellerId = await resolveEffectiveAmazonSellerId(config, lwaAccessToken);
     if (!effectiveSellerId) {
