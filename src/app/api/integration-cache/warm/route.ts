@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { primeAmazonProductsIntegrationCache } from "@/shared/lib/amazonProductsSpApiCatalog";
 import {
   FLEX_DAY_MS,
   FLEX_MARKETPLACE_EBAY_SPEC,
@@ -120,10 +121,25 @@ async function handleWarm(request: Request): Promise<Response> {
 
   const started = Date.now();
   const flex = await runFlexMarketplaceWarm(dayWindows);
+
+  const amazonStarted = Date.now();
+  let amazon: Awaited<ReturnType<typeof primeAmazonProductsIntegrationCache>> & { durationMs: number };
+  try {
+    const ar = await primeAmazonProductsIntegrationCache();
+    amazon = { ...ar, durationMs: Date.now() - amazonStarted };
+  } catch (e) {
+    amazon = {
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+      durationMs: Date.now() - amazonStarted,
+    };
+  }
+
   return NextResponse.json({
     ok: true,
     durationMs: Date.now() - started,
     flex,
+    amazon,
     dayWindows,
   });
 }
