@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
+
+export const maxDuration = 60;
 import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import {
   MAX_ANALYTICS_RANGE_DAYS,
@@ -7,6 +9,10 @@ import {
   type CompareMode,
 } from "@/shared/lib/analytics-date-range";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import {
+  amazonSpApiGetWithQuotaRetry,
+  amazonSpApiSleepMs,
+} from "@/shared/lib/amazonSpApiQuotaRetry";
 import {
   buildNetBreakdown,
   estimateMarketplaceFeeAmount,
@@ -114,6 +120,15 @@ async function getConfig() {
     .map((v) => v.trim())
     .filter(Boolean);
 
+  const max429Retries = Math.min(
+    30,
+    Math.max(1, Number(await getIntegrationSecretValue("AMAZON_SP_API_MAX_429_RETRIES")) || 10)
+  );
+  const ordersPageDelayMs = Math.max(
+    0,
+    Number(await getIntegrationSecretValue("AMAZON_SP_API_ORDERS_PAGE_DELAY_MS")) || 500
+  );
+
   return {
     refreshToken,
     lwaClientId,
@@ -124,6 +139,8 @@ async function getConfig() {
     region,
     endpoint,
     marketplaceIds,
+    max429Retries,
+    ordersPageDelayMs,
   };
 }
 
@@ -265,23 +282,28 @@ async function fetchSalesOrderMetricsTotal(args: {
   marketplaceIds: string[];
   startMs: number;
   endMs: number;
+  max429Retries: number;
 }): Promise<{ orderCount: number; salesAmount: number; units: number; currency: string } | null> {
   const { startMs, endMs } = args;
   const interval = `${new Date(startMs).toISOString()}--${new Date(endMs).toISOString()}`;
-  const ordersResult = await spApiGet({
-    endpoint: args.endpoint,
-    region: args.region,
-    path: "/sales/v1/orderMetrics",
-    query: {
-      marketplaceIds: args.marketplaceIds.join(","),
-      interval,
-      granularity: "Total",
-    },
-    awsAccessKeyId: args.awsAccessKeyId,
-    awsSecretAccessKey: args.awsSecretAccessKey,
-    awsSessionToken: args.awsSessionToken,
-    lwaAccessToken: args.lwaAccessToken,
-  });
+  const ordersResult = await amazonSpApiGetWithQuotaRetry(
+    () =>
+      spApiGet({
+        endpoint: args.endpoint,
+        region: args.region,
+        path: "/sales/v1/orderMetrics",
+        query: {
+          marketplaceIds: args.marketplaceIds.join(","),
+          interval,
+          granularity: "Total",
+        },
+        awsAccessKeyId: args.awsAccessKeyId,
+        awsSecretAccessKey: args.awsSecretAccessKey,
+        awsSessionToken: args.awsSessionToken,
+        lwaAccessToken: args.lwaAccessToken,
+      }),
+    { max429Retries: args.max429Retries }
+  );
 
   if (!ordersResult.res.ok || !ordersResult.json) {
     return null;
@@ -326,24 +348,29 @@ async function fetchSalesOrderMetricsDaySeries(args: {
   marketplaceIds: string[];
   startMs: number;
   endMs: number;
+  max429Retries: number;
 }): Promise<SalesPoint[] | null> {
   const tz = (await getIntegrationSecretValue("AMAZON_SALES_GRANULARITY_TIMEZONE")) || "Europe/Berlin";
   const interval = `${new Date(args.startMs).toISOString()}--${new Date(args.endMs).toISOString()}`;
-  const ordersResult = await spApiGet({
-    endpoint: args.endpoint,
-    region: args.region,
-    path: "/sales/v1/orderMetrics",
-    query: {
-      marketplaceIds: args.marketplaceIds.join(","),
-      interval,
-      granularity: "Day",
-      granularityTimeZone: tz,
-    },
-    awsAccessKeyId: args.awsAccessKeyId,
-    awsSecretAccessKey: args.awsSecretAccessKey,
-    awsSessionToken: args.awsSessionToken,
-    lwaAccessToken: args.lwaAccessToken,
-  });
+  const ordersResult = await amazonSpApiGetWithQuotaRetry(
+    () =>
+      spApiGet({
+        endpoint: args.endpoint,
+        region: args.region,
+        path: "/sales/v1/orderMetrics",
+        query: {
+          marketplaceIds: args.marketplaceIds.join(","),
+          interval,
+          granularity: "Day",
+          granularityTimeZone: tz,
+        },
+        awsAccessKeyId: args.awsAccessKeyId,
+        awsSecretAccessKey: args.awsSecretAccessKey,
+        awsSessionToken: args.awsSessionToken,
+        lwaAccessToken: args.lwaAccessToken,
+      }),
+    { max429Retries: args.max429Retries }
+  );
 
   if (!ordersResult.res.ok || !ordersResult.json) {
     return null;
@@ -392,6 +419,9 @@ async function fetchOrdersForFbaUnits(args: {
   let nextToken = "";
   let guard = 0;
   while (guard < 20) {
+    if (nextToken && args.config.ordersPageDelayMs > 0) {
+      await amazonSpApiSleepMs(args.config.ordersPageDelayMs);
+    }
     const query: Record<string, string> = nextToken
       ? { NextToken: nextToken }
       : {
@@ -399,16 +429,20 @@ async function fetchOrdersForFbaUnits(args: {
           CreatedAfter: args.createdAfterIso,
           MaxResultsPerPage: "100",
         };
-    const ordersResult = await spApiGet({
-      endpoint: args.config.endpoint,
-      region: args.config.region,
-      path: "/orders/v0/orders",
-      query,
-      awsAccessKeyId: args.config.awsAccessKeyId,
-      awsSecretAccessKey: args.config.awsSecretAccessKey,
-      awsSessionToken: args.config.awsSessionToken,
-      lwaAccessToken: args.lwaAccessToken,
-    });
+    const ordersResult = await amazonSpApiGetWithQuotaRetry(
+      () =>
+        spApiGet({
+          endpoint: args.config.endpoint,
+          region: args.config.region,
+          path: "/orders/v0/orders",
+          query,
+          awsAccessKeyId: args.config.awsAccessKeyId,
+          awsSecretAccessKey: args.config.awsSecretAccessKey,
+          awsSessionToken: args.config.awsSessionToken,
+          lwaAccessToken: args.lwaAccessToken,
+        }),
+      { max429Retries: args.config.max429Retries }
+    );
     if (!ordersResult.res.ok || !ordersResult.json) {
       throw new Error(`Amazon Orders konnten nicht geladen werden (HTTP ${ordersResult.res.status}).`);
     }
@@ -515,6 +549,7 @@ async function buildResponseFromSalesOrderMetrics(args: {
     awsSessionToken: config.awsSessionToken,
     lwaAccessToken,
     marketplaceIds: config.marketplaceIds,
+    max429Retries: config.max429Retries,
   };
 
   if (compare && previous) {
@@ -819,6 +854,9 @@ export async function GET(request: Request) {
     let guard = 0;
 
     while (guard < 20) {
+      if (nextToken && config.ordersPageDelayMs > 0) {
+        await amazonSpApiSleepMs(config.ordersPageDelayMs);
+      }
       const query: Record<string, string> = nextToken
         ? { NextToken: nextToken }
         : {
@@ -827,16 +865,20 @@ export async function GET(request: Request) {
             MaxResultsPerPage: "100",
           };
 
-      const ordersResult = await spApiGet({
-        endpoint: config.endpoint,
-        region: config.region,
-        path: "/orders/v0/orders",
-        query,
-        awsAccessKeyId: config.awsAccessKeyId,
-        awsSecretAccessKey: config.awsSecretAccessKey,
-        awsSessionToken: config.awsSessionToken,
-        lwaAccessToken,
-      });
+      const ordersResult = await amazonSpApiGetWithQuotaRetry(
+        () =>
+          spApiGet({
+            endpoint: config.endpoint,
+            region: config.region,
+            path: "/orders/v0/orders",
+            query,
+            awsAccessKeyId: config.awsAccessKeyId,
+            awsSecretAccessKey: config.awsSecretAccessKey,
+            awsSessionToken: config.awsSessionToken,
+            lwaAccessToken,
+          }),
+        { max429Retries: config.max429Retries }
+      );
 
       if (!ordersResult.res.ok || !ordersResult.json) {
         return NextResponse.json(

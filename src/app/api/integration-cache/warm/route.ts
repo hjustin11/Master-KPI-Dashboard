@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { primeAmazonProductsIntegrationCache } from "@/shared/lib/amazonProductsSpApiCatalog";
+import { primeXentralIntegrationCaches } from "@/shared/lib/xentralIntegrationCacheWarm";
 import {
   FLEX_DAY_MS,
   FLEX_MARKETPLACE_EBAY_SPEC,
@@ -135,11 +136,26 @@ async function handleWarm(request: Request): Promise<Response> {
     };
   }
 
+  const xentralStarted = Date.now();
+  let xentral: Awaited<ReturnType<typeof primeXentralIntegrationCaches>> & { durationMs: number };
+  try {
+    const xr = await primeXentralIntegrationCaches();
+    xentral = { ...xr, durationMs: Date.now() - xentralStarted };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    xentral = {
+      durationMs: Date.now() - xentralStarted,
+      orders: { ok: false, durationMs: 0, recentDays: 90, error: msg },
+      articles: { ok: false, durationMs: 0, error: msg },
+    };
+  }
+
   return NextResponse.json({
     ok: true,
     durationMs: Date.now() - started,
     flex,
     amazon,
+    xentral,
     dayWindows,
   });
 }

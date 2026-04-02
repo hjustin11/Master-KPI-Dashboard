@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { getShopifyIntegrationConfig, shopifyMissingKeysForConfig } from "@/shared/lib/shopifyApiClient";
+import { fetchShopifyProductRows } from "@/shared/lib/shopifyProductsList";
+import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import {
+  loadMarketplaceProductListCached,
+  parseProductListForceRefresh,
+} from "@/shared/lib/marketplaceProductsListCache";
+import type { MarketplaceProductsListResponse } from "@/shared/lib/marketplaceProductList";
 
 /** Vercel: viele Produktseiten brauchen länger als 10s (Hobby-Default). */
 export const maxDuration = 60;
-import { fetchShopifyProductRows } from "@/shared/lib/shopifyProductsList";
-import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
-import type { MarketplaceProductsListResponse } from "@/shared/lib/marketplaceProductList";
 
 /** Pfad ohne Query (Orders-Pfad darf z. B. `.../orders.json?foo` sein). */
 function shopifyAdminPathnameOnly(pathOrUrl: string): string {
@@ -46,7 +50,7 @@ async function resolveShopifyProductsPath(): Promise<string> {
   return "/admin/api/2024-10/products.json";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const config = await getShopifyIntegrationConfig();
     const missing = shopifyMissingKeysForConfig(config).filter((x) => x.missing);
@@ -60,8 +64,18 @@ export async function GET() {
       );
     }
     const productsPath = await resolveShopifyProductsPath();
-    const items = await fetchShopifyProductRows(config, productsPath);
-    return NextResponse.json({ items } satisfies MarketplaceProductsListResponse);
+    const forceRefresh = parseProductListForceRefresh(request);
+    const payload = await loadMarketplaceProductListCached({
+      marketplaceSlug: "shopify",
+      variant: "full",
+      fingerprintParts: [config.baseUrl, productsPath],
+      forceRefresh,
+      loader: async () => {
+        const items = await fetchShopifyProductRows(config, productsPath);
+        return { items };
+      },
+    });
+    return NextResponse.json(payload satisfies MarketplaceProductsListResponse);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unbekannter Fehler.";
     return NextResponse.json({ error: message, items: [] } satisfies MarketplaceProductsListResponse, {

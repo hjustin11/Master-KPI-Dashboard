@@ -1,7 +1,14 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
+
+/** Vercel: Retries + Pagination können länger als 10s dauern. */
+export const maxDuration = 60;
 import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import {
+  amazonSpApiGetWithQuotaRetry,
+  amazonSpApiSleepMs,
+} from "@/shared/lib/amazonSpApiQuotaRetry";
 
 type AmazonOrder = {
   AmazonOrderId?: string;
@@ -113,6 +120,15 @@ async function getConfig() {
     .map((v) => v.trim())
     .filter(Boolean);
 
+  const max429Retries = Math.min(
+    30,
+    Math.max(1, Number(await getIntegrationSecretValue("AMAZON_SP_API_MAX_429_RETRIES")) || 10)
+  );
+  const ordersPageDelayMs = Math.max(
+    0,
+    Number(await getIntegrationSecretValue("AMAZON_SP_API_ORDERS_PAGE_DELAY_MS")) || 500
+  );
+
   return {
     refreshToken,
     lwaClientId,
@@ -123,6 +139,8 @@ async function getConfig() {
     region,
     endpoint,
     marketplaceIds,
+    max429Retries,
+    ordersPageDelayMs,
   };
 }
 
@@ -307,6 +325,9 @@ export async function GET(request: Request) {
     let nextToken = "";
     let guard = 0;
     while (guard < 30) {
+      if (nextToken && config.ordersPageDelayMs > 0) {
+        await amazonSpApiSleepMs(config.ordersPageDelayMs);
+      }
       const query: Record<string, string> = nextToken
         ? { NextToken: nextToken }
         : {
@@ -315,16 +336,20 @@ export async function GET(request: Request) {
             MaxResultsPerPage: "100",
           };
 
-      const ordersResult = await spApiGet({
-        endpoint: config.endpoint,
-        region: config.region,
-        path: "/orders/v0/orders",
-        query,
-        awsAccessKeyId: config.awsAccessKeyId,
-        awsSecretAccessKey: config.awsSecretAccessKey,
-        awsSessionToken: config.awsSessionToken,
-        lwaAccessToken,
-      });
+      const ordersResult = await amazonSpApiGetWithQuotaRetry(
+        () =>
+          spApiGet({
+            endpoint: config.endpoint,
+            region: config.region,
+            path: "/orders/v0/orders",
+            query,
+            awsAccessKeyId: config.awsAccessKeyId,
+            awsSecretAccessKey: config.awsSecretAccessKey,
+            awsSessionToken: config.awsSessionToken,
+            lwaAccessToken,
+          }),
+        { max429Retries: config.max429Retries }
+      );
       if (!ordersResult.res.ok || !ordersResult.json) {
         return NextResponse.json(
           {

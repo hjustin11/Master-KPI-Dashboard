@@ -3,8 +3,8 @@ import {
   buildXentralOrdersCacheKey,
   computeXentralOrdersPayload,
   XentralOrdersPayloadError,
-  XENTRAL_ORDERS_CACHE_FRESH_MS,
-  XENTRAL_ORDERS_CACHE_STALE_MS,
+  xentralOrdersCacheFreshMs,
+  xentralOrdersCacheStaleMs,
 } from "@/shared/lib/xentralOrdersPayload";
 import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
@@ -160,15 +160,15 @@ export async function POST(request: Request) {
     if (body.prewarmOrders !== false) {
       const started = Date.now();
       const ordersUrl = new URL("http://internal/xentral/orders");
-      ordersUrl.searchParams.set("recentDays", "2");
+      ordersUrl.searchParams.set("recentDays", "90");
       ordersUrl.searchParams.set("limit", "50");
       const ordersReq = new Request(ordersUrl);
       try {
         await getIntegrationCachedOrLoad({
           cacheKey: buildXentralOrdersCacheKey(ordersUrl.searchParams),
           source: "xentral:orders",
-          freshMs: XENTRAL_ORDERS_CACHE_FRESH_MS,
-          staleMs: XENTRAL_ORDERS_CACHE_STALE_MS,
+          freshMs: xentralOrdersCacheFreshMs(),
+          staleMs: xentralOrdersCacheStaleMs(),
           loader: () => computeXentralOrdersPayload(ordersReq, baseUrl, token),
         });
         ordersPrewarm = { ok: true, durationMs: Date.now() - started };

@@ -5,6 +5,10 @@ import {
   fetchEbayInventoryProductRows,
 } from "@/shared/lib/ebayInventoryProducts";
 import {
+  loadMarketplaceProductListCached,
+  parseProductListForceRefresh,
+} from "@/shared/lib/marketplaceProductsListCache";
+import {
   parseProductListPagination,
   type MarketplaceProductsListResponse,
 } from "@/shared/lib/marketplaceProductList";
@@ -28,18 +32,30 @@ export async function GET(request: Request) {
     }
     const listPath =
       env("EBAY_PRODUCTS_PATH") || "/sell/inventory/v1/inventory_item";
+    const forceRefresh = parseProductListForceRefresh(request);
     const page = parseProductListPagination(request);
     if (page) {
-      const { items, totalCount } = await fetchEbayInventoryProductPage(
-        config,
-        listPath,
-        page.limit,
-        page.offset
-      );
-      return NextResponse.json({ items, totalCount } satisfies MarketplaceProductsListResponse);
+      const payload = await loadMarketplaceProductListCached({
+        marketplaceSlug: "ebay",
+        variant: "page",
+        fingerprintParts: [listPath, String(page.limit), String(page.offset)],
+        forceRefresh,
+        loader: () =>
+          fetchEbayInventoryProductPage(config, listPath, page.limit, page.offset),
+      });
+      return NextResponse.json(payload satisfies MarketplaceProductsListResponse);
     }
-    const items = await fetchEbayInventoryProductRows(config, listPath);
-    return NextResponse.json({ items, totalCount: items.length } satisfies MarketplaceProductsListResponse);
+    const payload = await loadMarketplaceProductListCached({
+      marketplaceSlug: "ebay",
+      variant: "full",
+      fingerprintParts: [listPath],
+      forceRefresh,
+      loader: async () => {
+        const items = await fetchEbayInventoryProductRows(config, listPath);
+        return { items, totalCount: items.length };
+      },
+    });
+    return NextResponse.json(payload satisfies MarketplaceProductsListResponse);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unbekannter Fehler.";
     return NextResponse.json(

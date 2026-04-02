@@ -123,6 +123,13 @@ type CachedPayload = {
   xentralSalesOrderWebPath?: string;
 };
 
+type XentralOrdersLoadOptions = {
+  /** `refresh=1` an die API — Server-Cache umgehen, Zeilen bleiben sichtbar (Merge). */
+  bustServerCache?: boolean;
+  mode?: ImportMode;
+  silent?: boolean;
+};
+
 /** Bekannte Xentral-Antworten mit verständlicher Erklärung ergänzen (Dialog + Toast). */
 function formatXentralAddressSubmitError(
   raw: string,
@@ -1147,11 +1154,14 @@ export default function XentralOrdersPage() {
     }
   }, [flushAddressDraftToApp, t]);
 
-  const load = useCallback(async (forceRefresh = false, mode?: ImportMode, silent = false) => {
+  const load = useCallback(async (options?: XentralOrdersLoadOptions) => {
+    const bustServerCache = options?.bustServerCache ?? false;
+    const silent = options?.silent ?? false;
+    const mode = options?.mode;
     let fetchMode: ImportMode = mode ?? importModeRef.current;
     let hadCache = false;
 
-    if (!forceRefresh && !silent) {
+    if (!bustServerCache && !silent) {
       const raw = localStorage.getItem(XENTRAL_ORDERS_CACHE_KEY);
       if (raw) {
         try {
@@ -1184,20 +1194,16 @@ export default function XentralOrdersPage() {
       }
     }
 
-    if (forceRefresh && !silent) {
-    setIsLoading(true);
-    } else if (!hadCache && !silent) {
+    const retainVisual = hadCache || dataRef.current.length > 0;
+    if (!silent && !retainVisual && !hadCache) {
       setIsLoading(true);
     }
-
-    const showBackgroundIndicator = silent || (!forceRefresh && hadCache);
-
-    if (showBackgroundIndicator) {
+    if (silent || retainVisual) {
       setIsBackgroundSyncing(true);
     }
 
     if (!silent) {
-    setError(null);
+      setError(null);
     }
 
     try {
@@ -1213,7 +1219,7 @@ export default function XentralOrdersPage() {
           qs.set("toYmd", t);
         }
       }
-      if (forceRefresh) {
+      if (bustServerCache) {
         qs.set("refresh", "1");
       }
       const res = await fetch(`/api/xentral/orders?${qs.toString()}`, {
@@ -1248,21 +1254,12 @@ export default function XentralOrdersPage() {
       setXentralOrderWebBase(linkBase);
       setXentralSalesOrderWebPath(linkPath);
 
-      let stored: XentralOrderRow[];
-
-      if (forceRefresh) {
-        stored = nextItems;
-        dataRef.current = nextItems;
-      setData(nextItems);
-      setDisplayedRows(nextItems);
-      } else {
-        const merged = mergeXentralOrderLists(dataRef.current, nextItems, {
-          dropMissingFromPrevious: fetchMode === "recent",
-        });
-        stored = merged;
-        dataRef.current = merged;
-        setData(merged);
-      }
+      const merged = mergeXentralOrderLists(dataRef.current, nextItems, {
+        dropMissingFromPrevious: false,
+      });
+      const stored = merged;
+      dataRef.current = merged;
+      setData(merged);
 
       setTotalCount(apiTotal);
       setImportMode(fetchMode);
@@ -1314,9 +1311,9 @@ export default function XentralOrdersPage() {
       }
     } finally {
       if (!silent) {
-      setIsLoading(false);
-    }
-      if (showBackgroundIndicator) {
+        setIsLoading(false);
+      }
+      if (silent || retainVisual) {
         setIsBackgroundSyncing(false);
       }
     }
@@ -1334,7 +1331,7 @@ export default function XentralOrdersPage() {
     dateToRef.current = d.to;
     setDateFrom(d.from);
     setDateTo(d.to);
-    void loadRef.current(false);
+    void loadRef.current();
   }, []);
 
   useEffect(() => {
@@ -1353,7 +1350,7 @@ export default function XentralOrdersPage() {
     prevDateFilterRef.current = { from: dateFrom, to: dateTo };
     if (!prev || (prev.from === dateFrom && prev.to === dateTo)) return;
     const id = window.setTimeout(() => {
-      void loadRef.current(true, "recent");
+      void loadRef.current({ mode: "recent" });
     }, 450);
     return () => window.clearTimeout(id);
   }, [dateFrom, dateTo, hasMounted, importMode]);
@@ -1362,7 +1359,7 @@ export default function XentralOrdersPage() {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
       if (!shouldRunBackgroundSync()) return;
-      void loadRef.current(false, undefined, true);
+      void loadRef.current({ silent: true });
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
   }, [hasMounted]);
@@ -1493,7 +1490,7 @@ export default function XentralOrdersPage() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void load(true, importMode)}
+              onClick={() => void load({ bustServerCache: true, mode: importMode })}
               disabled={isLoading || !hasMounted}
             >
               {t("xentralOrders.refresh")}
@@ -1502,7 +1499,7 @@ export default function XentralOrdersPage() {
               type="button"
               variant={importMode === "all" ? "secondary" : "outline"}
               size="sm"
-              onClick={() => void load(true, "all")}
+              onClick={() => void load({ bustServerCache: true, mode: "all" })}
               disabled={isLoading || !hasMounted}
               title={t("xentralOrders.loadAllTitle")}
             >
@@ -1513,7 +1510,7 @@ export default function XentralOrdersPage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => void load(true, "recent")}
+                onClick={() => void load({ bustServerCache: true, mode: "recent" })}
                 disabled={isLoading || !hasMounted}
                 title={t("xentralOrders.loadRecentTitle")}
               >

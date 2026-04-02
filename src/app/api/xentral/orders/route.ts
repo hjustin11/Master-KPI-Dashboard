@@ -5,9 +5,11 @@ import {
   buildXentralOrdersCacheKey,
   computeXentralOrdersPayload,
   XentralOrdersPayloadError,
-  XENTRAL_ORDERS_CACHE_FRESH_MS,
-  XENTRAL_ORDERS_CACHE_STALE_MS,
+  xentralOrdersCacheFreshMs,
+  xentralOrdersCacheStaleMs,
 } from "@/shared/lib/xentralOrdersPayload";
+
+export const maxDuration = 300;
 
 async function resolveXentralConfig() {
   const baseUrl = await getIntegrationSecretValue("XENTRAL_BASE_URL");
@@ -43,8 +45,8 @@ export async function GET(request: Request) {
       : await getIntegrationCachedOrLoad({
           cacheKey: buildXentralOrdersCacheKey(searchParams),
           source: "xentral:orders",
-          freshMs: XENTRAL_ORDERS_CACHE_FRESH_MS,
-          staleMs: XENTRAL_ORDERS_CACHE_STALE_MS,
+          freshMs: xentralOrdersCacheFreshMs(),
+          staleMs: xentralOrdersCacheStaleMs(),
           loader: () => computeXentralOrdersPayload(request, baseUrl, token),
         });
     return NextResponse.json(payload);

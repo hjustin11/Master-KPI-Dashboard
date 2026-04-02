@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 
 import {
+  marketplaceIntegrationFreshMs,
+  marketplaceIntegrationStaleMs,
+} from "@/shared/lib/integrationCacheTtl";
+
+import {
   computeAddressValidation,
   primaryAddressContext,
   type ShippingAddressValidationStatus,
@@ -554,8 +559,23 @@ export function buildXentralOrdersCacheKey(searchParams: URLSearchParams): strin
   return `xentral:orders:${h}`;
 }
 
-export const XENTRAL_ORDERS_CACHE_FRESH_MS = 3 * 60 * 1000;
-export const XENTRAL_ORDERS_CACHE_STALE_MS = 45 * 60 * 1000;
+function parseOptionalEnvMs(name: string): number | null {
+  const raw = (process.env[name] ?? "").trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 10_000 ? Math.floor(n) : null;
+}
+
+export function xentralOrdersCacheFreshMs(): number {
+  return parseOptionalEnvMs("XENTRAL_ORDERS_CACHE_FRESH_MS") ?? marketplaceIntegrationFreshMs();
+}
+
+export function xentralOrdersCacheStaleMs(): number {
+  const fresh = xentralOrdersCacheFreshMs();
+  const fromEnv = parseOptionalEnvMs("XENTRAL_ORDERS_CACHE_STALE_MS");
+  const fallback = marketplaceIntegrationStaleMs();
+  return Math.max(fromEnv ?? fallback, fresh);
+}
 
 /**
  * Reine JSON-Payload (Erfolg). Bei Xentral-Fehlern: {@link XentralOrdersPayloadError} — kein Caching.

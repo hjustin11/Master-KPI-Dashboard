@@ -21,6 +21,7 @@ import {
 } from "@/shared/lib/xentralProductTagMirror";
 import { cn } from "@/lib/utils";
 import { compareLocaleStringEmptyLast } from "@/shared/lib/tableSort";
+import { mergeXentralArticleLists } from "@/shared/lib/xentralArticleMerge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -609,10 +610,12 @@ export default function XentralProductsPage() {
     [persistTagDefs]
   );
 
-  const load = useCallback(async (forceRefresh = false, silent = false) => {
+  const load = useCallback(async (options?: { bustServerCache?: boolean; silent?: boolean }) => {
+    const bustServerCache = options?.bustServerCache ?? false;
+    const silent = options?.silent ?? false;
     let hadCache = false;
 
-    if (!forceRefresh && !silent) {
+    if (!bustServerCache && !silent) {
       const parsed = readLocalJsonCache<CachedPayload>(XENTRAL_ARTICLES_CACHE_KEY);
       if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
         setData(parsed.items);
@@ -623,14 +626,11 @@ export default function XentralProductsPage() {
       }
     }
 
-    if (forceRefresh && !silent) {
-      setIsLoading(true);
-    } else if (!hadCache && !silent) {
+    const retainVisual = hadCache || dataRef.current.length > 0;
+    if (!silent && !retainVisual && !hadCache) {
       setIsLoading(true);
     }
-
-    const showBackgroundIndicator = silent || (!forceRefresh && hadCache);
-    if (showBackgroundIndicator) {
+    if (silent || retainVisual) {
       setIsBackgroundSyncing(true);
     }
 
@@ -639,7 +639,11 @@ export default function XentralProductsPage() {
     }
 
     try {
-      const articlesRes = await fetch("/api/xentral/articles?all=1&limit=150", {
+      const qs = new URLSearchParams({ all: "1", limit: "150" });
+      if (bustServerCache) {
+        qs.set("refresh", "1");
+      }
+      const articlesRes = await fetch(`/api/xentral/articles?${qs.toString()}`, {
         cache: "no-store",
       });
 
@@ -652,11 +656,12 @@ export default function XentralProductsPage() {
       }
 
       const nextItems = articlesPayload.items ?? [];
-      setData(nextItems);
-      setDisplayedRows(nextItems);
-      dataRef.current = nextItems;
+      const merged = mergeXentralArticleLists(dataRef.current, nextItems);
+      setData(merged);
+      setDisplayedRows(merged);
+      dataRef.current = merged;
       const savedAt = Date.now();
-      writeLocalJsonCache(XENTRAL_ARTICLES_CACHE_KEY, { savedAt, items: nextItems } satisfies CachedPayload);
+      writeLocalJsonCache(XENTRAL_ARTICLES_CACHE_KEY, { savedAt, items: merged } satisfies CachedPayload);
     } catch (e) {
       if (silent) {
         console.warn("[Xentral Artikel] Hintergrund-Abgleich fehlgeschlagen:", e);
@@ -668,7 +673,7 @@ export default function XentralProductsPage() {
       if (!silent) {
         setIsLoading(false);
       }
-      if (showBackgroundIndicator) {
+      if (silent || retainVisual) {
         setIsBackgroundSyncing(false);
       }
     }
@@ -676,14 +681,14 @@ export default function XentralProductsPage() {
 
   useEffect(() => {
     setHasMounted(true);
-    void load(false);
+    void load();
   }, [load]);
 
   useEffect(() => {
     if (!hasMounted) return;
     const id = window.setInterval(() => {
       if (!shouldRunBackgroundSync()) return;
-      void load(false, true);
+      void load({ silent: true });
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
   }, [hasMounted, load]);
@@ -797,7 +802,7 @@ export default function XentralProductsPage() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void load(true)}
+              onClick={() => void load({ bustServerCache: true })}
               disabled={isLoading || !hasMounted}
             >
               {t("xentralProducts.refresh")}

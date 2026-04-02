@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import { fetchMiraklProductRowsFressnapf } from "@/shared/lib/miraklProductOffers";
 import type { MarketplaceProductsListResponse } from "@/shared/lib/marketplaceProductList";
 import { getFressnapfIntegrationConfig } from "@/shared/lib/fressnapfApiClient";
+import {
+  loadMarketplaceProductListCached,
+  parseProductListForceRefresh,
+} from "@/shared/lib/marketplaceProductsListCache";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const config = await getFressnapfIntegrationConfig();
     const missing = {
@@ -21,8 +25,18 @@ export async function GET() {
         { status: 500 }
       );
     }
-    const items = await fetchMiraklProductRowsFressnapf(config);
-    return NextResponse.json({ items } satisfies MarketplaceProductsListResponse);
+    const forceRefresh = parseProductListForceRefresh(request);
+    const payload = await loadMarketplaceProductListCached({
+      marketplaceSlug: "fressnapf",
+      variant: "full",
+      fingerprintParts: [config.baseUrl, config.ordersPath],
+      forceRefresh,
+      loader: async () => {
+        const items = await fetchMiraklProductRowsFressnapf(config);
+        return { items };
+      },
+    });
+    return NextResponse.json(payload satisfies MarketplaceProductsListResponse);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unbekannter Fehler.";
     return NextResponse.json({ error: message, items: [] } satisfies MarketplaceProductsListResponse, {
