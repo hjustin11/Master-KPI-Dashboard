@@ -1,5 +1,16 @@
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 
+/** In `next dev`: gleiche TTL-Logik wie in Supabase, aber ohne Netzwerk — zweiter Request oft sofort. */
+function useDevIntegrationMemoryMirror(): boolean {
+  return (
+    process.env.NODE_ENV === "development" &&
+    (process.env.INTEGRATION_CACHE_DEV_MEMORY ?? "").trim() !== "0"
+  );
+}
+
+type DevMemoryEntry = { payload: unknown; freshUntil: number; staleUntil: number };
+const devIntegrationMemory = new Map<string, DevMemoryEntry>();
+
 type CacheRow = {
   cache_key: string;
   source: string;
@@ -15,6 +26,20 @@ export type CachedReadResult<T> =
   | { state: "miss" };
 
 export async function readIntegrationCache<T>(cacheKey: string): Promise<CachedReadResult<T>> {
+  const now = Date.now();
+  if (useDevIntegrationMemoryMirror()) {
+    const mem = devIntegrationMemory.get(cacheKey);
+    if (mem) {
+      if (Number.isFinite(mem.freshUntil) && mem.freshUntil > now) {
+        return { state: "fresh", value: mem.payload as T };
+      }
+      if (Number.isFinite(mem.staleUntil) && mem.staleUntil > now) {
+        return { state: "stale", value: mem.payload as T };
+      }
+      devIntegrationMemory.delete(cacheKey);
+    }
+  }
+
   try {
     const admin = createAdminClient();
     const { data, error } = await admin
@@ -24,9 +49,15 @@ export async function readIntegrationCache<T>(cacheKey: string): Promise<CachedR
       .maybeSingle();
     if (error || !data) return { state: "miss" };
     const row = data as CacheRow;
-    const now = Date.now();
     const freshUntil = Date.parse(row.fresh_until);
     const staleUntil = Date.parse(row.stale_until);
+    if (useDevIntegrationMemoryMirror()) {
+      devIntegrationMemory.set(cacheKey, {
+        payload: row.payload,
+        freshUntil,
+        staleUntil,
+      });
+    }
     if (Number.isFinite(freshUntil) && freshUntil > now) {
       return { state: "fresh", value: row.payload as T };
     }
@@ -46,11 +77,20 @@ export async function writeIntegrationCache<T>(args: {
   freshMs: number;
   staleMs?: number;
 }) {
+  const now = Date.now();
+  const freshMs = Math.max(10_000, args.freshMs);
+  const staleMs = Math.max(freshMs, args.staleMs ?? freshMs * 3);
+
+  if (useDevIntegrationMemoryMirror()) {
+    devIntegrationMemory.set(args.cacheKey, {
+      payload: args.value,
+      freshUntil: now + freshMs,
+      staleUntil: now + staleMs,
+    });
+  }
+
   try {
     const admin = createAdminClient();
-    const now = Date.now();
-    const freshMs = Math.max(10_000, args.freshMs);
-    const staleMs = Math.max(freshMs, args.staleMs ?? freshMs * 3);
     await admin.from("integration_data_cache").upsert(
       {
         cache_key: args.cacheKey,
