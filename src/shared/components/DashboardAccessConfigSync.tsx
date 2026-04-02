@@ -8,9 +8,10 @@ import {
   parseDashboardAccessConfig,
   readLegacySectionOrderFromLocalStorage,
 } from "@/shared/lib/dashboard-access-config";
+import { DASHBOARD_CLIENT_BACKGROUND_SYNC_MS } from "@/shared/lib/dashboardClientCache";
 import { DEFAULT_SETTINGS_USERS_SECTION_ORDER } from "@/shared/lib/settings-users-section-order";
 
-const POLL_MS = 45_000;
+const POLL_MS = DASHBOARD_CLIENT_BACKGROUND_SYNC_MS;
 
 type FetchPayload = {
   config?: unknown;

@@ -25,6 +25,10 @@ import {
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/shared/components/DataTable";
 import {
+  MarketplaceProductShellDialog,
+  type MarketplaceProductShellMode,
+} from "@/shared/components/MarketplaceProductShellDialog";
+import {
   DASHBOARD_COMPACT_CARD,
   DASHBOARD_MARKETPLACE_LOGO_FRAME,
   DASHBOARD_MARKETPLACE_LOGO_IMG_IN_FRAME,
@@ -43,14 +47,19 @@ import {
   writeLocalJsonCache,
 } from "@/shared/lib/dashboardClientCache";
 import type { MarketplaceProductListRow } from "@/shared/lib/marketplaceProductList";
+import { mergeMarketplaceProductClientLists } from "@/shared/lib/marketplaceProductClientMerge";
+import { useStableTableRowsDuringFetch } from "@/shared/lib/useStableTableRowsDuringFetch";
 import { useUser } from "@/shared/hooks/useUser";
 import {
+  AMAZON_DRAFT_IMAGE_SLOT_COUNT,
   type AmazonProductDraftMode,
   type AmazonProductDraftRecord,
   type AmazonProductDraftValues,
   deriveDraftStatus,
   draftValuesFromSource,
   emptyDraftValues,
+  normalizeDraftValues,
+  padAmazonDraftImages,
   sourceSnapshotFromRow,
 } from "@/shared/lib/amazonProductDraft";
 import {
@@ -119,6 +128,11 @@ export type MarketplaceProductsViewProps = {
   backgroundSyncIntervalMs?: number;
   /** Vorbereitung Produkteditor (Owner) – aktuell nur für Amazon vorgesehen. */
   enableAmazonEditor?: boolean;
+  /**
+   * Zentrales Artikel-Popup (Stammdaten + Platzhalter für marktplatzspezifische Felder).
+   * Standard: an, sobald kein `enableAmazonEditor` (Volleditor nur Amazon-Owner).
+   */
+  productShellEnabled?: boolean;
 };
 
 const REPORT_PENDING_MAX_ATTEMPTS = 36;
@@ -148,6 +162,65 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function AmazonDraftImageSlot({
+  index,
+  url,
+  onChange,
+  onClear,
+}: {
+  index: number;
+  url: string;
+  onChange: (value: string) => void;
+  onClear: () => void;
+}) {
+  const [broken, setBroken] = useState(false);
+  const trimmed = url.trim();
+  const showImg = Boolean(trimmed && isLikelyImageUrl(trimmed) && !broken);
+  useEffect(() => {
+    setBroken(false);
+  }, [trimmed]);
+
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-border/55 bg-background/70 p-1.5">
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-[10px] font-medium tabular-nums text-muted-foreground">{index + 1}</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+          onClick={onClear}
+          aria-label={`Bild ${index + 1} entfernen`}
+        >
+          <Trash2 className="h-3 w-3" aria-hidden />
+        </Button>
+      </div>
+      <div className="flex h-12 w-full items-center justify-center overflow-hidden rounded border border-border/45 bg-muted/30">
+        {showImg ? (
+          <img
+            src={trimmed}
+            alt=""
+            className="max-h-full max-w-full object-contain"
+            loading="lazy"
+            onError={() => setBroken(true)}
+          />
+        ) : (
+          <span className="px-0.5 text-center text-[9px] leading-tight text-muted-foreground">
+            {broken ? "Vorschau fehlerhaft" : "—"}
+          </span>
+        )}
+      </div>
+      <Input
+        value={url}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-7 px-1.5 py-0 font-mono text-[10px] leading-tight"
+        placeholder="https://…"
+        spellCheck={false}
+      />
+    </div>
+  );
+}
+
 export function MarketplaceProductsView({
   apiUrl,
   cacheKey,
@@ -161,11 +234,13 @@ export function MarketplaceProductsView({
   pageSize: pageSizeProp = 50,
   backgroundSyncIntervalMs = DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
   enableAmazonEditor = false,
+  productShellEnabled: productShellEnabledProp,
 }: MarketplaceProductsViewProps) {
   const { t, locale } = useTranslation();
   const user = useUser();
   const isOwner = !user.isLoading && user.roleKey?.toLowerCase() === "owner";
   const canEditProducts = enableAmazonEditor && isOwner;
+  const useProductShell = productShellEnabledProp ?? !enableAmazonEditor;
   const [status, setStatus] = useState<ProductStatus>("active");
   const [pageIndex, setPageIndex] = useState(0);
   const [totalCount, setTotalCount] = useState<number | null>(null);
@@ -188,6 +263,9 @@ export function MarketplaceProductsView({
   const [draftError, setDraftError] = useState<string | null>(null);
   const [draftTableMissing, setDraftTableMissing] = useState(false);
   const [imageDropActive, setImageDropActive] = useState(false);
+  const [shellOpen, setShellOpen] = useState(false);
+  const [shellMode, setShellMode] = useState<MarketplaceProductShellMode>("edit");
+  const [shellRow, setShellRow] = useState<MarketplaceProductListRow | null>(null);
   const statusRef = useRef(status);
   const selectedProductTypeSchema = useMemo(
     () => getAmazonProductTypeSchema(draftValues.productType),
@@ -197,6 +275,7 @@ export function MarketplaceProductsView({
     () => (editorMode === "create_new" ? getMissingAmazonRequiredFields(draftValues) : []),
     [editorMode, draftValues]
   );
+  const amazonImageSlots = useMemo(() => padAmazonDraftImages(draftValues.images), [draftValues.images]);
   const productTypeOptions = useMemo(() => getAmazonProductTypeOptions(), []);
 
   const pageIndexRef = useRef(pageIndex);
@@ -214,6 +293,11 @@ export function MarketplaceProductsView({
   useEffect(() => {
     rowsRef.current = rows;
   }, [rows]);
+
+  const tableRows = useStableTableRowsDuringFetch({
+    rows,
+    isFetchActive: isLoading || isBackgroundSyncing,
+  });
 
   useEffect(() => {
     reportPendingAttemptRef.current = 0;
@@ -248,10 +332,27 @@ export function MarketplaceProductsView({
     [apiUrl, serverPagination, pageSizeProp]
   );
 
+  /** Ein Aufruf ohne Pagination (Amazon: `all=1`), damit „Artikel bearbeiten“ den API-Datensatz zur SKU findet. */
+  const productsShellListUrl = useMemo(() => {
+    const base = typeof apiUrl === "function" ? apiUrl(status) : apiUrl;
+    const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost";
+    try {
+      const u = new URL(base, origin);
+      u.searchParams.delete("limit");
+      u.searchParams.delete("offset");
+      if (u.pathname === "/api/amazon/products") {
+        u.searchParams.set("all", "1");
+      }
+      return `${u.pathname}${u.search}`;
+    } catch {
+      return base;
+    }
+  }, [apiUrl, status]);
+
   const totalArticlesLabel = useMemo(() => {
-    const n = serverPagination && totalCount != null ? totalCount : rows.length;
+    const n = serverPagination && totalCount != null ? totalCount : tableRows.length;
     return new Intl.NumberFormat(intlLocaleTag(locale)).format(n);
-  }, [serverPagination, totalCount, rows.length, locale]);
+  }, [serverPagination, totalCount, tableRows.length, locale]);
 
   const saveDraft = useCallback(async () => {
     const mode = editorMode;
@@ -328,13 +429,19 @@ export function MarketplaceProductsView({
           if (!detailRes.ok) {
             throw new Error(detailPayload.error ?? "Produktdetails konnten nicht geladen werden.");
           }
-          const nextValues = detailPayload.draftValues ?? draftValuesFromSource(detailPayload.sourceSnapshot ?? sourceSnapshotFromRow({
-            sku,
-            secondaryId: "",
-            title: "",
-            statusLabel: "",
-            isActive: true,
-          }));
+          const nextValues = normalizeDraftValues(
+            detailPayload.draftValues ??
+              draftValuesFromSource(
+                detailPayload.sourceSnapshot ??
+                  sourceSnapshotFromRow({
+                    sku,
+                    secondaryId: "",
+                    title: "",
+                    statusLabel: "",
+                    isActive: true,
+                  })
+              )
+          );
           setDraftValues(nextValues);
           if (detailPayload.draft?.id) {
             setDraftId(detailPayload.draft.id);
@@ -365,8 +472,9 @@ export function MarketplaceProductsView({
           return;
         }
         setDraftId(item.id);
-        setDraftValues(item.draft_values ?? emptyDraftValues());
-        setDraftStatus(item.status ?? deriveDraftStatus(item.draft_values ?? emptyDraftValues(), mode));
+        const dv = normalizeDraftValues(item.draft_values ?? {});
+        setDraftValues(dv);
+        setDraftStatus(item.status ?? deriveDraftStatus(dv, mode));
       } catch (e) {
         setDraftError(e instanceof Error ? e.message : t("commonUi.unknownError"));
       } finally {
@@ -376,8 +484,23 @@ export function MarketplaceProductsView({
     [t]
   );
 
+  const openShellForRow = useCallback((row: MarketplaceProductListRow) => {
+    setEditorOpen(false);
+    setShellMode("edit");
+    setShellRow(row);
+    setShellOpen(true);
+  }, []);
+
+  const openShellCreate = useCallback(() => {
+    setEditorOpen(false);
+    setShellMode("create");
+    setShellRow(null);
+    setShellOpen(true);
+  }, []);
+
   const openEditorForRow = useCallback(
     (row: MarketplaceProductListRow) => {
+      setShellOpen(false);
       const source = sourceSnapshotFromRow(row);
       setEditorMode("edit_existing");
       setEditorSource(row);
@@ -392,6 +515,7 @@ export function MarketplaceProductsView({
   );
 
   const openCreateEditor = useCallback(() => {
+    setShellOpen(false);
     setEditorMode("create_new");
     setEditorSource(null);
     setDraftId(null);
@@ -431,10 +555,18 @@ export function MarketplaceProductsView({
         }
       }
       if (droppedUrls.length === 0 && fileDataUrls.length === 0) return;
-      setDraftValues((prev) => ({
-        ...prev,
-        images: [...prev.images, ...droppedUrls, ...fileDataUrls].slice(0, 20),
-      }));
+      setDraftValues((prev) => {
+        const slots = padAmazonDraftImages(prev.images);
+        const incoming = [...droppedUrls, ...fileDataUrls];
+        let i = 0;
+        for (let s = 0; s < AMAZON_DRAFT_IMAGE_SLOT_COUNT && i < incoming.length; s += 1) {
+          if (!slots[s].trim()) {
+            slots[s] = incoming[i];
+            i += 1;
+          }
+        }
+        return { ...prev, images: slots };
+      });
       setDraftError(null);
     },
     []
@@ -521,7 +653,10 @@ export function MarketplaceProductsView({
                   variant="ghost"
                   size="sm"
                   className="h-6 px-1.5 text-[10px]"
-                  onClick={() => openEditorForRow(row.original)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEditorForRow(row.original);
+                  }}
                 >
                   <PencilLine className="mr-1 h-3.5 w-3.5" aria-hidden />
                   Bearbeiten
@@ -577,13 +712,16 @@ export function MarketplaceProductsView({
         }
       }
 
-      if (forceRefresh && !silent) {
+      const hasAnyRows = hadCache || rowsRef.current.length > 0;
+      if (forceRefresh && !silent && !hasAnyRows) {
         setIsLoading(true);
-      } else if (!hadCache && !silent) {
+      } else if (!hasAnyRows && !silent) {
         setIsLoading(true);
+      } else if (!silent) {
+        setIsLoading(false);
       }
 
-      const showBackgroundIndicator = silent || (!forceRefresh && hadCache);
+      const showBackgroundIndicator = silent || hasAnyRows;
       if (showBackgroundIndicator) {
         setIsBackgroundSyncing(true);
       }
@@ -640,21 +778,29 @@ export function MarketplaceProductsView({
             missingKeys: payload.missingKeys,
             hint: payload.hint,
           });
-          setRows([]);
-          if (serverPagination) setTotalCount(null);
+          if (rowsRef.current.length === 0) {
+            setRows([]);
+            if (serverPagination) setTotalCount(null);
+          }
           return;
         }
         setPendingInfo(null);
         const nextItems = payload.items ?? [];
-        setRows(nextItems);
+        let mergedForCache: MarketplaceProductListRow[] = [];
+        setRows((prev) => {
+          mergedForCache = serverPagination
+            ? nextItems
+            : mergeMarketplaceProductClientLists(prev, nextItems);
+          return mergedForCache;
+        });
         if (serverPagination && typeof payload.totalCount === "number") {
           setTotalCount(payload.totalCount);
         } else if (!serverPagination) {
-          setTotalCount(nextItems.length);
+          setTotalCount(mergedForCache.length);
         }
         writeLocalJsonCache(key, {
           savedAt: Date.now(),
-          items: nextItems,
+          items: mergedForCache,
           totalCount: serverPagination ? payload.totalCount : undefined,
         } satisfies CachedProductsPayload);
       } catch (e) {
@@ -662,7 +808,9 @@ export function MarketplaceProductsView({
         if (silent) {
           console.warn("[Marketplace Produkte] Hintergrund-Abgleich fehlgeschlagen:", e);
         } else {
-          setRows([]);
+          if (rowsRef.current.length === 0) {
+            setRows([]);
+          }
           setError({
             message: e instanceof Error ? e.message : t("commonUi.unknownError"),
           });
@@ -748,7 +896,12 @@ export function MarketplaceProductsView({
             {canEditProducts ? (
               <Button type="button" variant="outline" size="sm" onClick={openCreateEditor} className="h-8 gap-1.5">
                 <Plus className="h-3.5 w-3.5" aria-hidden />
-                Artikel anlegen
+                {t("marketplaceProducts.createArticle")}
+              </Button>
+            ) : useProductShell ? (
+              <Button type="button" variant="outline" size="sm" onClick={openShellCreate} className="h-8 gap-1.5">
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+                {t("marketplaceProducts.createArticle")}
               </Button>
             ) : null}
             <Button
@@ -816,19 +969,26 @@ export function MarketplaceProductsView({
         </div>
       ) : null}
 
-      {isLoading ? (
+      {isLoading && tableRows.length === 0 ? (
         <div className="rounded-xl border border-border/50 bg-card/80 p-4 text-sm text-muted-foreground">
-          {t("marketplaceProducts.loading")}
+          {t("productListShared.loading", { marketplace: brandAlt })}
         </div>
       ) : (
         <>
           <DataTable
             columns={columns}
-            data={rows}
+            data={tableRows}
             filterColumn={t("filters.skuAsinOrTitle")}
             paginate={!serverPagination}
             defaultPageSize={pageSizeProp}
             getRowId={(row) => `${row.sku}\u0000${row.secondaryId}`}
+            onRowClick={
+              canEditProducts
+                ? (row) => openEditorForRow(row)
+                : useProductShell
+                  ? (row) => openShellForRow(row)
+                  : undefined
+            }
             compact
             className="flex-1 min-h-0"
             tableWrapClassName="min-h-0 [&_[data-slot=table-head]]:!h-5 [&_[data-slot=table-head]]:!px-0.5 [&_[data-slot=table-head]]:!py-0 [&_[data-slot=table-head]]:!text-[9px] [&_[data-slot=table-cell]]:!px-0.5 [&_[data-slot=table-cell]]:!py-0 [&_[data-slot=table-cell]]:!text-[10px]"
@@ -866,57 +1026,68 @@ export function MarketplaceProductsView({
           ) : null}
         </>
       )}
+      {useProductShell ? (
+        <MarketplaceProductShellDialog
+          open={shellOpen}
+          onOpenChange={setShellOpen}
+          mode={shellMode}
+          row={shellRow}
+          marketplaceLabel={brandAlt}
+          productsListApiUrl={useProductShell ? productsShellListUrl : null}
+        />
+      ) : null}
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
-        <DialogContent className="max-h-[96vh] w-[min(96rem,calc(100vw-1.25rem))] max-w-[calc(100%-1rem)] overflow-y-auto sm:max-w-none">
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent className="max-h-[90vh] w-[min(42rem,calc(100vw-1rem))] max-w-[calc(100%-1rem)] gap-0 overflow-y-auto p-3 sm:max-w-3xl sm:p-4">
+          <DialogHeader className="space-y-0.5 pb-2">
+            <DialogTitle className="text-base leading-tight">
               {editorMode === "create_new" ? "Neuen Amazon-Artikel vorbereiten" : "Amazon-Artikel bearbeiten"}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs leading-snug">
               Entwurf im Dashboard. Es wird noch nichts an Amazon übertragen.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-md border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
-              Pflichtfelder bei Amazon sind je Kategorie/Produkttyp unterschiedlich. Diese Maske deckt die
-              allgemeinen Kernfelder ab; kategoriespezifische Attribute folgen im nächsten Schritt.
+          <div className="space-y-2.5">
+            <div className="rounded-md border border-border/70 bg-muted/30 p-2 text-[11px] leading-snug text-muted-foreground">
+              Pflichtfelder je Produkttyp. Kernfelder hier; Kategorieattribute unten.
             </div>
             {draftTableMissing ? (
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700">
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700">
                 Tabelle für Produkt-Entwürfe fehlt. Bitte Supabase-Migration ausführen.
               </div>
             ) : null}
             {draftError ? (
-              <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700">
+              <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-700">
                 {draftError}
               </div>
             ) : null}
             {editorMode === "create_new" && missingRequiredFields.length > 0 ? (
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800">
-                <p className="font-medium">Für Amazon fehlen noch Pflichtfelder:</p>
-                <p className="mt-1 text-xs">{missingRequiredFields.map((x) => x.label).join(" • ")}</p>
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-800">
+                <p className="font-medium">Pflichtfelder fehlen:</p>
+                <p className="mt-0.5">{missingRequiredFields.map((x) => x.label).join(" • ")}</p>
               </div>
             ) : null}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="space-y-0.5 text-xs">
                 <span className="text-muted-foreground">SKU</span>
                 <Input
+                  className="h-8 text-sm"
                   value={draftValues.sku}
                   onChange={(e) => setDraftValues((prev) => ({ ...prev, sku: e.target.value }))}
                   placeholder="z. B. ASTRO-123"
                 />
               </label>
-              <label className="space-y-1 text-sm">
+              <label className="space-y-0.5 text-xs">
                 <span className="text-muted-foreground">ASIN</span>
                 <Input
+                  className="h-8 text-sm"
                   value={draftValues.asin}
                   onChange={(e) => setDraftValues((prev) => ({ ...prev, asin: e.target.value }))}
                   placeholder="z. B. B0..."
                 />
               </label>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <label className="space-y-1 text-sm">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <label className="space-y-0.5 text-xs">
                 <span className="text-muted-foreground">Produkttyp (Amazon)</span>
                 <Select
                   value={draftValues.productType || "__none__"}
@@ -927,7 +1098,7 @@ export function MarketplaceProductsView({
                     }))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-8 text-sm">
                     <SelectValue placeholder="Produkttyp wählen" />
                   </SelectTrigger>
                   <SelectContent>
@@ -940,15 +1111,16 @@ export function MarketplaceProductsView({
                   </SelectContent>
                 </Select>
               </label>
-              <label className="space-y-1 text-sm">
+              <label className="space-y-0.5 text-xs">
                 <span className="text-muted-foreground">Marke</span>
                 <Input
+                  className="h-8 text-sm"
                   value={draftValues.brand}
                   onChange={(e) => setDraftValues((prev) => ({ ...prev, brand: e.target.value }))}
                   placeholder="Brand"
                 />
               </label>
-              <label className="space-y-1 text-sm">
+              <label className="space-y-0.5 text-xs">
                 <span className="text-muted-foreground">Zustand</span>
                 <Select
                   value={draftValues.conditionType || "new_new"}
@@ -956,7 +1128,7 @@ export function MarketplaceProductsView({
                     setDraftValues((prev) => ({ ...prev, conditionType: value ?? "new_new" }))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-8 text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -968,15 +1140,16 @@ export function MarketplaceProductsView({
                   </SelectContent>
                 </Select>
               </label>
-              <label className="space-y-1 text-sm">
+              <label className="space-y-0.5 text-xs">
                 <span className="text-muted-foreground">Externe Produkt-ID</span>
                 <Input
+                  className="h-8 text-sm"
                   value={draftValues.externalProductId}
                   onChange={(e) => setDraftValues((prev) => ({ ...prev, externalProductId: e.target.value }))}
                   placeholder="EAN/UPC/GTIN/ISBN"
                 />
               </label>
-              <label className="space-y-1 text-sm">
+              <label className="space-y-0.5 text-xs">
                 <span className="text-muted-foreground">ID-Typ</span>
                 <Select
                   value={draftValues.externalProductIdType}
@@ -987,7 +1160,7 @@ export function MarketplaceProductsView({
                     }))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-8 text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -999,18 +1172,20 @@ export function MarketplaceProductsView({
                   </SelectContent>
                 </Select>
               </label>
-              <label className="space-y-1 text-sm">
+              <label className="space-y-0.5 text-xs">
                 <span className="text-muted-foreground">Preis (EUR)</span>
                 <Input
+                  className="h-8 text-sm"
                   value={draftValues.listPriceEur}
                   onChange={(e) => setDraftValues((prev) => ({ ...prev, listPriceEur: e.target.value }))}
                   placeholder="z. B. 29.99"
                   inputMode="decimal"
                 />
               </label>
-              <label className="space-y-1 text-sm">
+              <label className="space-y-0.5 text-xs">
                 <span className="text-muted-foreground">Bestand</span>
                 <Input
+                  className="h-8 text-sm"
                   value={draftValues.quantity}
                   onChange={(e) => setDraftValues((prev) => ({ ...prev, quantity: e.target.value }))}
                   placeholder="z. B. 120"
@@ -1019,18 +1194,19 @@ export function MarketplaceProductsView({
               </label>
             </div>
             {selectedProductTypeSchema ? (
-              <div className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3">
-                <p className="text-sm font-medium">
+              <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-2">
+                <p className="text-xs font-medium">
                   Kategorieattribute ({selectedProductTypeSchema.label})
                 </p>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   {selectedProductTypeSchema.attributes.map((field) => (
-                    <label key={field.key} className="space-y-1 text-sm">
+                    <label key={field.key} className="space-y-0.5 text-xs">
                       <span className="text-muted-foreground">
                         {field.label}
                         {field.required ? " *" : ""}
                       </span>
                       <Input
+                        className="h-8 text-sm"
                         value={draftValues.attributes[field.key] ?? ""}
                         onChange={(e) =>
                           setDraftValues((prev) => ({
@@ -1048,28 +1224,31 @@ export function MarketplaceProductsView({
                 </div>
               </div>
             ) : null}
-            <label className="space-y-1 text-sm">
+            <label className="space-y-0.5 text-xs">
               <span className="text-muted-foreground">Titel</span>
               <Input
+                className="h-8 text-sm"
                 value={draftValues.title}
                 onChange={(e) => setDraftValues((prev) => ({ ...prev, title: e.target.value }))}
                 placeholder="Produkttitel"
               />
             </label>
-            <label className="space-y-1 text-sm">
+            <label className="space-y-0.5 text-xs">
               <span className="text-muted-foreground">Beschreibung</span>
               <Textarea
                 value={draftValues.description}
                 onChange={(e) => setDraftValues((prev) => ({ ...prev, description: e.target.value }))}
-                className="min-h-[120px]"
-                placeholder="Lange Beschreibung"
+                className="min-h-[72px] resize-y text-sm"
+                rows={3}
+                placeholder="Beschreibung"
               />
             </label>
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Bulletpoints</p>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Bulletpoints</p>
               {[0, 1, 2, 3, 4].map((idx) => (
                 <Input
                   key={`bp-${idx}`}
+                  className="h-8 text-sm"
                   value={draftValues.bulletPoints[idx] ?? ""}
                   onChange={(e) =>
                     setDraftValues((prev) => {
@@ -1078,28 +1257,17 @@ export function MarketplaceProductsView({
                       return { ...prev, bulletPoints: next };
                     })
                   }
-                  placeholder={`Bulletpoint ${idx + 1}`}
+                  placeholder={`Bullet ${idx + 1}`}
                 />
               ))}
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm text-muted-foreground">Bilder (URLs)</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setDraftValues((prev) => ({ ...prev, images: [...prev.images, ""] }))
-                  }
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" aria-hidden />
-                  Bild hinzufügen
-                </Button>
-              </div>
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">
+                Bilder ({AMAZON_DRAFT_IMAGE_SLOT_COUNT} Felder, Vorschau)
+              </p>
               <div
                 className={cn(
-                  "rounded-md border border-dashed p-4 text-center text-sm transition-colors",
+                  "rounded-md border border-dashed px-2 py-1.5 text-center text-[11px] leading-snug transition-colors",
                   imageDropActive
                     ? "border-primary/70 bg-primary/5 text-foreground"
                     : "border-border/70 bg-muted/20 text-muted-foreground"
@@ -1126,70 +1294,52 @@ export function MarketplaceProductsView({
                   void handleImageDrop(e.dataTransfer);
                 }}
               >
-                <Upload className="mx-auto mb-2 h-5 w-5" aria-hidden />
-                Bilder hier hineinziehen (Dateien oder Bild-URLs). Max. {AMAZON_DRAFT_IMAGE_MAX_MB} MB pro Datei.
+                <Upload className="mx-auto mb-0.5 h-3.5 w-3.5 opacity-70" aria-hidden />
+                Dateien oder Bild-URLs in freie Slots ziehen (max. {AMAZON_DRAFT_IMAGE_MAX_MB} MB/Datei).
               </div>
-              {(draftValues.images.length ? draftValues.images : [""]).map((url, idx) => (
-                <div key={`img-${idx}`} className="flex items-center gap-2">
-                  <Input
-                    value={url}
-                    onChange={(e) =>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                {amazonImageSlots.map((url, idx) => (
+                  <AmazonDraftImageSlot
+                    key={idx}
+                    index={idx}
+                    url={url}
+                    onChange={(v) =>
                       setDraftValues((prev) => {
-                        const next = [...prev.images];
-                        next[idx] = e.target.value;
+                        const next = padAmazonDraftImages(prev.images);
+                        next[idx] = v;
                         return { ...prev, images: next };
                       })
                     }
-                    placeholder="https://..."
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() =>
-                      setDraftValues((prev) => ({
-                        ...prev,
-                        images: prev.images.filter((_, imageIdx) => imageIdx !== idx),
-                      }))
+                    onClear={() =>
+                      setDraftValues((prev) => {
+                        const next = padAmazonDraftImages(prev.images);
+                        next[idx] = "";
+                        return { ...prev, images: next };
+                      })
                     }
-                    aria-label="Bild entfernen"
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden />
-                  </Button>
-                </div>
-              ))}
-              {draftValues.images.filter(Boolean).length > 0 ? (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {draftValues.images
-                    .filter(Boolean)
-                    .slice(0, 8)
-                    .map((img) => (
-                      <a
-                        key={img}
-                        href={img}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block overflow-hidden rounded-md border border-border/60"
-                      >
-                        <img src={img} alt="Produktbild" className="h-24 w-full object-cover" loading="lazy" />
-                      </a>
-                    ))}
-                </div>
-              ) : null}
+                  />
+                ))}
+              </div>
             </div>
           </div>
-          <DialogFooter className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground">
+          <DialogFooter className="gap-2 border-t border-border/50 pt-2 sm:justify-between">
+            <span className="text-[11px] text-muted-foreground">
               Status: {draftLoading ? "lädt..." : draftStatus === "ready" ? "bereit" : "Entwurf"}
               {editorMode === "create_new" && missingRequiredFields.length > 0
                 ? ` • ${missingRequiredFields.length} Pflichtfeld(er) fehlen`
                 : ""}
             </span>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => setEditorOpen(false)}>
                 Schließen
               </Button>
-              <Button type="button" onClick={() => void saveDraft()} disabled={draftSaving || draftLoading}>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8"
+                onClick={() => void saveDraft()}
+                disabled={draftSaving || draftLoading}
+              >
                 {draftSaving ? "Speichert..." : "Entwurf speichern"}
               </Button>
             </div>

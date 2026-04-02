@@ -134,12 +134,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Zeitraum muss 1–60 Tage umfassen." }, { status: 400 });
     }
 
+    const forceRefresh = searchParams.get("refresh") === "1";
     const token = await getOttoAccessToken(config);
     const orders = await fetchOttoOrdersRange({
       baseUrl: config.baseUrl,
       token,
       startMs,
       endMs,
+      forceRefresh,
     });
 
     const items = orders

@@ -95,7 +95,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Zeitraum muss 1–60 Tage umfassen." }, { status: 400 });
     }
 
-    const allUnits = await fetchKauflandOrderUnitsAllStatuses({ config });
+    const forceRefresh = searchParams.get("refresh") === "1";
+    const allUnits = await fetchKauflandOrderUnitsAllStatuses({ config, forceRefresh });
     const filtered = filterOrderUnitsByCreatedRange(allUnits, startMs, endMs);
     const byOrder = new Map<string, KauflandOrderUnit[]>();
     for (const u of filtered) {

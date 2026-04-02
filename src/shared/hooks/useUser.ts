@@ -10,6 +10,8 @@ type DashboardUser = {
   email: string;
   fullName: string;
   roleKey: string;
+  /** Rohwert `profiles.role` (ohne Localhost-Boost) — für Entwickler-only UI. */
+  profileRoleRaw: string | null;
   initials: string;
   isLoading: boolean;
 };
@@ -19,6 +21,7 @@ const DEFAULT_USER: DashboardUser = {
   email: "",
   fullName: "Benutzer",
   roleKey: "",
+  profileRoleRaw: null,
   initials: "U",
   isLoading: true,
 };
@@ -60,7 +63,7 @@ export function useUser() {
       const authUser = session?.user ?? null;
       if (!authUser) {
         if (cancelled || gen !== hydrateGen) return;
-        setUser({ ...DEFAULT_USER, isLoading: false });
+        setUser({ ...DEFAULT_USER, isLoading: false, profileRoleRaw: null });
         return;
       }
 
@@ -73,6 +76,10 @@ export function useUser() {
         normalizeRoleKey(authUser.user_metadata?.role) ??
         normalizeRoleKey(authUser.app_metadata?.role) ??
         "viewer";
+      const metadataRoleRaw =
+        typeof authUser.user_metadata?.role === "string" && authUser.user_metadata.role.trim()
+          ? authUser.user_metadata.role.trim()
+          : null;
 
       // Sofort aus Session-Metadaten — ohne auf `profiles` zu warten (schnelleres Willkommen).
       // Bei erneutem Hydrate (z. B. Token-Refresh) Anzeigename nicht zurück auf Metadaten setzen.
@@ -86,6 +93,7 @@ export function useUser() {
           email,
           fullName: fallbackFullName,
           roleKey: fallbackRoleKey,
+          profileRoleRaw: metadataRoleRaw,
           initials: buildInitials(fallbackFullName, email),
           isLoading: false,
         };
@@ -102,6 +110,10 @@ export function useUser() {
       const fullName =
         (profile?.full_name as string | undefined) || fallbackFullName;
       let roleKey = normalizeRoleKey(profile?.role) || fallbackRoleKey;
+      const profileRoleRaw =
+        typeof profile?.role === "string" && profile.role.trim()
+          ? profile.role.trim()
+          : metadataRoleRaw;
 
       try {
         const hostname = typeof window !== "undefined" ? window.location.hostname : "";
@@ -117,6 +129,7 @@ export function useUser() {
         email,
         fullName,
         roleKey,
+        profileRoleRaw,
         initials: buildInitials(fullName, email),
         isLoading: false,
       });

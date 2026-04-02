@@ -61,9 +61,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Zeitraum muss 1–60 Tage umfassen." }, { status: 400 });
     }
 
+    const forceRefresh = searchParams.get("refresh") === "1";
     const allOrders = await fetchFressnapfOrdersPaginated(config, {
       createdFromMs: startMs,
       createdToMsExclusive: endMs,
+      forceRefresh,
     });
     const filtered = filterOrdersByCreatedRange(allOrders, startMs, endMs);
 

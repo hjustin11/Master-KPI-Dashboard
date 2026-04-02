@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { primeAmazonProductsIntegrationCache } from "@/shared/lib/amazonProductsSpApiCatalog";
+import { primeMiscMarketplaceOrdersCaches } from "@/shared/lib/marketplaceOrdersCacheWarm";
 import { primeXentralIntegrationCaches } from "@/shared/lib/xentralIntegrationCacheWarm";
 import {
   FLEX_DAY_MS,
@@ -123,6 +124,16 @@ async function handleWarm(request: Request): Promise<Response> {
   const started = Date.now();
   const flex = await runFlexMarketplaceWarm(dayWindows);
 
+  const miscOrdersStarted = Date.now();
+  let miscOrders: Awaited<ReturnType<typeof primeMiscMarketplaceOrdersCaches>> & { durationMs: number };
+  try {
+    const mr = await primeMiscMarketplaceOrdersCaches(dayWindows);
+    miscOrders = { ...mr, durationMs: Date.now() - miscOrdersStarted };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    miscOrders = { durationMs: Date.now() - miscOrdersStarted, otto: { ok: false, error: msg } };
+  }
+
   const amazonStarted = Date.now();
   let amazon: Awaited<ReturnType<typeof primeAmazonProductsIntegrationCache>> & { durationMs: number };
   try {
@@ -154,6 +165,7 @@ async function handleWarm(request: Request): Promise<Response> {
     ok: true,
     durationMs: Date.now() - started,
     flex,
+    miscOrders,
     amazon,
     xentral,
     dayWindows,

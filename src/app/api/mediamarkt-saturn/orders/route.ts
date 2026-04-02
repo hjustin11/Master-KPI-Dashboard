@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { primeFlexOrdersCaches } from "@/shared/lib/flexMarketplaceApiClient";
 import {
   fetchMmsOrdersPaginated,
   filterOrdersByCreatedRange,
@@ -59,6 +60,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Zeitraum muss 1–60 Tage umfassen." }, { status: 400 });
     }
 
+    const forceRefresh = searchParams.get("refresh") === "1";
+    if (forceRefresh) {
+      await primeFlexOrdersCaches(config, {
+        createdFromMs: startMs,
+        createdToMsExclusive: endMs,
+      });
+    }
     const allOrders = await fetchMmsOrdersPaginated(config, {
       createdFromMs: startMs,
       createdToMsExclusive: endMs,

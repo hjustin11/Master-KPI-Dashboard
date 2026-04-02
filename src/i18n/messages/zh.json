@@ -29,7 +29,7 @@
     "roleTestAccessPanelPermissionsHint": "该角色在仪表盘可执行的操作。",
     "roleTestAccessPanelSectionsHint": "在 设置 → 用户 中可见的区域（卡片）。",
     "wipGlobalLocksTitle": "全局 WIP 锁定",
-    "wipGlobalLocksHint": "对所有用户生效。勾选 = 仅开发者可访问（Owner 未在角色测试中，或已开启“编辑权限”）。与其余配置一并保存，约每 45 秒同步到各客户端。",
+    "wipGlobalLocksHint": "对所有用户生效。勾选 = 仅开发者可访问（Owner 未在角色测试中，或已开启“编辑权限”）。与其余配置一并保存，约每 5 分钟同步到各客户端。",
     "wipGlobalLockOn": "（已锁）",
     "wipGlobalLockOff": "（开放）"
   },
@@ -330,7 +330,8 @@
   "commonUi": {
     "unknownError": "未知错误。",
     "loading": "加载中…",
-    "syncing": "正在同步数据…"
+    "syncing": "正在同步数据…",
+    "close": "关闭"
   },
   "analyticsPage": {
     "title": "分析"
@@ -480,7 +481,37 @@
     "missingEnvVars": "缺少变量：{keys}",
     "loadFailed": "无法加载商品。",
     "reportPending": "正在准备报表…",
-    "reportPendingGiveUp": "多次自动重试后报表仍未就绪。请稍后刷新页面或在卖家平台查看报表状态。"
+    "reportPendingGiveUp": "多次自动重试后报表仍未就绪。请稍后刷新页面或在卖家平台查看报表状态。",
+    "createArticle": "新建商品",
+    "productShell": {
+      "editTitle": "编辑商品（{marketplace}）",
+      "createTitle": "新建商品（{marketplace}）",
+      "description": "在控制台集中编辑。特定于 {marketplace} 的字段与回写将在后续接入。",
+      "stammdatenSection": "主数据（来自列表）",
+      "marketplaceFieldsTitle": "{marketplace} 专用字段",
+      "marketplaceFieldsHint": "此处将显示该平台的典型商品属性（类目、物流、价格规则等）。当前为占位。",
+      "footerHint": "对接 API 后将支持保存到平台。",
+      "saveToMarketplace": "保存到平台",
+      "saveDisabledTitle": "尚未接入",
+      "createSkuPlaceholder": "新 SKU",
+      "createIdPlaceholder": "平台商品 ID（若已知）",
+      "createTitlePlaceholder": "工作标题 / 商品名称",
+      "listFieldsSection": "列表其余列（API）",
+      "listFieldStatusLabel": "状态（列表）",
+      "listFieldPriceEur": "价格（欧元，列表）",
+      "listFieldStockQty": "库存（列表）",
+      "apiDetailSection": "完整 API 记录（按 SKU 匹配）",
+      "apiDetailNote": "来源：与该平台相同的商品列表接口；下方为返回的全部字段。",
+      "apiDetailLoading": "正在加载 API 数据…",
+      "apiDetailError": "无法加载商品列表。",
+      "apiDetailEmpty": "当前 API 响应中无匹配记录（例如分页—请换页后重新打开）。"
+    }
+  },
+  "ordersShared": {
+    "loading": "正在加载订单（{marketplace}）…"
+  },
+  "productListShared": {
+    "loading": "正在加载商品（{marketplace}）…"
   },
   "amazonOrders": {
     "title": "亚马逊订单",
@@ -769,6 +800,9 @@
     "subtitleRest": "仅当至少两个市场有价格且某一价格与众数（出现次数最多的金额）不符时标为「不一致」。最高频次并列则不标记。",
     "loadError": "无法加载价格对比。",
     "saveError": "无法保存修改。",
+    "saved": "更改已保存。",
+    "stockSyncSaved": "已更新 {count} 个商品的平台库存。",
+    "stockSyncError": "无法完整更新平台库存。",
     "filterPlaceholder": "按 SKU 或商品名称筛选…",
     "refresh": "刷新",
     "syncing": "正在同步数据…",
@@ -790,7 +824,8 @@
     "priceNa": "无价格",
     "deviating": "不一致",
     "notConnected": "计划接入",
-    "priceStockCompact": "价格 / 库存"
+    "priceStockCompact": "价格 / 库存",
+    "apiUnavailable": "API 缺失"
   },
   "xentralOrders": {
     "title": "订单",

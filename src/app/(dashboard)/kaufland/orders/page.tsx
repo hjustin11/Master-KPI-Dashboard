@@ -24,7 +24,14 @@ import {
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
 import { MarketplaceOrderIdLink } from "@/shared/components/MarketplaceOrderIdLink";
+import {
+  filterMarketplaceOrdersByYmdRange,
+  mergeMarketplaceOrderLists,
+} from "@/shared/lib/marketplaceOrdersClientMerge";
 import { toDateInputValue } from "@/shared/lib/orderDateParams";
+import { useStableTableRowsDuringFetch } from "@/shared/lib/useStableTableRowsDuringFetch";
+
+const KAUFLAND_ORDERS_ACCUMULATED_LS_KEY = "kaufland_orders_accumulated_v1";
 
 type KauflandOrderRow = {
   orderId: string;
@@ -103,26 +110,41 @@ export default function KauflandOrdersPage() {
 
   const [from, setFrom] = useState<string>(toDateInputValue(yesterday));
   const [to, setTo] = useState<string>(toDateInputValue(now));
-  const [rows, setRows] = useState<KauflandOrderRow[]>([]);
+  const [allRows, setAllRows] = useState<KauflandOrderRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
   const [error, setError] = useState<{ message: string; missingKeys?: string[] } | null>(null);
   const [hasMounted, setHasMounted] = useState(false);
   const fromRef = useRef(from);
   const toRef = useRef(to);
+  const allRowsRef = useRef<KauflandOrderRow[]>([]);
 
   useEffect(() => {
     fromRef.current = from;
     toRef.current = to;
   }, [from, to]);
 
+  useEffect(() => {
+    allRowsRef.current = allRows;
+  }, [allRows]);
+
+  const displayedRows = useMemo(
+    () => filterMarketplaceOrdersByYmdRange(allRows, from, to),
+    [allRows, from, to]
+  );
+
+  const tableRows = useStableTableRowsDuringFetch({
+    rows: displayedRows,
+    isFetchActive: isLoading || isBackgroundSyncing,
+  });
+
   const summary = useMemo(() => {
-    const orders = rows.length;
-    const units = rows.reduce((sum, row) => sum + (row.units ?? 0), 0);
-    const amount = rows.reduce((sum, row) => sum + (row.amount ?? 0), 0);
-    const currency = rows[0]?.currency || "EUR";
+    const orders = tableRows.length;
+    const units = tableRows.reduce((sum, row) => sum + (row.units ?? 0), 0);
+    const amount = tableRows.reduce((sum, row) => sum + (row.amount ?? 0), 0);
+    const currency = tableRows[0]?.currency || "EUR";
     return { orders, units, amount, currency };
-  }, [rows]);
+  }, [tableRows]);
 
   const columns = useMemo<Array<ColumnDef<KauflandOrderRow>>>(
     () => [
@@ -177,25 +199,27 @@ export default function KauflandOrdersPage() {
     async (nextFrom?: string, nextTo?: string, forceRefresh = false, silent = false) => {
       const f = nextFrom ?? fromRef.current;
       const rangeTo = nextTo ?? toRef.current;
-      const cacheKey = `kaufland_orders_cache_v1:${f}:${rangeTo}`;
       let hadCache = false;
 
       if (!forceRefresh && !silent) {
-        const parsed = readLocalJsonCache<CachedOrdersPayload>(cacheKey);
-        if (parsed && Array.isArray(parsed.items)) {
-          setRows(parsed.items);
+        const parsed = readLocalJsonCache<CachedOrdersPayload>(KAUFLAND_ORDERS_ACCUMULATED_LS_KEY);
+        if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+          setAllRows(parsed.items);
           hadCache = true;
           setIsLoading(false);
         }
       }
 
-      if (forceRefresh && !silent) {
+      const hasAnyRows = hadCache || allRowsRef.current.length > 0;
+      if (forceRefresh && !silent && !hasAnyRows) {
         setIsLoading(true);
-      } else if (!hadCache && !silent) {
+      } else if (!hasAnyRows && !silent) {
         setIsLoading(true);
+      } else if (!silent) {
+        setIsLoading(false);
       }
 
-      const showBackgroundIndicator = silent || (!forceRefresh && hadCache);
+      const showBackgroundIndicator = silent || hasAnyRows;
       if (showBackgroundIndicator) {
         setIsBackgroundSyncing(true);
       }
@@ -208,6 +232,7 @@ export default function KauflandOrdersPage() {
         const search = new URLSearchParams();
         if (f) search.set("from", f);
         if (rangeTo) search.set("to", rangeTo);
+        if (forceRefresh) search.set("refresh", "1");
         const res = await fetch(`/api/kaufland/orders?${search.toString()}`, { cache: "no-store" });
         const payload = (await res.json()) as OrdersResponse;
         if (!res.ok) {
@@ -216,22 +241,21 @@ export default function KauflandOrdersPage() {
             message,
             missingKeys: payload.missingKeys,
           });
-          setRows([]);
           return;
         }
-        const sorted = [...(payload.items ?? [])].sort(
-          (a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()
-        );
-        setRows(sorted);
-        writeLocalJsonCache(cacheKey, {
-          savedAt: Date.now(),
-          items: sorted,
-        } satisfies CachedOrdersPayload);
+        const fresh = payload.items ?? [];
+        setAllRows((prev) => {
+          const merged = mergeMarketplaceOrderLists(prev, fresh);
+          writeLocalJsonCache(KAUFLAND_ORDERS_ACCUMULATED_LS_KEY, {
+            savedAt: Date.now(),
+            items: merged,
+          } satisfies CachedOrdersPayload);
+          return merged;
+        });
       } catch (e) {
         if (silent) {
           console.warn("[Kaufland Bestellungen] Hintergrund-Abgleich fehlgeschlagen:", e);
         } else {
-          setRows([]);
           setError({
             message: e instanceof Error ? e.message : t("commonUi.unknownError"),
           });
@@ -328,14 +352,14 @@ export default function KauflandOrdersPage() {
         </div>
       ) : null}
 
-      {isLoading ? (
+      {isLoading && tableRows.length === 0 && allRows.length === 0 ? (
         <div className="rounded-xl border border-border/50 bg-card/80 p-4 text-sm text-muted-foreground">
-          {t("kauflandOrders.loading")}
+          {t("ordersShared.loading", { marketplace: t("nav.kaufland") })}
         </div>
       ) : (
         <DataTable
           columns={columns}
-          data={rows}
+          data={tableRows}
           filterColumn={t("filters.kauflandOrders")}
           paginate={false}
           compact

@@ -35,7 +35,13 @@ function mapShopifyProduct(p: Record<string, unknown>): MarketplaceProductListRo
   const sku = String(first?.sku ?? "").trim();
   const isActive = status === "active";
   const rawPrice = first?.price;
-  const rawStock = first?.inventory_quantity ?? first?.inventoryQuantity;
+  const rawStock =
+    first?.inventory_quantity ??
+    first?.inventoryQuantity ??
+    first?.old_inventory_quantity ??
+    first?.oldInventoryQuantity ??
+    first?.available ??
+    first?.availableForSale;
   let priceEur: number | null = null;
   if (typeof rawPrice === "string") {
     const n = Number(rawPrice);

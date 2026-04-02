@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
-import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
+import { getIntegrationCachedOrLoad, writeIntegrationCache } from "@/shared/lib/integrationDataCache";
 import {
   marketplaceIntegrationFreshMs,
   marketplaceIntegrationStaleMs,
@@ -171,6 +171,8 @@ export type FetchFressnapfOrdersOptions = {
   /** Exklusives Ende (Mirakl `end_date` = letzter inkl. Zeitpunkt). */
   createdToMsExclusive?: number;
   maxPages?: number;
+  /** Live-Fetch und Cache neu schreiben (z. B. `refresh=1` in der Route). */
+  forceRefresh?: boolean;
 };
 
 function buildOrdersListQuery(
@@ -425,18 +427,32 @@ export async function fetchFressnapfOrdersRawPaginated(
   config: FressnapfIntegrationConfig,
   options: FetchFressnapfOrdersOptions = {}
 ): Promise<unknown[]> {
+  const { forceRefresh, ...optsForKey } = options;
   const cacheKey = `fressnapf:orders:raw:${hashCacheInput({
-    createdFromMs: options.createdFromMs ?? null,
-    createdToMsExclusive: options.createdToMsExclusive ?? null,
-    maxPages: options.maxPages ?? null,
+    createdFromMs: optsForKey.createdFromMs ?? null,
+    createdToMsExclusive: optsForKey.createdToMsExclusive ?? null,
+    maxPages: optsForKey.maxPages ?? null,
     ordersPath: config.ordersPath,
     amountScale: config.amountScale,
   })}`;
+  const freshMs = marketplaceIntegrationFreshMs();
+  const staleMs = marketplaceIntegrationStaleMs();
+  if (forceRefresh) {
+    const live = await fetchFressnapfOrdersRawPaginatedLive(config, options);
+    await writeIntegrationCache({
+      cacheKey,
+      source: "fressnapf:orders:raw",
+      value: live,
+      freshMs,
+      staleMs,
+    });
+    return live;
+  }
   return getIntegrationCachedOrLoad({
     cacheKey,
     source: "fressnapf:orders:raw",
-    freshMs: marketplaceIntegrationFreshMs(),
-    staleMs: marketplaceIntegrationStaleMs(),
+    freshMs,
+    staleMs,
     loader: () => fetchFressnapfOrdersRawPaginatedLive(config, options),
   });
 }
@@ -445,18 +461,32 @@ export async function fetchFressnapfOrdersPaginated(
   config: FressnapfIntegrationConfig,
   options: FetchFressnapfOrdersOptions = {}
 ): Promise<FressnapfNormalizedOrder[]> {
+  const { forceRefresh, ...optsForKey } = options;
   const cacheKey = `fressnapf:orders:normalized:${hashCacheInput({
-    createdFromMs: options.createdFromMs ?? null,
-    createdToMsExclusive: options.createdToMsExclusive ?? null,
-    maxPages: options.maxPages ?? null,
+    createdFromMs: optsForKey.createdFromMs ?? null,
+    createdToMsExclusive: optsForKey.createdToMsExclusive ?? null,
+    maxPages: optsForKey.maxPages ?? null,
     ordersPath: config.ordersPath,
     amountScale: config.amountScale,
   })}`;
+  const freshMs = marketplaceIntegrationFreshMs();
+  const staleMs = marketplaceIntegrationStaleMs();
+  if (forceRefresh) {
+    const live = await fetchFressnapfOrdersPaginatedLive(config, options);
+    await writeIntegrationCache({
+      cacheKey,
+      source: "fressnapf:orders:normalized",
+      value: live,
+      freshMs,
+      staleMs,
+    });
+    return live;
+  }
   return getIntegrationCachedOrLoad({
     cacheKey,
     source: "fressnapf:orders:normalized",
-    freshMs: marketplaceIntegrationFreshMs(),
-    staleMs: marketplaceIntegrationStaleMs(),
+    freshMs,
+    staleMs,
     loader: () => fetchFressnapfOrdersPaginatedLive(config, options),
   });
 }

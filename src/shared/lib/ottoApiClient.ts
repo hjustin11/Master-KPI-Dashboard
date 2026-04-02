@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readIntegrationSecret } from "@/shared/lib/integrationSecrets";
-import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
+import { getIntegrationCachedOrLoad, writeIntegrationCache } from "@/shared/lib/integrationDataCache";
 import {
   marketplaceIntegrationFreshMs,
   marketplaceIntegrationStaleMs,
@@ -196,17 +196,32 @@ export async function fetchOttoOrdersRange(args: {
   token: string;
   startMs: number;
   endMs: number;
+  /** Live-Fetch und Cache neu schreiben (z. B. `refresh=1` in der Route). */
+  forceRefresh?: boolean;
 }): Promise<OttoOrder[]> {
   const cacheKey = `otto:orders:${hashCacheInput({
     baseUrl: args.baseUrl,
     startMs: args.startMs,
     endMs: args.endMs,
   })}`;
+  const freshMs = marketplaceIntegrationFreshMs();
+  const staleMs = marketplaceIntegrationStaleMs();
+  if (args.forceRefresh) {
+    const live = await fetchOttoOrdersRangeLive(args);
+    await writeIntegrationCache({
+      cacheKey,
+      source: "otto:orders",
+      value: live,
+      freshMs,
+      staleMs,
+    });
+    return live;
+  }
   return getIntegrationCachedOrLoad({
     cacheKey,
     source: "otto:orders",
-    freshMs: marketplaceIntegrationFreshMs(),
-    staleMs: marketplaceIntegrationStaleMs(),
+    freshMs,
+    staleMs,
     loader: () => fetchOttoOrdersRangeLive(args),
   });
 }

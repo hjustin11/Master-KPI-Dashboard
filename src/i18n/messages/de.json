@@ -29,7 +29,7 @@
     "roleTestAccessPanelPermissionsHint": "Welche Aktionen die Rolle im Dashboard ausführen darf.",
     "roleTestAccessPanelSectionsHint": "Sichtbare Bereiche auf Einstellungen → Benutzer (Kacheln).",
     "wipGlobalLocksTitle": "Globale WIP-Sperren",
-    "wipGlobalLocksHint": "Gilt für alle Nutzer. Aktiv = Bereich nur für Entwickler (Owner ohne Rollen-Test oder mit aktivem „Zugriffe bearbeiten“). Wird mit der übrigen Konfiguration gespeichert und etwa alle 45 Sekunden bei allen Clients aktualisiert.",
+    "wipGlobalLocksHint": "Gilt für alle Nutzer. Aktiv = Bereich nur für Entwickler (Owner ohne Rollen-Test oder mit aktivem „Zugriffe bearbeiten“). Wird mit der übrigen Konfiguration gespeichert und etwa alle 5 Minuten bei allen Clients aktualisiert.",
     "wipGlobalLockOn": "(gesperrt)",
     "wipGlobalLockOff": "(frei)"
   },
@@ -329,7 +329,8 @@
   "commonUi": {
     "unknownError": "Unbekannter Fehler.",
     "loading": "Laden…",
-    "syncing": "Daten werden abgeglichen…"
+    "syncing": "Daten werden abgeglichen…",
+    "close": "Schließen"
   },
   "analyticsPage": {
     "title": "Analytics"
@@ -479,7 +480,37 @@
     "missingEnvVars": "Fehlende Variablen: {keys}",
     "loadFailed": "Produkte konnten nicht geladen werden.",
     "reportPending": "Bericht wird vorbereitet…",
-    "reportPendingGiveUp": "Der Bericht war nach mehreren automatischen Versuchen noch nicht bereit. Bitte die Seite später neu laden oder den Report-Status in Seller Central prüfen."
+    "reportPendingGiveUp": "Der Bericht war nach mehreren automatischen Versuchen noch nicht bereit. Bitte die Seite später neu laden oder den Report-Status in Seller Central prüfen.",
+    "createArticle": "Artikel anlegen",
+    "productShell": {
+      "editTitle": "Artikel bearbeiten ({marketplace})",
+      "createTitle": "Artikel anlegen ({marketplace})",
+      "description": "Zentrale Bearbeitung im Dashboard. Marktplatz-spezifische Felder und die Übertragung an {marketplace} werden als Nächstes ergänzt.",
+      "stammdatenSection": "Stammdaten (Liste)",
+      "marketplaceFieldsTitle": "Felder für {marketplace}",
+      "marketplaceFieldsHint": "Hier erscheinen die typischen Produktattribute dieses Marktplatzes (z. B. Kategorie, Versand, Preisregeln). Aktuell nur Platzhalter.",
+      "footerHint": "Speichern am Marktplatz folgt, sobald die API-Anbindung fertig ist.",
+      "saveToMarketplace": "Am Marktplatz speichern",
+      "saveDisabledTitle": "Noch nicht angebunden",
+      "createSkuPlaceholder": "Neue SKU",
+      "createIdPlaceholder": "Marktplatz-ID (falls bekannt)",
+      "createTitlePlaceholder": "Arbeitstitel / Produktname",
+      "listFieldsSection": "Weitere Listenspalten (API)",
+      "listFieldStatusLabel": "Status (Liste)",
+      "listFieldPriceEur": "Preis (EUR, Liste)",
+      "listFieldStockQty": "Bestand (Liste)",
+      "apiDetailSection": "Vollständiger API-Datensatz (Treffer per SKU)",
+      "apiDetailNote": "Quelle: dieselbe Produktlisten-API wie im Marktplatz; alle gelieferten Felder unten.",
+      "apiDetailLoading": "API-Daten werden geladen…",
+      "apiDetailError": "Produktliste konnte nicht geladen werden.",
+      "apiDetailEmpty": "Kein passender Datensatz in der aktuellen API-Antwort (z. B. Pagination – Seite wechseln und erneut öffnen)."
+    }
+  },
+  "ordersShared": {
+    "loading": "Bestellungen werden geladen ({marketplace})…"
+  },
+  "productListShared": {
+    "loading": "Produkte werden geladen ({marketplace})…"
   },
   "amazonOrders": {
     "title": "Amazon-Bestellungen",
@@ -792,6 +823,9 @@
     "subtitleRest": "„Abweichend“ nur, wenn mindestens zwei Marktplätze einen Preis haben und ein Preis nicht zur Mehrheit (häufigster Betrag) passt. Gleichstand an der Spitze → keine Markierung.",
     "loadError": "Preisvergleich konnte nicht geladen werden.",
     "saveError": "Änderungen konnten nicht gespeichert werden.",
+    "saved": "Änderungen gespeichert.",
+    "stockSyncSaved": "Marktplatz-Bestand für {count} Artikel aktualisiert.",
+    "stockSyncError": "Bestand konnte am Marktplatz nicht vollständig aktualisiert werden.",
     "filterPlaceholder": "SKU oder Artikelname filtern…",
     "refresh": "Aktualisieren",
     "syncing": "Daten werden abgeglichen…",
@@ -813,7 +847,8 @@
     "priceNa": "Preis n. a.",
     "deviating": "abweichend",
     "notConnected": "Anbindung geplant",
-    "priceStockCompact": "Preis / Bestand"
+    "priceStockCompact": "Preis / Bestand",
+    "apiUnavailable": "API fehlt"
   },
   "xentralOrders": {
     "title": "Aufträge",

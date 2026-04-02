@@ -22,6 +22,23 @@ function offerPriceEur(o: Record<string, unknown>): number | null {
   return null;
 }
 
+function miraklOfferQuantity(o: Record<string, unknown>): number | null {
+  const raw =
+    o.quantity ??
+    o.available_quantity ??
+    o.availableQuantity ??
+    o.offer_quantity ??
+    o.offerQuantity ??
+    o.quantity_max ??
+    o.max_quantity;
+  if (typeof raw === "number" && Number.isFinite(raw)) return Math.trunc(raw);
+  if (typeof raw === "string" && raw.trim()) {
+    const n = Number(raw.trim().replace(",", "."));
+    if (Number.isFinite(n)) return Math.trunc(n);
+  }
+  return null;
+}
+
 function mapMiraklOffer(o: Record<string, unknown>): MarketplaceProductListRow {
   const sku = String(o.shop_sku ?? o.shopSku ?? "").trim();
   const offerId = String(o.offer_id ?? o.id ?? "").trim();
@@ -42,6 +59,7 @@ function mapMiraklOffer(o: Record<string, unknown>): MarketplaceProductListRow {
     statusLabel: stateLabel,
     isActive: active,
     priceEur: offerPriceEur(o),
+    stockQty: miraklOfferQuantity(o),
   };
 }
 

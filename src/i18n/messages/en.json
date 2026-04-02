@@ -29,7 +29,7 @@
     "roleTestAccessPanelPermissionsHint": "What this role is allowed to do in the dashboard.",
     "roleTestAccessPanelSectionsHint": "Visible sections on Settings → Users (tiles).",
     "wipGlobalLocksTitle": "Global WIP locks",
-    "wipGlobalLocksHint": "Applies to everyone. On = section is developer-only (owner not in role test, or with “Edit access” enabled). Saved with the rest of the config and refreshed for all clients about every 45 seconds.",
+    "wipGlobalLocksHint": "Applies to everyone. On = section is developer-only (owner not in role test, or with “Edit access” enabled). Saved with the rest of the config and refreshed for all clients about every 5 minutes.",
     "wipGlobalLockOn": "(locked)",
     "wipGlobalLockOff": "(open)"
   },
@@ -330,7 +330,8 @@
   "commonUi": {
     "unknownError": "Unknown error.",
     "loading": "Loading…",
-    "syncing": "Syncing data…"
+    "syncing": "Syncing data…",
+    "close": "Close"
   },
   "analyticsPage": {
     "title": "Analytics"
@@ -480,7 +481,37 @@
     "missingEnvVars": "Missing variables: {keys}",
     "loadFailed": "Could not load products.",
     "reportPending": "Report is being prepared…",
-    "reportPendingGiveUp": "The report was still not ready after several automatic retries. Please reload later or check the report status in Seller Central."
+    "reportPendingGiveUp": "The report was still not ready after several automatic retries. Please reload later or check the report status in Seller Central.",
+    "createArticle": "Create listing",
+    "productShell": {
+      "editTitle": "Edit listing ({marketplace})",
+      "createTitle": "Create listing ({marketplace})",
+      "description": "Central editing in the dashboard. Marketplace-specific fields and pushing updates to {marketplace} will be added next.",
+      "stammdatenSection": "Master data (from list)",
+      "marketplaceFieldsTitle": "Fields for {marketplace}",
+      "marketplaceFieldsHint": "Typical product attributes for this marketplace (e.g. category, shipping, pricing rules) will appear here. Placeholder for now.",
+      "footerHint": "Saving to the marketplace will be enabled once the API integration is ready.",
+      "saveToMarketplace": "Save to marketplace",
+      "saveDisabledTitle": "Not connected yet",
+      "createSkuPlaceholder": "New SKU",
+      "createIdPlaceholder": "Marketplace ID (if known)",
+      "createTitlePlaceholder": "Working title / product name",
+      "listFieldsSection": "Additional list columns (API)",
+      "listFieldStatusLabel": "Status (list)",
+      "listFieldPriceEur": "Price (EUR, list)",
+      "listFieldStockQty": "Stock (list)",
+      "apiDetailSection": "Full API record (matched by SKU)",
+      "apiDetailNote": "Source: same product-list API as the marketplace; all fields returned below.",
+      "apiDetailLoading": "Loading API data…",
+      "apiDetailError": "Could not load the product list.",
+      "apiDetailEmpty": "No matching record in the current API response (e.g. pagination—switch page and open again)."
+    }
+  },
+  "ordersShared": {
+    "loading": "Loading orders ({marketplace})…"
+  },
+  "productListShared": {
+    "loading": "Loading products ({marketplace})…"
   },
   "amazonOrders": {
     "title": "Amazon orders",
@@ -793,6 +824,9 @@
     "subtitleRest": "“Deviating” only when at least two marketplaces have a price and one price does not match the plurality (most common amount). Tie for the top count → no tag.",
     "loadError": "Could not load price comparison.",
     "saveError": "Could not save changes.",
+    "saved": "Changes saved.",
+    "stockSyncSaved": "Updated marketplace stock for {count} items.",
+    "stockSyncError": "Could not fully update stock on marketplaces.",
     "filterPlaceholder": "Filter by SKU or article name…",
     "refresh": "Refresh",
     "syncing": "Syncing data…",
@@ -814,7 +848,8 @@
     "priceNa": "Price n/a",
     "deviating": "deviating",
     "notConnected": "Connection planned",
-    "priceStockCompact": "Price / Stock"
+    "priceStockCompact": "Price / Stock",
+    "apiUnavailable": "API missing"
   },
   "xentralOrders": {
     "title": "Orders",

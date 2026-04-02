@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
-import { getIntegrationCachedOrLoad } from "@/shared/lib/integrationDataCache";
+import { getIntegrationCachedOrLoad, writeIntegrationCache } from "@/shared/lib/integrationDataCache";
 import {
   marketplaceIntegrationFreshMs,
   marketplaceIntegrationStaleMs,
@@ -184,6 +184,7 @@ export async function fetchKauflandOrderUnitsAllStatuses(args: {
   /** Optional: z. B. de */
   storefront?: string;
   maxPagesPerStatus?: number;
+  forceRefresh?: boolean;
 }): Promise<KauflandOrderUnit[]> {
   const cacheKey = [
     "kaufland:order-units",
@@ -200,11 +201,24 @@ export async function fetchKauflandOrderUnitsAllStatuses(args: {
       .digest("hex")
       .slice(0, 24),
   ].join(":");
+  const freshMs = marketplaceIntegrationFreshMs();
+  const staleMs = marketplaceIntegrationStaleMs();
+  if (args.forceRefresh) {
+    const live = await fetchKauflandOrderUnitsAllStatusesLive(args);
+    await writeIntegrationCache({
+      cacheKey,
+      source: "kaufland:order-units",
+      value: live,
+      freshMs,
+      staleMs,
+    });
+    return live;
+  }
   return getIntegrationCachedOrLoad({
     cacheKey,
     source: "kaufland:order-units",
-    freshMs: marketplaceIntegrationFreshMs(),
-    staleMs: marketplaceIntegrationStaleMs(),
+    freshMs,
+    staleMs,
     loader: () => fetchKauflandOrderUnitsAllStatusesLive(args),
   });
 }

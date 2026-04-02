@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ApiDataSourceDebugPopover } from "@/shared/components/ApiDataSourceDebugPopover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +33,14 @@ import {
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
 import { usePermissions } from "@/shared/hooks/usePermissions";
+import { useShowApiSourceDebug } from "@/shared/hooks/useShowApiSourceDebug";
+import {
+  PRICE_PARITY_DOC_AMAZON,
+  PRICE_PARITY_DOC_BY_MARKETPLACE_SLUG,
+  PRICE_PARITY_DOC_XENTRAL_NAME,
+  PRICE_PARITY_DOC_XENTRAL_SKU,
+  PRICE_PARITY_DOC_XENTRAL_STOCK,
+} from "@/shared/lib/priceParityDataSourceMeta";
 
 type CellState = "ok" | "missing" | "no_price" | "mismatch" | "not_connected";
 
@@ -167,16 +177,6 @@ function ParityCellValue({
     }).format(value);
   };
 
-  if (state === "not_connected" && stockState === "not_connected") {
-    return (
-      <span
-        className="text-xs text-muted-foreground"
-        title={`${label}: ${t("priceParity.notConnected")}`}
-      >
-        —
-      </span>
-    );
-  }
   if (state === "missing" && stockState === "missing") {
     return (
       <div className="flex flex-col gap-px">
@@ -233,6 +233,9 @@ function ParityCellValue({
       {(state === "no_price" || stockState === "no_price") && !editing ? (
         <span className="text-[10px] text-muted-foreground">n/a</span>
       ) : null}
+      {(state === "not_connected" || stockState === "not_connected") && !editing ? (
+        <span className="text-[10px] text-amber-700">{t("priceParity.apiUnavailable")}</span>
+      ) : null}
       {state === "mismatch" || stockState === "mismatch" ? (
         <Badge variant="outline" className="h-4 w-fit border-rose-300 px-1 py-0 text-[9px] leading-none text-rose-800">
           {t("priceParity.deviating")}
@@ -245,6 +248,7 @@ function ParityCellValue({
 export function MarketplacePriceParitySection() {
   const { t, locale } = useTranslation();
   const { canUseAction } = usePermissions();
+  const showApiSourceDebug = useShowApiSourceDebug();
   const intlTag = intlLocaleTag(locale);
   const formatStock = (value: number) => {
     if (!Number.isFinite(value)) return "—";
@@ -472,6 +476,41 @@ export function MarketplacePriceParitySection() {
     }
     setSavingEdits(true);
     try {
+      if (editMode === "stock" || editMode === "price") {
+        const marketplaceSyncUpdates = updates
+          .filter(
+            (u): u is { sku: string; marketplaceSlug: string; stockQty?: number; priceEur?: number } =>
+              (typeof u.stockQty === "number" && Number.isFinite(u.stockQty)) ||
+              (typeof u.priceEur === "number" && Number.isFinite(u.priceEur))
+          )
+          .map((u) => ({ sku: u.sku, marketplaceSlug: u.marketplaceSlug, stockQty: u.stockQty, priceEur: u.priceEur }));
+        if (marketplaceSyncUpdates.length > 0) {
+          const syncRes = await fetch("/api/marketplaces/stock-sync", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ updates: marketplaceSyncUpdates }),
+          });
+          const syncJson = (await syncRes.json().catch(() => ({}))) as {
+            error?: string;
+            updatedCount?: number;
+            failures?: Array<{ marketplaceSlug?: string; sku?: string; reason?: string }>;
+          };
+          const failed = Array.isArray(syncJson.failures) ? syncJson.failures : [];
+          if (!syncRes.ok || failed.length > 0) {
+            const first = failed[0];
+            const detail = first?.sku
+              ? `${first.marketplaceSlug ?? "marketplace"} · ${first.sku}: ${first.reason ?? t("priceParity.stockSyncError")}`
+              : syncJson.error ?? t("priceParity.stockSyncError");
+            throw new Error(detail);
+          }
+          toast.success(
+            t("priceParity.stockSyncSaved", {
+              count: String(syncJson.updatedCount ?? marketplaceSyncUpdates.length),
+            })
+          );
+        }
+      }
+
       const res = await fetch("/api/marketplaces/price-stock-overrides", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -480,9 +519,12 @@ export function MarketplacePriceParitySection() {
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? t("priceParity.saveError"));
       cancelEdit();
+      toast.success(t("priceParity.saved"));
       await load(true, false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("commonUi.unknownError"));
+      const msg = e instanceof Error ? e.message : t("commonUi.unknownError");
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSavingEdits(false);
     }
@@ -608,34 +650,40 @@ export function MarketplacePriceParitySection() {
                     stickyHeadBg
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => toggleSort("sku")}
-                    title={t("dataTable.sort")}
-                    className="inline-flex w-full min-w-0 max-w-full items-center justify-start gap-1 text-left font-medium"
-                  >
-                    <span className="min-w-0 truncate">{t("priceParity.sku")}</span>
-                    {sortIcon("sku")}
-                  </button>
+                  <div className="flex w-full min-w-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("sku")}
+                      title={t("dataTable.sort")}
+                      className="inline-flex min-w-0 flex-1 items-center justify-start gap-1 text-left font-medium"
+                    >
+                      <span className="min-w-0 truncate">{t("priceParity.sku")}</span>
+                      {sortIcon("sku")}
+                    </button>
+                    <ApiDataSourceDebugPopover show={showApiSourceDebug} doc={PRICE_PARITY_DOC_XENTRAL_SKU} />
+                  </div>
                 </TableHead>
                 <TableHead
                   aria-sort={
                     sort.col === "stock" ? (sort.dir === "asc" ? "ascending" : "descending") : "none"
                   }
                   className={cn(
-                    "sticky top-0 z-20 w-[4.25rem] min-w-[4.25rem] max-w-[5rem] whitespace-nowrap pl-4 text-right",
+                    "sticky top-0 z-20 w-[4.25rem] min-w-[4.25rem] max-w-[5rem] whitespace-nowrap pl-2 pr-1 text-right",
                     stickyHeadBg
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => toggleSort("stock")}
-                    title={t("dataTable.sort")}
-                    className="inline-flex w-full items-center justify-end gap-1 font-medium"
-                  >
-                    {t("priceParity.stock")}
-                    {sortIcon("stock")}
-                  </button>
+                  <div className="flex w-full items-center justify-end gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("stock")}
+                      title={t("dataTable.sort")}
+                      className="inline-flex min-w-0 flex-1 items-center justify-end gap-1 font-medium"
+                    >
+                      <span className="truncate">{t("priceParity.stock")}</span>
+                      {sortIcon("stock")}
+                    </button>
+                    <ApiDataSourceDebugPopover show={showApiSourceDebug} doc={PRICE_PARITY_DOC_XENTRAL_STOCK} />
+                  </div>
                 </TableHead>
                 <TableHead
                   aria-sort={
@@ -643,15 +691,18 @@ export function MarketplacePriceParitySection() {
                   }
                   className={cn("sticky top-0 z-20 min-w-[9rem]", stickyHeadBg)}
                 >
-                  <button
-                    type="button"
-                    onClick={() => toggleSort("name")}
-                    title={t("dataTable.sort")}
-                    className="inline-flex w-full min-w-0 items-center justify-start gap-1 font-medium"
-                  >
-                    <span className="truncate">{t("priceParity.article")}</span>
-                    {sortIcon("name")}
-                  </button>
+                  <div className="flex w-full min-w-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("name")}
+                      title={t("dataTable.sort")}
+                      className="inline-flex min-w-0 flex-1 items-center justify-start gap-1 font-medium"
+                    >
+                      <span className="truncate">{t("priceParity.article")}</span>
+                      {sortIcon("name")}
+                    </button>
+                    <ApiDataSourceDebugPopover show={showApiSourceDebug} doc={PRICE_PARITY_DOC_XENTRAL_NAME} />
+                  </div>
                 </TableHead>
                 <TableHead
                   aria-sort={
@@ -659,15 +710,18 @@ export function MarketplacePriceParitySection() {
                   }
                   className={cn(MARKETPLACE_PRICE_COL, "sticky top-0 z-20", stickyHeadBg)}
                 >
-                  <button
-                    type="button"
-                    onClick={() => toggleSort("amazon")}
-                    title={t("dataTable.sort")}
-                    className="inline-flex w-full min-w-0 max-w-full items-center justify-start gap-1 font-medium"
-                  >
-                    <span className="min-w-0 truncate">{t("priceParity.amazon")}</span>
-                    {sortIcon("amazon")}
-                  </button>
+                  <div className="flex w-full min-w-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("amazon")}
+                      title={t("dataTable.sort")}
+                      className="inline-flex min-w-0 flex-1 items-center justify-start gap-1 font-medium"
+                    >
+                      <span className="min-w-0 truncate">{t("priceParity.amazon")}</span>
+                      {sortIcon("amazon")}
+                    </button>
+                    <ApiDataSourceDebugPopover show={showApiSourceDebug} doc={PRICE_PARITY_DOC_AMAZON} />
+                  </div>
                 </TableHead>
                 {ANALYTICS_MARKETPLACES.map((m) => {
                   const sid = `mp:${m.slug}` as SortColumnId;
@@ -683,15 +737,21 @@ export function MarketplacePriceParitySection() {
                         stickyHeadBg
                       )}
                     >
-                      <button
-                        type="button"
-                        onClick={() => toggleSort(sid)}
-                        title={t("dataTable.sort")}
-                        className="inline-flex w-full min-w-0 max-w-full items-center justify-start gap-1 font-medium"
-                      >
-                        <span className="min-w-0 truncate">{m.label}</span>
-                        {sortIcon(sid)}
-                      </button>
+                      <div className="flex w-full min-w-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(sid)}
+                          title={t("dataTable.sort")}
+                          className="inline-flex min-w-0 flex-1 items-center justify-start gap-1 font-medium"
+                        >
+                          <span className="min-w-0 truncate">{m.label}</span>
+                          {sortIcon(sid)}
+                        </button>
+                        <ApiDataSourceDebugPopover
+                          show={showApiSourceDebug}
+                          doc={PRICE_PARITY_DOC_BY_MARKETPLACE_SLUG[m.slug]}
+                        />
+                      </div>
                     </TableHead>
                   );
                 })}

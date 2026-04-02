@@ -33,6 +33,19 @@ export function normalizeRoleKey(value: unknown): Role | null {
   return null;
 }
 
+/**
+ * Rohwert aus `profiles.role` (o. ä.): wer die Rolle „Entwickler“ im UI hat
+ * (inkl. DB-Key `owner` — siehe Einladungs-Label „Entwickler“).
+ * Nicht für den Localhost-`roleKey === "owner"`-Boost verwenden.
+ */
+const ENTWICKLER_PROFILE_ROLE_KEYS = new Set(["owner", "developer", "entwickler"]);
+
+export function isEntwicklerProfileRole(raw: unknown): boolean {
+  if (typeof raw !== "string") return false;
+  const k = raw.trim().toLowerCase();
+  return ENTWICKLER_PROFILE_ROLE_KEYS.has(k);
+}
+
 export function isOwnerRole(value: unknown): boolean {
   return normalizeRoleKey(value) === "owner";
 }

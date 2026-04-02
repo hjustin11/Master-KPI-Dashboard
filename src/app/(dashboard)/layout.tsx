@@ -12,6 +12,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { DashboardAccessConfigSync } from "@/shared/components/DashboardAccessConfigSync";
 import { TutorialRuntimeController } from "@/shared/components/tutorial/TutorialRuntimeController";
 import { TutorialNavProvider } from "@/shared/components/tutorial/TutorialNavContext";
+import { DevLiveLogProvider } from "@/shared/components/dev/DevLiveLog";
 
 export default function DashboardLayout({
   children,
@@ -47,43 +48,45 @@ export default function DashboardLayout({
         } as React.CSSProperties
       }
     >
-      <DashboardAccessConfigSync />
-      <RoleTestAccessPersistOnExit />
-      <DashboardRouteAccessGuard />
-      <div className="relative flex min-h-screen w-full overflow-hidden bg-gradient-to-br from-white via-white to-white">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-blue-50/45 blur-3xl" />
-          <div className="absolute -right-28 top-1/3 h-80 w-80 rounded-full bg-indigo-50/40 blur-3xl" />
-          <div className="absolute bottom-[-130px] left-1/3 h-72 w-72 rounded-full bg-sky-50/45 blur-3xl" />
-        </div>
-        <div className="pointer-events-none absolute inset-0 bg-slate-900/[0.015]" />
+      <DevLiveLogProvider>
+        <DashboardAccessConfigSync />
+        <RoleTestAccessPersistOnExit />
+        <DashboardRouteAccessGuard />
+        <div className="relative flex min-h-screen w-full overflow-hidden bg-gradient-to-br from-white via-white to-white">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-blue-50/45 blur-3xl" />
+            <div className="absolute -right-28 top-1/3 h-80 w-80 rounded-full bg-indigo-50/40 blur-3xl" />
+            <div className="absolute bottom-[-130px] left-1/3 h-72 w-72 rounded-full bg-sky-50/45 blur-3xl" />
+          </div>
+          <div className="pointer-events-none absolute inset-0 bg-slate-900/[0.015]" />
 
-        <TutorialNavProvider value={{ visibleSidebarKeys: tutorialVisibleSidebarKeys }}>
-          {tutorialSidebarVisible ? <AppSidebar /> : null}
-          <main
-            data-tutorial-target="main-content"
-            className="relative z-10 flex min-h-screen min-w-0 w-full flex-1 basis-0 flex-col"
-          >
-            <Header />
-            <RoleTestAccessToolbar />
-            <div
-              className="flex flex-1 flex-col w-full max-w-none p-4 pb-20 md:p-6 md:pb-6 lg:p-8"
-              style={tutorialLocked ? { filter: "blur(1.8px)", pointerEvents: "none" } : undefined}
+          <TutorialNavProvider value={{ visibleSidebarKeys: tutorialVisibleSidebarKeys }}>
+            {tutorialSidebarVisible ? <AppSidebar /> : null}
+            <main
+              data-tutorial-target="main-content"
+              className="relative z-10 flex min-h-screen min-w-0 w-full flex-1 basis-0 flex-col"
             >
-              {children}
-            </div>
-            {tutorialSidebarVisible ? <MobileNav /> : null}
-          </main>
-        </TutorialNavProvider>
-        <TutorialRuntimeController
-          onStateChange={(state) => {
-            setTutorialLocked(state.locked);
-            setTutorialSidebarVisible(state.sidebarVisible);
-            setTutorialVisibleSidebarKeys(state.visibleSidebarKeys);
-          }}
-        />
-        <Toaster richColors position="top-center" />
-      </div>
+              <Header />
+              <RoleTestAccessToolbar />
+              <div
+                className="flex flex-1 flex-col w-full max-w-none p-4 pb-20 md:p-6 md:pb-6 lg:p-8"
+                style={tutorialLocked ? { filter: "blur(1.8px)", pointerEvents: "none" } : undefined}
+              >
+                {children}
+              </div>
+              {tutorialSidebarVisible ? <MobileNav /> : null}
+            </main>
+          </TutorialNavProvider>
+          <TutorialRuntimeController
+            onStateChange={(state) => {
+              setTutorialLocked(state.locked);
+              setTutorialSidebarVisible(state.sidebarVisible);
+              setTutorialVisibleSidebarKeys(state.visibleSidebarKeys);
+            }}
+          />
+          <Toaster richColors position="top-center" />
+        </div>
+      </DevLiveLogProvider>
     </SidebarProvider>
   );
 }

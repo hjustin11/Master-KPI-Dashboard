@@ -1,6 +1,9 @@
 import type { MarketplaceProductListRow } from "@/shared/lib/marketplaceProductList";
 import { getMissingAmazonRequiredFields } from "@/shared/lib/amazonProductTypeSchema";
 
+/** Feste Anzahl Bild-Slots im Amazon-Entwurfseditor (URL oder data:-Bild pro Feld). */
+export const AMAZON_DRAFT_IMAGE_SLOT_COUNT = 10;
+
 export type AmazonProductDraftMode = "edit_existing" | "create_new";
 export type AmazonProductDraftStatus = "draft" | "ready";
 export type AmazonExternalIdType = "ean" | "upc" | "gtin" | "isbn" | "none";
@@ -63,6 +66,18 @@ export function normalizeStringList(input: unknown, max = 12): string[] {
     .slice(0, max);
 }
 
+/** Liefert immer genau `AMAZON_DRAFT_IMAGE_SLOT_COUNT` Einträge (leere Strings = freier Slot). */
+export function padAmazonDraftImages(raw: unknown): string[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const urls = list
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter(Boolean)
+    .slice(0, AMAZON_DRAFT_IMAGE_SLOT_COUNT);
+  const out = [...urls];
+  while (out.length < AMAZON_DRAFT_IMAGE_SLOT_COUNT) out.push("");
+  return out;
+}
+
 export function sourceSnapshotFromRow(row: MarketplaceProductListRow): AmazonProductSourceSnapshot {
   return {
     sku: (row.sku ?? "").trim(),
@@ -91,7 +106,7 @@ export function emptyDraftValues(): AmazonProductDraftValues {
     title: "",
     description: "",
     bulletPoints: [],
-    images: [],
+    images: padAmazonDraftImages([]),
     productType: "",
     brand: "",
     conditionType: "new_new",
@@ -110,7 +125,7 @@ export function draftValuesFromSource(source: AmazonProductSourceSnapshot): Amaz
     title: source.title,
     description: source.description,
     bulletPoints: source.bulletPoints,
-    images: source.images,
+    images: padAmazonDraftImages(source.images),
     productType: source.productType,
     brand: source.brand,
     conditionType: source.conditionType,
@@ -138,7 +153,7 @@ export function normalizeDraftValues(raw: unknown): AmazonProductDraftValues {
     title: typeof obj.title === "string" ? obj.title.trim() : "",
     description: typeof obj.description === "string" ? obj.description.trim() : "",
     bulletPoints: normalizeStringList(obj.bulletPoints, 12),
-    images: normalizeStringList(obj.images, 20),
+    images: padAmazonDraftImages(obj.images),
     productType: typeof obj.productType === "string" ? obj.productType.trim() : "",
     brand: typeof obj.brand === "string" ? obj.brand.trim() : "",
     conditionType: typeof obj.conditionType === "string" ? obj.conditionType.trim() : "new_new",
@@ -175,7 +190,7 @@ export function normalizeSourceSnapshot(raw: unknown): AmazonProductSourceSnapsh
     isActive: Boolean(obj.isActive),
     bulletPoints: normalizeStringList(obj.bulletPoints, 12),
     description: typeof obj.description === "string" ? obj.description.trim() : "",
-    images: normalizeStringList(obj.images, 20),
+    images: padAmazonDraftImages(obj.images),
     productType: typeof obj.productType === "string" ? obj.productType.trim() : "",
     brand: typeof obj.brand === "string" ? obj.brand.trim() : "",
     conditionType: typeof obj.conditionType === "string" ? obj.conditionType.trim() : "new_new",
@@ -200,7 +215,10 @@ export function deriveDraftStatus(
   mode: AmazonProductDraftMode = "edit_existing"
 ): AmazonProductDraftStatus {
   const hasCore = values.sku && values.title;
-  const hasContent = values.description || values.bulletPoints.length > 0 || values.images.length > 0;
+  const hasContent =
+    values.description.trim().length > 0 ||
+    values.bulletPoints.some((b) => b.trim().length > 0) ||
+    values.images.some((img) => img.trim().length > 0);
   if (mode === "edit_existing") return hasCore && hasContent ? "ready" : "draft";
   return getMissingAmazonRequiredFields(values).length === 0 ? "ready" : "draft";
 }

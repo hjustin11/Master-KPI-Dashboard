@@ -11,7 +11,14 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { ArrowUpDown, ChevronDown, ChevronUp, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +69,8 @@ type DataTableProps<TData, TValue> = {
   ) => string | undefined;
   /** Stabile Zeilen-IDs (z. B. SKU), damit Zellen bei externem State korrekt aktualisieren. */
   getRowId?: (originalRow: TData, index: number) => string;
+  /** Ganze Zeile klickbar (z. B. Artikel-Editor). Klicks auf Buttons/Links werden ignoriert. */
+  onRowClick?: (row: TData, event: MouseEvent<HTMLTableRowElement>) => void;
 };
 
 type ColumnMeta = {
@@ -98,6 +107,7 @@ export function DataTable<TData, TValue>({
   onDisplayedRowsChange,
   getRowClassName,
   getRowId,
+  onRowClick,
 }: DataTableProps<TData, TValue>) {
   const { t } = useTranslation();
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -262,7 +272,26 @@ export function DataTable<TData, TValue>({
               rows.map((row, index) => (
                 <TableRow
                   key={row.id}
-                  className={cn(getRowClassName?.(row, { index, data: visibleRowData }))}
+                  className={cn(
+                    onRowClick && "cursor-pointer hover:bg-muted/40",
+                    getRowClassName?.(row, { index, data: visibleRowData })
+                  )}
+                  onClick={
+                    onRowClick
+                      ? (event: MouseEvent<HTMLTableRowElement>) => {
+                          const el = event.target as HTMLElement | null;
+                          if (!el) return;
+                          if (
+                            el.closest(
+                              "button,a,input,textarea,select,option,[role='button'],[role='combobox'],[data-row-click='ignore']"
+                            )
+                          ) {
+                            return;
+                          }
+                          onRowClick(row.original, event);
+                        }
+                      : undefined
+                  }
                 >
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta as ColumnMeta | undefined;

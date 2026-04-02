@@ -128,7 +128,14 @@ function skuSnapshotMapFromProductItems(
       parseNumber(it.quantity) ??
       parseNumber(it.availableQuantity) ??
       parseNumber(it.inventoryQuantity) ??
+      parseNumber(it.inventory_quantity) ??
       parseNumber(it.available) ??
+      parseNumber(it.old_inventory_quantity) ??
+      parseNumber(it.offer_quantity) ??
+      parseNumber(it.available_quantity) ??
+      parseNumber(it.fulfillable_quantity) ??
+      parseNumber(it.afn_fulfillable_quantity) ??
+      parseNumber(it.mfn_fulfillable_quantity) ??
       null;
     map.set(k, { price: p, stock });
   }
@@ -447,7 +454,7 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
     const key = normSku(a.sku);
     const amz = key ? amazonBySku.get(key) : undefined;
     const amazonPrice = amz?.price ?? null;
-    const amazonStock = amz?.stock ?? null;
+    const amazonStock = amz?.stock ?? 0;
     const ottoPrice = key ? (ottoBySku.get(key) ?? null) : null;
 
     const flat: Record<string, MutableCell> = {};
@@ -467,13 +474,13 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
       const pmap = productMaps[m.slug];
       if (pmap == null) {
         flat[m.slug] = { price: null, state: "not_connected" };
-        stockFlat[m.slug] = { stock: null, state: "not_connected" };
+        stockFlat[m.slug] = { stock: 0, state: "not_connected" };
         continue;
       }
       const hasSku = Boolean(key && pmap.has(key));
       const snap = hasSku ? (pmap.get(key) ?? { price: null, stock: null }) : { price: null, stock: null };
       const price = snap.price;
-      const stock = snap.stock;
+      const stock = snap.stock ?? 0;
       let ms: MarketplaceCellState = "ok";
       if (!key || !hasSku) ms = "missing";
       else if (price == null) ms = "no_price";
@@ -489,10 +496,10 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
       if (!key || !ottoBySku.has(key)) ottoState = "missing";
       else if (ottoPrice == null) ottoState = "no_price";
       flat.otto = { price: ottoPrice, state: ottoState };
-      stockFlat.otto = { stock: null, state: "not_connected" };
+      stockFlat.otto = { stock: 0, state: "not_connected" };
     } else {
       flat.otto = { price: null, state: "not_connected" };
-      stockFlat.otto = { stock: null, state: "not_connected" };
+      stockFlat.otto = { stock: 0, state: "not_connected" };
     }
 
     const afterDeviation = applyMajorityDeviation(flat);

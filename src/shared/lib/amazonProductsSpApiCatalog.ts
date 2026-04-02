@@ -27,6 +27,8 @@ export type ProductRow = {
   statusLabel: string;
   isActive: boolean;
   price: number | null;
+  /** Menge aus Merchant-Listings-Report (Spalten wie quantity / fulfillable), sonst null. */
+  stockQty?: number | null;
 };
 
 type ReportFallbackState = {
@@ -404,6 +406,19 @@ function parseListingsTsv(content: string) {
     "list-price",
     "list price",
   ]);
+  const qtyIdx = idx([
+    "quantity",
+    "quantity-available",
+    "fulfillable quantity",
+    "fulfillable-quantity",
+    "fulfillable_quantity",
+    "afn-fulfillable-quantity",
+    "afn_fulfillable_quantity",
+    "afn-warehouse-quantity",
+    "afn_warehouse_quantity",
+    "mfn-fulfillable-quantity",
+    "mfn_fulfillable_quantity",
+  ]);
 
   const rows: ProductRow[] = [];
   for (let i = 1; i < lines.length; i += 1) {
@@ -428,8 +443,15 @@ function parseListingsTsv(content: string) {
       const n = Number(norm);
       if (Number.isFinite(n) && n >= 0) price = n;
     }
+    let stockQty: number | null = null;
+    const rawQty = value(qtyIdx);
+    if (rawQty) {
+      const normQ = rawQty.replace(/\s/g, "").replace(",", ".");
+      const nq = Number(normQ);
+      if (Number.isFinite(nq) && nq >= 0) stockQty = Math.trunc(nq);
+    }
     if (!sku && !secondaryId && !title) continue;
-    rows.push({ sku, secondaryId, title, statusLabel, isActive, price });
+    rows.push({ sku, secondaryId, title, statusLabel, isActive, price, stockQty });
   }
   return rows;
 }
@@ -754,6 +776,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
         statusLabel: statuses.length ? statuses.join(", ") : "Unbekannt",
         isActive: active,
         price: null,
+        stockQty: null,
       });
     }
 

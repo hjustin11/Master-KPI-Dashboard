@@ -78,6 +78,7 @@ import {
   readSeenUpdatesSignature,
   UPDATES_SEEN_EVENT,
 } from "@/shared/lib/updatesFeed";
+import { DASHBOARD_CLIENT_BACKGROUND_SYNC_MS } from "@/shared/lib/dashboardClientCache";
 
 type NavItem = {
   key: SidebarItemKey;
@@ -950,7 +951,7 @@ export function AppSidebar() {
     void refreshSignature();
     const id = window.setInterval(() => {
       void refreshSignature();
-    }, 60_000);
+    }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => {
       cancelled = true;
       window.clearInterval(id);
@@ -1285,7 +1286,7 @@ export function MobileSidebarTrigger() {
     void refreshSignature();
     const id = window.setInterval(() => {
       void refreshSignature();
-    }, 60_000);
+    }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => {
       cancelled = true;
       window.clearInterval(id);
