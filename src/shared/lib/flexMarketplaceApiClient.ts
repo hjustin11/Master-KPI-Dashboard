@@ -426,7 +426,8 @@ export async function flexGet(
   }
 }
 
-async function flexGetWith429Retry(
+/** GET mit Retry bei HTTP 429 (Shopify u. a.). Response-Body ist bereits als `text` gelesen. */
+export async function flexGetWith429Retry(
   config: FlexIntegrationConfig,
   pathAndQuery: string
 ): Promise<{ res: Response; text: string }> {

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { getShopifyIntegrationConfig, shopifyMissingKeysForConfig } from "@/shared/lib/shopifyApiClient";
+
+/** Vercel: viele Produktseiten brauchen länger als 10s (Hobby-Default). */
+export const maxDuration = 60;
 import { fetchShopifyProductRows } from "@/shared/lib/shopifyProductsList";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import type { MarketplaceProductsListResponse } from "@/shared/lib/marketplaceProductList";

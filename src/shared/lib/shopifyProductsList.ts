@@ -1,5 +1,7 @@
-import { flexGet } from "@/shared/lib/flexMarketplaceApiClient";
-import type { FlexIntegrationConfig } from "@/shared/lib/flexMarketplaceApiClient";
+import {
+  flexGetWith429Retry,
+  type FlexIntegrationConfig,
+} from "@/shared/lib/flexMarketplaceApiClient";
 import type { MarketplaceProductListRow } from "@/shared/lib/marketplaceProductList";
 
 function parseShopifyNextPath(linkHeader: string | null, baseUrlRaw: string): string | null {
@@ -60,6 +62,25 @@ function mapShopifyProduct(p: Record<string, unknown>): MarketplaceProductListRo
 
 const MAX_PAGES = 40;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function shopifyProductsErrorMessage(rec: Record<string, unknown>): string | null {
+  const err = rec.errors;
+  if (err == null) return null;
+  if (typeof err === "string" && err.trim()) return err.trim();
+  if (typeof err === "object") {
+    try {
+      const s = JSON.stringify(err);
+      if (s !== "{}" && s !== "[]") return s;
+    } catch {
+      return String(err);
+    }
+  }
+  return null;
+}
+
 export async function fetchShopifyProductRows(
   config: FlexIntegrationConfig,
   productsPath: string
@@ -68,10 +89,13 @@ export async function fetchShopifyProductRows(
   const sep = pathBase.includes("?") ? "&" : "?";
   let nextPath: string | null = `${pathBase}${sep}limit=250`;
   const out: MarketplaceProductListRow[] = [];
+  const delayMs = Math.max(0, config.paginationDelayMs || 0);
 
   for (let page = 0; page < MAX_PAGES && nextPath; page += 1) {
-    const res = await flexGet(config, nextPath);
-    const text = await res.text();
+    if (page > 0 && delayMs > 0) {
+      await sleep(delayMs);
+    }
+    const { res, text } = await flexGetWith429Retry(config, nextPath);
     let json: unknown = null;
     try {
       json = text ? (JSON.parse(text) as unknown) : null;
@@ -84,6 +108,10 @@ export async function fetchShopifyProductRows(
     }
     const rec = json as Record<string, unknown>;
     const products = Array.isArray(rec.products) ? rec.products : [];
+    const apiErr = shopifyProductsErrorMessage(rec);
+    if (apiErr && products.length === 0) {
+      throw new Error(`Shopify products: ${apiErr}`);
+    }
     for (const p of products) {
       out.push(mapShopifyProduct(p as Record<string, unknown>));
     }
