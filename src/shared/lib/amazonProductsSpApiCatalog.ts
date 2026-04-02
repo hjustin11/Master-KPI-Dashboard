@@ -182,7 +182,7 @@ export type AmazonSpApiProductsConfig = Awaited<ReturnType<typeof loadAmazonSpAp
 /** Prozess-lokal: weniger LWA-Roundtrips bei parallelen Dashboard-Requests. */
 let lwaAccessTokenCache: { token: string; expiresAtMs: number } | null = null;
 
-async function getLwaAccessToken(args: {
+async function obtainAmazonLwaAccessToken(args: {
   refreshToken: string;
   lwaClientId: string;
   lwaClientSecret: string;
@@ -228,8 +228,11 @@ async function getLwaAccessToken(args: {
   return token;
 }
 
+/** Expliziter Re-Export für Turbopack / ältere Importzeilen (`import { getLwaAccessToken } …`). */
+export { obtainAmazonLwaAccessToken as getLwaAccessToken };
+
 export async function getAmazonProductsLwaToken(config: AmazonSpApiProductsConfig): Promise<string> {
-  return getLwaAccessToken({
+  return obtainAmazonLwaAccessToken({
     refreshToken: config.refreshToken,
     lwaClientId: config.lwaClientId,
     lwaClientSecret: config.lwaClientSecret,
@@ -799,7 +802,7 @@ export async function primeAmazonProductsIntegrationCache(): Promise<{
 
     const marketplaceId = config.marketplaceIds[0];
     const cacheKey = `amazon:products:${marketplaceId}`;
-    const lwaAccessToken = await getLwaAccessToken({
+    const lwaAccessToken = await obtainAmazonLwaAccessToken({
       refreshToken: config.refreshToken,
       lwaClientId: config.lwaClientId,
       lwaClientSecret: config.lwaClientSecret,
