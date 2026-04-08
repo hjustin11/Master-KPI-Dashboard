@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import {
+  ensureOttoAvailabilityScope,
   ensureOttoProductsScope,
+  fetchOttoAvailabilityQuantitiesAll,
   fetchOttoProductsAll,
   getOttoAccessToken,
   getOttoIntegrationConfig,
@@ -8,8 +10,10 @@ import {
 import { INTEGRATION_SECRETS_CONFIGURATION_HINT_DE } from "@/shared/lib/integrationSecrets";
 import type { MarketplaceProductsListResponse } from "@/shared/lib/marketplaceProductList";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const url = new URL(request.url);
+    const forceRefresh = url.searchParams.get("refresh") === "1";
     const config = await getOttoIntegrationConfig();
     const missing = {
       OTTO_API_CLIENT_ID: !config.clientId,
@@ -29,7 +33,7 @@ export async function GET() {
       );
     }
 
-    const scopes = ensureOttoProductsScope(config.scopes);
+    const scopes = ensureOttoAvailabilityScope(ensureOttoProductsScope(config.scopes));
     const token = await getOttoAccessToken({
       baseUrl: config.baseUrl,
       clientId: config.clientId,
@@ -44,19 +48,33 @@ export async function GET() {
         : `/${productsPathRaw}`
       : undefined;
 
-    const list = await fetchOttoProductsAll({
-      baseUrl: config.baseUrl,
-      token,
-      productsPath,
-    });
+    const [list, availabilityBySku] = await Promise.all([
+      fetchOttoProductsAll({
+        baseUrl: config.baseUrl,
+        token,
+        productsPath,
+        forceRefresh,
+      }),
+      fetchOttoAvailabilityQuantitiesAll({
+        baseUrl: config.baseUrl,
+        token,
+        forceRefresh,
+      }),
+    ]);
 
-    const items = list.map((r) => ({
-      sku: r.sku,
-      secondaryId: r.secondaryId,
-      title: r.title,
-      statusLabel: r.statusLabel,
-      isActive: r.isActive,
-    }));
+    const items = list.map((r) => {
+      const skuKey = r.sku.trim().toLowerCase();
+      return {
+        sku: r.sku,
+        secondaryId: r.secondaryId,
+        title: r.title,
+        statusLabel: r.statusLabel,
+        isActive: r.isActive,
+        ...(r.priceEur != null ? { priceEur: r.priceEur } : {}),
+        stockQty: availabilityBySku.get(skuKey) ?? null,
+        ...(r.extras && Object.keys(r.extras).length > 0 ? { extras: r.extras } : {}),
+      };
+    });
 
     return NextResponse.json({ items } satisfies MarketplaceProductsListResponse);
   } catch (e) {
@@ -66,7 +84,7 @@ export async function GET() {
         error: message,
         items: [],
         hint:
-          "OTTO-Produktpfad wird automatisch über /v5/products (Fallback: /v4,/v3) versucht. Optional OTTO_PRODUCTS_PATH setzen. Außerdem Scope „products“ in OTTO_API_SCOPES aktivieren.",
+          "OTTO-Produktpfad wird automatisch über /v5/products (Fallback: /v4,/v3) versucht. Optional OTTO_PRODUCTS_PATH setzen. Außerdem Scopes „products availability“ in OTTO_API_SCOPES aktivieren.",
       } satisfies MarketplaceProductsListResponse,
       { status: 502 }
     );

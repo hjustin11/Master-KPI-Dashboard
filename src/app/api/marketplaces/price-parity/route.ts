@@ -4,8 +4,21 @@ import {
   type AnalyticsMarketplaceSlug,
 } from "@/shared/lib/analytics-marketplaces";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import {
+  loadAmazonSpApiProductsConfig,
+  type AmazonProductsCachedPayload,
+} from "@/shared/lib/amazonProductsSpApiCatalog";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import { getIntegrationCachedOrLoad, readIntegrationCache } from "@/shared/lib/integrationDataCache";
+
+/** Muss unter /api/amazon/products maxDuration (120s) liegen; genug für Kalt-Sync ohne Abort. */
+export const maxDuration = 120;
+
+/** Interner fetch zu /api/amazon/products — 2,2s war zu kurz → leere Amazon-Spalte im Preisvergleich. */
+const AMAZON_PRODUCTS_INTERNAL_FETCH_MS = Math.min(
+  115_000,
+  Math.max(5_000, Number(process.env.PRICE_PARITY_AMAZON_FETCH_MS) || 115_000)
+);
 
 class PriceParityHttpError extends Error {
   constructor(
@@ -46,11 +59,6 @@ type OttoOrdersPayload = {
   links?: Array<{ href?: string; rel?: string }>;
 };
 
-type AmazonProductsCachedPayload = {
-  sellerId: string;
-  rows: Array<Record<string, unknown>>;
-};
-
 export type MarketplaceCellState = "ok" | "missing" | "no_price" | "mismatch" | "not_connected";
 
 export type PriceParityCell = {
@@ -86,8 +94,9 @@ function forwardAuthHeadersFrom(request: Request): HeadersInit {
   return headers;
 }
 
-/** Produkte-API je Marktplatz (ohne Amazon-Spalte; Otto bleibt über Auftragspreise). */
+/** Produkte-API je Marktplatz (ohne Amazon-Spalte; Otto liefert hier den Bestand). */
 const ANALYTICS_PRODUCTS_API: Partial<Record<AnalyticsMarketplaceSlug, string>> = {
+  otto: "/api/otto/products",
   ebay: "/api/ebay/products",
   kaufland: "/api/kaufland/products",
   fressnapf: "/api/fressnapf/products",
@@ -145,10 +154,13 @@ function skuSnapshotMapFromProductItems(
 async function fetchSkuPriceMapFromProductsApi(
   origin: string,
   path: string,
-  initHeaders: HeadersInit
+  initHeaders: HeadersInit,
+  forceRefresh = false
 ): Promise<Map<string, SkuSnapshot> | null> {
   try {
-    const res = await fetch(`${origin}${path}`, { cache: "no-store", headers: initHeaders });
+    const productsUrl = new URL(path, origin);
+    if (forceRefresh) productsUrl.searchParams.set("refresh", "1");
+    const res = await fetch(productsUrl.toString(), { cache: "no-store", headers: initHeaders });
     if (!res.ok) return null;
     const json = (await res.json()) as { items?: Array<Record<string, unknown>> };
     return skuSnapshotMapFromProductItems(json.items ?? [], "priceEur");
@@ -160,41 +172,45 @@ async function fetchSkuPriceMapFromProductsApi(
 /**
  * Amazon: gleiche Produktquelle wie die Amazon-Produktseite (`/api/amazon/products`),
  * inkl. 202 „Report wird erstellt“ und Fehlertext aus der API.
+ *
+ * `marketplaceId` wie in `loadAmazonSpApiProductsConfig` (gleicher Integration-Cache-Key wie die Produkt-API).
  */
 async function fetchAmazonProductsPriceMap(
   origin: string,
-  initHeaders: HeadersInit
+  initHeaders: HeadersInit,
+  marketplaceId: string | undefined,
+  forceRefresh = false
 ): Promise<{
   map: Map<string, SkuSnapshot> | null;
   warning: string | null;
 }> {
-  const marketplaceIdsRaw =
-    process.env.AMAZON_SP_API_MARKETPLACE_IDS ??
-    process.env.AMAZON_SP_API_MARKETPLACE_ID ??
-    (await getIntegrationSecretValue("AMAZON_SP_API_MARKETPLACE_IDS")) ??
-    (await getIntegrationSecretValue("AMAZON_SP_API_MARKETPLACE_ID")) ??
-    "";
-  const marketplaceId = marketplaceIdsRaw
-    .split(",")
-    .map((v) => v.trim())
-    .filter(Boolean)[0];
-
-  if (marketplaceId) {
+  if (!forceRefresh && marketplaceId) {
     const cached = await readIntegrationCache<AmazonProductsCachedPayload>(
       `amazon:products:${marketplaceId}`
     );
     if (cached.state !== "miss" && Array.isArray(cached.value?.rows)) {
-      const primary = skuSnapshotMapFromProductItems(cached.value.rows, "price");
+      const primary = skuSnapshotMapFromProductItems(
+        cached.value.rows as Array<Record<string, unknown>>,
+        "price"
+      );
       if (primary.size > 0) return { map: primary, warning: null };
-      const fallback = skuSnapshotMapFromProductItems(cached.value.rows, "priceEur");
+      const fallback = skuSnapshotMapFromProductItems(
+        cached.value.rows as Array<Record<string, unknown>>,
+        "priceEur"
+      );
       if (fallback.size > 0) return { map: fallback, warning: null };
     }
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 2200);
+  const timeout = setTimeout(() => controller.abort(), AMAZON_PRODUCTS_INTERNAL_FETCH_MS);
   try {
-    const res = await fetch(`${origin}/api/amazon/products?status=all&all=1`, {
+    const amazonParams = new URLSearchParams({
+      status: "all",
+      all: "1",
+      ...(forceRefresh ? { refresh: "1" } : {}),
+    });
+    const res = await fetch(`${origin}/api/amazon/products?${amazonParams}`, {
       cache: "no-store",
       signal: controller.signal,
       headers: initHeaders,
@@ -219,10 +235,13 @@ async function fetchAmazonProductsPriceMap(
     }
     const fallback = skuSnapshotMapFromProductItems(json.items ?? [], "priceEur");
     return { map: fallback, warning: null };
-  } catch {
+  } catch (e) {
+    const aborted = e instanceof Error && e.name === "AbortError";
     return {
       map: null,
-      warning: "Amazon Produkte werden im Hintergrund aktualisiert.",
+      warning: aborted
+        ? "Amazon-Produktliste antwortet zu langsam. Bitte erneut laden oder Cache auf der Amazon-Produktseite aufwärmen."
+        : "Amazon Produkte werden im Hintergrund aktualisiert.",
     };
   } finally {
     clearTimeout(timeout);
@@ -389,6 +408,7 @@ async function fetchOttoLatestSkuPrices(): Promise<{
 async function computePriceParityPayload(request: Request): Promise<Record<string, unknown>> {
   const url = new URL(request.url);
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? "300") || 300, 50), 500);
+  const forceRefresh = url.searchParams.get("refresh") === "1";
   const origin = url.origin;
   const authHeaders = forwardAuthHeadersFrom(request);
 
@@ -415,14 +435,20 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
 
   const articles = xrJson.items ?? [];
 
-  const amazonPromise = fetchAmazonProductsPriceMap(origin, authHeaders);
+  const amazonProductsConfig = await loadAmazonSpApiProductsConfig();
+  const amazonMarketplaceId = amazonProductsConfig.marketplaceIds[0];
+  const amazonPromise = fetchAmazonProductsPriceMap(
+    origin,
+    authHeaders,
+    amazonMarketplaceId,
+    forceRefresh
+  );
   const ottoPromise = fetchOttoLatestSkuPrices();
   const productMapEntriesPromise = Promise.all(
     ANALYTICS_MARKETPLACES.map(async (m) => {
-      if (m.slug === "otto") return [m.slug, null] as const;
       const path = ANALYTICS_PRODUCTS_API[m.slug];
       if (!path) return [m.slug, null] as const;
-      const map = await fetchSkuPriceMapFromProductsApi(origin, path, authHeaders);
+      const map = await fetchSkuPriceMapFromProductsApi(origin, path, authHeaders, forceRefresh);
       return [m.slug, map] as const;
     })
   );
@@ -442,20 +468,38 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
   }
 
   const ottoBySku = otto.bySku;
-
   const productMaps: Partial<Record<AnalyticsMarketplaceSlug, Map<string, SkuSnapshot> | null>> =
     {};
   for (const [slug, map] of productMapEntries) {
-    if (slug === "otto") continue;
     productMaps[slug] = map;
   }
+  const ottoProductsConnected = productMaps.otto != null;
+  const ottoHasAnyStock =
+    productMaps.otto != null &&
+    Array.from(productMaps.otto.values()).some((snap) => snap.stock != null && Number.isFinite(snap.stock));
+  const ottoWarning =
+    otto.warning ??
+    (!ottoProductsConnected
+      ? "Otto Availability nicht verbunden oder Scope „availability“ fehlt."
+      : !ottoHasAnyStock
+        ? "Otto Availability verbunden, liefert aber derzeit keine SKU-Mengen."
+      : null);
 
   const rows: PriceParityRow[] = articles.map((a) => {
     const key = normSku(a.sku);
     const amz = key ? amazonBySku.get(key) : undefined;
     const amazonPrice = amz?.price ?? null;
-    const amazonStock = amz?.stock ?? 0;
+    /** `null` = unbekannt (nicht als 0 ausgeben — vorher `?? 0` maskierte fehlende Bestände). */
+    const amazonStock: number | null = amz ? amz.stock : null;
     const ottoPrice = key ? (ottoBySku.get(key) ?? null) : null;
+    const ottoProductsMap = productMaps.otto;
+    const ottoHasSkuInProducts = Boolean(key && ottoProductsMap?.has(key));
+    const ottoProductSnap = ottoHasSkuInProducts
+      ? (ottoProductsMap?.get(key) ?? { price: null, stock: null })
+      : { price: null, stock: null };
+    const ottoProductPrice = ottoProductSnap.price;
+    const ottoStock = ottoProductSnap.stock;
+    const effectiveOttoPrice = ottoPrice ?? ottoProductPrice ?? null;
 
     const flat: Record<string, MutableCell> = {};
     const stockFlat: Record<string, { stock: number | null; state: MarketplaceCellState }> = {};
@@ -465,7 +509,7 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
     else if (amazonPrice == null) amazonProv = "no_price";
     let amazonStockState: MarketplaceCellState = "ok";
     if (!amz) amazonStockState = "missing";
-    else if (amazonStock == null) amazonStockState = "not_connected";
+    else if (amazonStock == null) amazonStockState = "no_price";
     flat.amazon = { price: amazonPrice, state: amazonProv };
     stockFlat.amazon = { stock: amazonStock, state: amazonStockState };
 
@@ -474,32 +518,41 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
       const pmap = productMaps[m.slug];
       if (pmap == null) {
         flat[m.slug] = { price: null, state: "not_connected" };
-        stockFlat[m.slug] = { stock: 0, state: "not_connected" };
+        stockFlat[m.slug] = { stock: null, state: "not_connected" };
         continue;
       }
       const hasSku = Boolean(key && pmap.has(key));
       const snap = hasSku ? (pmap.get(key) ?? { price: null, stock: null }) : { price: null, stock: null };
       const price = snap.price;
-      const stock = snap.stock ?? 0;
+      const stock = snap.stock;
       let ms: MarketplaceCellState = "ok";
       if (!key || !hasSku) ms = "missing";
       else if (price == null) ms = "no_price";
       let mStockState: MarketplaceCellState = "ok";
       if (!key || !hasSku) mStockState = "missing";
-      else if (stock == null) mStockState = "not_connected";
+      else if (stock == null) mStockState = "no_price";
       flat[m.slug] = { price, state: ms };
       stockFlat[m.slug] = { stock, state: mStockState };
     }
 
     if (ottoBySku.size > 0) {
       let ottoState: MarketplaceCellState = "ok";
-      if (!key || !ottoBySku.has(key)) ottoState = "missing";
-      else if (ottoPrice == null) ottoState = "no_price";
-      flat.otto = { price: ottoPrice, state: ottoState };
-      stockFlat.otto = { stock: 0, state: "not_connected" };
+      if (!key || (!ottoBySku.has(key) && !ottoHasSkuInProducts)) ottoState = "missing";
+      else if (effectiveOttoPrice == null) ottoState = "no_price";
+      flat.otto = { price: effectiveOttoPrice, state: ottoState };
+    } else if (ottoHasSkuInProducts) {
+      const ottoState: MarketplaceCellState = effectiveOttoPrice == null ? "no_price" : "ok";
+      flat.otto = { price: effectiveOttoPrice, state: ottoState };
     } else {
       flat.otto = { price: null, state: "not_connected" };
-      stockFlat.otto = { stock: 0, state: "not_connected" };
+    }
+    if (ottoProductsMap == null) {
+      stockFlat.otto = { stock: null, state: "not_connected" };
+    } else {
+      let ottoStockState: MarketplaceCellState = "ok";
+      if (!key || !ottoHasSkuInProducts) ottoStockState = "missing";
+      else if (ottoStock == null) ottoStockState = "no_price";
+      stockFlat.otto = { stock: ottoStock, state: ottoStockState };
     }
 
     const afterDeviation = applyMajorityDeviation(flat);
@@ -611,11 +664,11 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
       articleCount: rows.length,
       amazonMatchedSkus: amazonBySku.size,
       amazonWarning,
-      ottoWarning: otto.warning,
+      ottoWarning,
       channels: {
         connected: [
           "amazon",
-          ...(ottoBySku.size > 0 ? ["otto"] : []),
+          ...(ottoBySku.size > 0 || productMaps.otto != null ? ["otto"] : []),
           ...ANALYTICS_MARKETPLACES.filter((m) => {
             if (m.slug === "otto") return false;
             return productMaps[m.slug] != null;

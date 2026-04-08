@@ -58,9 +58,9 @@ function flexMarketplaceDoc(label: string, apiId: string, apiPath: string): Pric
 
 export const PRICE_PARITY_DOC_OTTO: PriceParityColumnApiDoc = {
   source: "Otto",
-  apiId: "otto_api_orders_line_price",
-  route: "OAuth → GET /v4/orders (letzte 60 Tage, Pagination)",
-  hint: `Keine Produktlisten-API hier; Preis aus Auftragsposition. Bestand ohne API-Wert = 0 + Hinweis (kein Xentral-Fallback). ${OVERRIDE_HINT}`,
+  apiId: "otto_api_orders_plus_availability",
+  route: "Preis: OAuth → GET /v4/orders; Bestand: OAuth → GET /v1/availability/quantities",
+  hint: `Preis aus Auftragspositionen, Bestand aus Availability-API je SKU. Bei fehlendem Availability-Scope: Zustand „nicht verbunden“. ${OVERRIDE_HINT}`,
 };
 
 export const PRICE_PARITY_DOC_EBAY = flexMarketplaceDoc("eBay", "ebay_api_products", "/api/ebay/products");

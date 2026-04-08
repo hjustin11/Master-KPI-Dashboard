@@ -236,6 +236,193 @@ export function ensureOttoProductsScope(scopes: string): string {
   return parts.join(" ");
 }
 
+/** Scope `availability` für GET /v1/availability/quantities ergänzen. */
+export function ensureOttoAvailabilityScope(scopes: string): string {
+  const parts = scopes
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!parts.includes("availability")) parts.push("availability");
+  return parts.join(" ");
+}
+
+type OttoAvailabilityPayload = {
+  resources?: unknown[] | Record<string, unknown>;
+  links?: Array<{ href?: string; rel?: string }>;
+};
+
+function normSku(v: string): string {
+  return v.trim().toLowerCase();
+}
+
+function readAvailabilityQuantityFromRecord(r: Record<string, unknown>): number | null {
+  const candidates = [
+    r.quantity,
+    r.availableQuantity,
+    r.available_quantity,
+    r.stockQty,
+    r.stock_qty,
+    r.value,
+    r.amount,
+  ];
+  for (const c of candidates) {
+    const n = parseNumberish(c);
+    if (n != null && n >= 0) return Math.trunc(n);
+  }
+  const nested = r.quantityInfo ?? r.quantity_info ?? r.availability ?? r.stock;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return readAvailabilityQuantityFromRecord(nested as Record<string, unknown>);
+  }
+  return null;
+}
+
+function readAvailabilitySkuFromRecord(r: Record<string, unknown>): string {
+  const direct = str(r.sku ?? r.articleNumber ?? r.supplierSku ?? r.productSku ?? r.partnerSku);
+  if (direct) return direct;
+  const product = r.product;
+  if (product && typeof product === "object" && !Array.isArray(product)) {
+    return str(
+      (product as Record<string, unknown>).sku ??
+        (product as Record<string, unknown>).articleNumber ??
+        (product as Record<string, unknown>).supplierSku
+    );
+  }
+  return "";
+}
+
+async function fetchAvailabilitySlice(args: {
+  baseUrl: string;
+  token: string;
+  limit: number;
+  endpointPath: string;
+  nextHref?: string;
+}): Promise<{ resources: unknown[]; nextHref?: string }> {
+  const url = args.nextHref
+    ? new URL(args.nextHref, args.baseUrl)
+    : new URL(args.endpointPath, args.baseUrl);
+  if (!args.nextHref) {
+    url.searchParams.set("limit", String(args.limit));
+  }
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${args.token}`,
+      "X-Request-Timestamp": new Date().toISOString(),
+    },
+    cache: "no-store",
+  });
+  const text = await res.text();
+  let json: OttoAvailabilityPayload | null = null;
+  try {
+    json = text ? (JSON.parse(text) as OttoAvailabilityPayload) : null;
+  } catch {
+    json = null;
+  }
+  if (!res.ok || !json) {
+    const preview = text.replace(/\s+/g, " ").trim().slice(0, 400);
+    throw new Error(`OTTO availability request failed (${res.status}). ${preview}`);
+  }
+  const links = Array.isArray(json.links) ? json.links : [];
+  const nextHref = links.find((l) => l?.rel === "next")?.href;
+  let resources: unknown[] = [];
+  if (Array.isArray(json.resources)) {
+    resources = json.resources;
+  } else if (json.resources && typeof json.resources === "object") {
+    const rec = json.resources as Record<string, unknown>;
+    // Official list shape:
+    // { resources: { variations: [{ sku, quantity, ...}] }, links: [...] }
+    const variations = rec.variations;
+    if (Array.isArray(variations)) {
+      resources = variations;
+    } else {
+      // Fallback for map-like payloads.
+      resources = Object.entries(rec).map(([skuKey, value]) => {
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          const row = value as Record<string, unknown>;
+          return { sku: row.sku ?? skuKey, ...row };
+        }
+        return { sku: skuKey, quantity: value };
+      });
+    }
+  }
+  return { resources, nextHref };
+}
+
+async function fetchOttoAvailabilityQuantitiesAllLive(args: {
+  baseUrl: string;
+  token: string;
+  limit?: number;
+}): Promise<Map<string, number>> {
+  const limit = Math.min(200, Math.max(10, args.limit ?? 200));
+  const out = new Map<string, number>();
+  const pathCandidates = ["/v1/availability/quantities", "/v2/quantities", "/v1/quantities"];
+  let nextHref: string | undefined;
+  let pathIndex = 0;
+  for (let guard = 0; guard < 500; guard += 1) {
+    let slice: { resources: unknown[]; nextHref?: string };
+    try {
+      slice = await fetchAvailabilitySlice({
+        baseUrl: args.baseUrl,
+        token: args.token,
+        limit,
+        endpointPath: pathCandidates[pathIndex] ?? "/v1/availability/quantities",
+        nextHref,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err ?? "");
+      const isRoute404 = /failed\s*\(404\)/i.test(msg) || /no route matched/i.test(msg);
+      const canFallback = out.size === 0 && !nextHref && pathIndex < pathCandidates.length - 1;
+      if (isRoute404 && canFallback) {
+        pathIndex += 1;
+        continue;
+      }
+      throw err;
+    }
+    for (const row of slice.resources) {
+      if (!row || typeof row !== "object") continue;
+      const rec = row as Record<string, unknown>;
+      const sku = readAvailabilitySkuFromRecord(rec);
+      const key = normSku(sku);
+      if (!key) continue;
+      const qty = readAvailabilityQuantityFromRecord(rec);
+      if (qty == null) continue;
+      out.set(key, qty);
+    }
+    if (!slice.nextHref) break;
+    nextHref = slice.nextHref;
+  }
+  return out;
+}
+
+export async function fetchOttoAvailabilityQuantitiesAll(args: {
+  baseUrl: string;
+  token: string;
+  limit?: number;
+  forceRefresh?: boolean;
+}): Promise<Map<string, number>> {
+  if (args.forceRefresh) {
+    return fetchOttoAvailabilityQuantitiesAllLive(args);
+  }
+  const cacheKey = `otto:availability:${hashCacheInput({
+    baseUrl: args.baseUrl,
+    limit: args.limit ?? 200,
+  })}`;
+  const cached = await getIntegrationCachedOrLoad<{
+    entries?: Array<[string, number]>;
+  }>({
+    cacheKey,
+    source: "otto:availability",
+    freshMs: marketplaceIntegrationFreshMs(),
+    staleMs: marketplaceIntegrationStaleMs(),
+    loader: async () => {
+      const live = await fetchOttoAvailabilityQuantitiesAllLive(args);
+      return { entries: Array.from(live.entries()) };
+    },
+  });
+  return new Map(cached.entries ?? []);
+}
+
 type OttoProductsPayload = {
   resources?: unknown[];
   productVariations?: unknown[];
@@ -296,12 +483,166 @@ export type OttoProductListRow = {
   title: string;
   statusLabel: string;
   isActive: boolean;
+  priceEur?: number | null;
+  stockQty?: number | null;
+  extras?: Record<string, unknown>;
 };
 
 function str(v: unknown): string {
   if (typeof v === "string") return v.trim();
   if (typeof v === "number" && Number.isFinite(v)) return String(v);
   return "";
+}
+
+function parseNumberish(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = Number(v.replace(/\s/g, "").replace(",", "."));
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function extractOttoPriceEurFromRecord(input: unknown): number | null {
+  if (!input || typeof input !== "object") return null;
+  const r = input as Record<string, unknown>;
+  const pricing = r.pricing;
+  if (pricing && typeof pricing === "object" && !Array.isArray(pricing)) {
+    const p = pricing as Record<string, unknown>;
+    const directCandidates = [
+      p.standardPrice,
+      p.salePrice,
+      p.offerPrice,
+      p.price,
+      p.grossPrice,
+      p.netPrice,
+      p.amount,
+      p.value,
+    ];
+    for (const c of directCandidates) {
+      if (c && typeof c === "object" && !Array.isArray(c)) {
+        const n = parseNumberish((c as Record<string, unknown>).amount ?? (c as Record<string, unknown>).value);
+        if (n != null && Number.isFinite(n)) return Number(n.toFixed(2));
+      }
+      const n = parseNumberish(c);
+      if (n != null && Number.isFinite(n)) return Number(n.toFixed(2));
+    }
+  }
+  const topCandidates = [
+    r.price,
+    r.salePrice,
+    r.offerPrice,
+    r.grossPrice,
+    r.standardPrice,
+    r.amount,
+    r.value,
+  ];
+  for (const c of topCandidates) {
+    if (c && typeof c === "object" && !Array.isArray(c)) {
+      const n = parseNumberish((c as Record<string, unknown>).amount ?? (c as Record<string, unknown>).value);
+      if (n != null && Number.isFinite(n)) return Number(n.toFixed(2));
+    }
+    const n = parseNumberish(c);
+    if (n != null && Number.isFinite(n)) return Number(n.toFixed(2));
+  }
+  return null;
+}
+
+function extractStockQtyFromRecord(input: unknown): number | null {
+  if (!input || typeof input !== "object") return null;
+  const deniedHints = /(price|weight|length|width|height|volume|pack|unit|size|ean|gtin|upc)/i;
+  const exactKeyHints = new Set(
+    [
+      "quantity",
+      "availableQuantity",
+      "available_quantity",
+      "stockQty",
+      "stock_qty",
+      "stockQuantity",
+      "stock_quantity",
+      "inventoryQuantity",
+      "inventory_quantity",
+      "old_inventory_quantity",
+      "offer_quantity",
+      "fulfillable_quantity",
+      "sellableQuantity",
+      "sellable_quantity",
+      "availableStock",
+      "available_stock",
+      "availableStockQuantity",
+      "available_stock_quantity",
+      "stockLevel",
+      "stock_level",
+      "inventoryLevel",
+      "inventory_level",
+      "quantityAvailable",
+      "quantity_available",
+      "onStock",
+      "on_stock",
+      "remainingQuantity",
+      "remaining_quantity",
+    ].map((k) => k.replace(/[^a-z0-9]/gi, "").toLowerCase())
+  );
+  const nestedHints = /(stock|inventory|availability|quantit|qty|fulfillable|sellable|available)/i;
+  const seen = new Set<object>();
+
+  const numberFromUnknown = (value: unknown): number | null => {
+    const direct = parseNumberish(value);
+    if (direct != null && direct >= 0) return Math.trunc(direct);
+    if (!value || typeof value !== "object") return null;
+    const rec = value as Record<string, unknown>;
+    const candidates = [
+      rec.value,
+      rec.amount,
+      rec.quantity,
+      rec.qty,
+      rec.stock,
+      rec.available,
+      rec.availableQuantity,
+      rec.available_quantity,
+      rec.sellableQuantity,
+      rec.sellable_quantity,
+      rec.inventoryQuantity,
+      rec.inventory_quantity,
+    ];
+    for (const c of candidates) {
+      const n = parseNumberish(c);
+      if (n != null && n >= 0) return Math.trunc(n);
+    }
+    return null;
+  };
+
+  const walk = (node: unknown, depth: number): number | null => {
+    if (depth > 6 || !node || typeof node !== "object") return null;
+    if (seen.has(node as object)) return null;
+    seen.add(node as object);
+
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const n = walk(item, depth + 1);
+        if (n != null) return n;
+      }
+      return null;
+    }
+
+    const rec = node as Record<string, unknown>;
+    for (const [rawKey, value] of Object.entries(rec)) {
+      const keyNorm = rawKey.replace(/[^a-z0-9]/gi, "").toLowerCase();
+      if (!keyNorm) continue;
+      const hasStockHint = exactKeyHints.has(keyNorm) || nestedHints.test(rawKey);
+      if (hasStockHint && !deniedHints.test(rawKey)) {
+        const n = numberFromUnknown(value);
+        if (n != null) return n;
+      }
+    }
+    for (const value of Object.values(rec)) {
+      const n = walk(value, depth + 1);
+      if (n != null) return n;
+    }
+    return null;
+  };
+
+  return walk(input, 0);
 }
 
 function firstLine(text: string, maxLen = 240): string {
@@ -386,6 +727,32 @@ function ottoTitleFromRecord(r: Record<string, unknown>): string {
   return "";
 }
 
+function ottoExtrasForRow(resource: Record<string, unknown>, vr?: Record<string, unknown>): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {};
+  const put = (k: string, v: unknown) => {
+    if (v === undefined || v === null) return;
+    if (typeof v === "string" && !v.trim()) return;
+    out[k] = v;
+  };
+  put(
+    "product_reference",
+    resource.productReference ?? resource.product_reference ?? resource.id ?? resource.productId
+  );
+  if (vr) {
+    put("variation_id", vr.id ?? vr.sku ?? vr.articleNumber);
+    put("active_status", vr.activeStatus ?? vr.status ?? vr.marketplaceStatus);
+  } else {
+    put("active_status", resource.activeStatus ?? resource.status);
+  }
+  const pdRaw = resource.productDescription ?? resource.product_description;
+  if (pdRaw && typeof pdRaw === "object" && !Array.isArray(pdRaw)) {
+    const pd = pdRaw as Record<string, unknown>;
+    put("brand_hint", pd.brand);
+    put("product_line_hint", pd.productLine ?? pd.product_line);
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function mapOttoProductResourceToRows(resource: Record<string, unknown>): OttoProductListRow[] {
   const variations = resource.variations;
   const productTitle = ottoTitleFromRecord(resource);
@@ -416,12 +783,18 @@ function mapOttoProductResourceToRows(resource: Record<string, unknown>): OttoPr
         vr.active !== false &&
         !/inactive|deactivated|deleted/i.test(statusRaw) &&
         String(vr.activeStatus ?? "").toUpperCase() !== "INACTIVE";
+      const extras = ottoExtrasForRow(resource, vr);
+      const stockQty = extractStockQtyFromRecord(vr) ?? extractStockQtyFromRecord(resource);
+      const priceEur = extractOttoPriceEurFromRecord(vr) ?? extractOttoPriceEurFromRecord(resource);
       rows.push({
         sku: sku || vid || "—",
         secondaryId: productRef || vid || sku || "—",
         title: title || productTitle || "—",
         statusLabel: statusRaw || (active ? "ACTIVE" : "INACTIVE"),
         isActive: active,
+        ...(priceEur != null ? { priceEur } : {}),
+        ...(stockQty != null ? { stockQty } : {}),
+        ...(extras ? { extras } : {}),
       });
     }
     return rows;
@@ -434,6 +807,9 @@ function mapOttoProductResourceToRows(resource: Record<string, unknown>): OttoPr
     !/inactive|deactivated/i.test(statusRaw) &&
     String(resource.activeStatus ?? "").toUpperCase() !== "INACTIVE";
 
+  const extras = ottoExtrasForRow(resource);
+  const priceEur = extractOttoPriceEurFromRecord(resource);
+  const stockQty = extractStockQtyFromRecord(resource);
   return [
     {
       sku: sku || productRef || "—",
@@ -441,6 +817,9 @@ function mapOttoProductResourceToRows(resource: Record<string, unknown>): OttoPr
       title: productTitle || "—",
       statusLabel: statusRaw || (active ? "ACTIVE" : "INACTIVE"),
       isActive: active,
+      ...(priceEur != null ? { priceEur } : {}),
+      ...(stockQty != null ? { stockQty } : {}),
+      ...(extras ? { extras } : {}),
     },
   ];
 }
@@ -515,7 +894,16 @@ export async function fetchOttoProductsAll(args: {
   token: string;
   limit?: number;
   productsPath?: string;
+  forceRefresh?: boolean;
 }): Promise<OttoProductListRow[]> {
+  if (args.forceRefresh) {
+    return fetchOttoProductsAllLive({
+      baseUrl: args.baseUrl,
+      token: args.token,
+      limit: args.limit,
+      productsPath: args.productsPath,
+    });
+  }
   const cacheKey = `otto:products:${hashCacheInput({
     baseUrl: args.baseUrl,
     limit: args.limit ?? 100,
