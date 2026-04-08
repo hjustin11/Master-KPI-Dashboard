@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import {
   MAX_ANALYTICS_RANGE_DAYS,
@@ -410,7 +410,12 @@ function ordersToDailyPoints(orders: AmazonOrder[]): SalesPoint[] {
   return Array.from(pointsMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-async function fetchOrdersForFbaUnits(args: {
+/**
+ * Paginiert GET /orders/v0/orders ab CreatedAfter (gleiche Logik wie früher nacheinander nach Metriken).
+ * Läuft parallel zu {@link buildResponseFromSalesOrderMetrics}, damit die Analytics-Kachel nicht
+ * erst Metriken + danach dieselbe Bestellliste sequentiell abwartet.
+ */
+async function fetchOrdersCreatedAfterAllPages(args: {
   config: Awaited<ReturnType<typeof getConfig>>;
   lwaAccessToken: string;
   createdAfterIso: string;
@@ -815,25 +820,35 @@ export async function GET(request: Request) {
       source: "none",
     };
 
-    const fromMetrics = await buildResponseFromSalesOrderMetrics({
-      config,
-      lwaAccessToken,
-      compare,
-      createdAfterIso,
-      current: { startMs: currentStartMs, endMs: currentEndMs },
-      previous: compare ? { startMs: prevStartMs, endMs: prevEndMs } : undefined,
-      meta: metaBase,
-      feePolicy,
-      adSpend,
-      txCosts,
-    });
+    const [metricsSettled, ordersSettled] = await Promise.allSettled([
+      buildResponseFromSalesOrderMetrics({
+        config,
+        lwaAccessToken,
+        compare,
+        createdAfterIso,
+        current: { startMs: currentStartMs, endMs: currentEndMs },
+        previous: compare ? { startMs: prevStartMs, endMs: prevEndMs } : undefined,
+        meta: metaBase,
+        feePolicy,
+        adSpend,
+        txCosts,
+      }),
+      fetchOrdersCreatedAfterAllPages({
+        config,
+        lwaAccessToken,
+        createdAfterIso,
+      }),
+    ]);
+
+    const fromMetrics =
+      metricsSettled.status === "fulfilled" ? metricsSettled.value : null;
+
+    const allOrders: AmazonOrder[] =
+      ordersSettled.status === "fulfilled" ? ordersSettled.value : [];
+
     if (fromMetrics) {
-      try {
-        const fbaOrders = await fetchOrdersForFbaUnits({
-          config,
-          lwaAccessToken,
-          createdAfterIso,
-        });
+      if (ordersSettled.status === "fulfilled") {
+        const fbaOrders = allOrders;
         const currentFbaUnits = sumFbaUnitsInRange(fbaOrders, currentStartMs, currentEndMs);
         const previousFbaUnits =
           compare && prevEndMs > prevStartMs ? sumFbaUnitsInRange(fbaOrders, prevStartMs, prevEndMs) : 0;
@@ -844,61 +859,21 @@ export async function GET(request: Request) {
             ? { previousSummary: { ...fromMetrics.previousSummary, fbaUnits: previousFbaUnits } }
             : {}),
         });
-      } catch {
-        return NextResponse.json(fromMetrics);
       }
+      return NextResponse.json(fromMetrics);
     }
 
-    const allOrders: AmazonOrder[] = [];
-    let nextToken = "";
-    let guard = 0;
-
-    while (guard < 20) {
-      if (nextToken && config.ordersPageDelayMs > 0) {
-        await amazonSpApiSleepMs(config.ordersPageDelayMs);
-      }
-      const query: Record<string, string> = nextToken
-        ? { NextToken: nextToken }
-        : {
-            MarketplaceIds: config.marketplaceIds.join(","),
-            CreatedAfter: createdAfterIso,
-            MaxResultsPerPage: "100",
-          };
-
-      const ordersResult = await amazonSpApiGetWithQuotaRetry(
-        () =>
-          spApiGet({
-            endpoint: config.endpoint,
-            region: config.region,
-            path: "/orders/v0/orders",
-            query,
-            awsAccessKeyId: config.awsAccessKeyId,
-            awsSecretAccessKey: config.awsSecretAccessKey,
-            awsSessionToken: config.awsSessionToken,
-            lwaAccessToken,
-          }),
-        { max429Retries: config.max429Retries }
+    if (ordersSettled.status === "rejected") {
+      return NextResponse.json(
+        {
+          error: "Amazon Orders konnten nicht geladen werden.",
+          preview:
+            ordersSettled.reason instanceof Error
+              ? ordersSettled.reason.message.slice(0, 320)
+              : String(ordersSettled.reason).slice(0, 320),
+        },
+        { status: 502 }
       );
-
-      if (!ordersResult.res.ok || !ordersResult.json) {
-        return NextResponse.json(
-          {
-            error: "Amazon Orders konnten nicht geladen werden.",
-            status: ordersResult.res.status,
-            preview: (ordersResult.text ?? "").slice(0, 320),
-          },
-          { status: 502 }
-        );
-      }
-
-      const payload = ordersResult.json as {
-        payload?: { Orders?: AmazonOrder[]; NextToken?: string };
-      };
-      const orders = payload?.payload?.Orders ?? [];
-      allOrders.push(...orders);
-      nextToken = payload?.payload?.NextToken ?? "";
-      if (!nextToken) break;
-      guard += 1;
     }
 
     function orderBucket(order: AmazonOrder): "current" | "previous" | "all" | "skip" {
