@@ -9,6 +9,7 @@ export default function TiktokProductsPage() {
       cacheKey="tiktok_products_cache_v1"
       logoSrc="/brand/marketplaces/tiktok.svg"
       brandAlt="TikTok"
+      marketplaceSlug="tiktok"
     />
   );
 }

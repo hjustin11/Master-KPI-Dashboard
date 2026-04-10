@@ -23,6 +23,33 @@ function inventoryPriceEur(item: Record<string, unknown>): number | null {
   return null;
 }
 
+function ebayInventoryExtras(item: Record<string, unknown>): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {};
+  const put = (k: string, v: unknown) => {
+    if (v === undefined || v === null) return;
+    if (typeof v === "string" && !v.trim()) return;
+    out[k] = v;
+  };
+  put("condition", item.condition);
+  put("locale", item.locale);
+  const g = item.groupIds ?? item.group_ids;
+  if (Array.isArray(g)) put("group_ids", g.map(String).join(", "));
+  else if (typeof g === "string") put("group_ids", g);
+  const pkg = item.packageWeightAndSize as Record<string, unknown> | undefined;
+  const w =
+    pkg && typeof pkg === "object" && pkg !== null
+      ? ((pkg.weight as Record<string, unknown> | undefined) ?? undefined)
+      : undefined;
+  if (w && typeof w === "object") {
+    put("package_weight_value", w.value);
+    put("package_weight_unit", w.unit);
+  }
+  const product = (item.product as Record<string, unknown>) || {};
+  put("mpn", product.mpn);
+  put("epid", product.epid);
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function mapInventoryItem(item: Record<string, unknown>): MarketplaceProductListRow {
   const sku = String(item.sku ?? "").trim();
   const product = (item.product as Record<string, unknown>) || {};
@@ -45,6 +72,7 @@ function mapInventoryItem(item: Record<string, unknown>): MarketplaceProductList
           ? Number((qtyRaw as Record<string, unknown>).quantity ?? NaN)
           : NaN;
   const stockQty = Number.isFinite(qtyNum) ? qtyNum : null;
+  const extras = ebayInventoryExtras(item);
   return {
     sku: sku || "—",
     secondaryId: sku || "—",
@@ -53,6 +81,7 @@ function mapInventoryItem(item: Record<string, unknown>): MarketplaceProductList
     isActive,
     priceEur: inventoryPriceEur(item),
     stockQty,
+    ...(extras ? { extras } : {}),
   };
 }
 

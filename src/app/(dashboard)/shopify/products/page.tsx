@@ -13,6 +13,7 @@ export default function ShopifyProductsPage() {
       cacheKey="shopify_products_cache_v1"
       logoSrc={WIKIMEDIA_SHOPIFY_LOGO_2018_SVG}
       brandAlt="Shopify"
+      marketplaceSlug="shopify"
       logoFrameClassName={DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_MD}
     />
   );

@@ -3,7 +3,8 @@
  * optional localStorage hydratisieren → API immer anfragen → periodisch still abgleichen.
  */
 
-export const DASHBOARD_CLIENT_BACKGROUND_SYNC_MS = 5 * 60 * 1000;
+/** An Supabase-Cache-TTL (Cron 15 Min) angeglichen — Poll trifft nur leichte GETs. */
+export const DASHBOARD_CLIENT_BACKGROUND_SYNC_MS = 15 * 60 * 1000;
 
 /** Reduziert unnötige Polling-Last in versteckten Browser-Tabs. */
 export function shouldRunBackgroundSync(): boolean {

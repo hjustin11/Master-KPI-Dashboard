@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import type { OttoOrder } from "@/shared/lib/ottoApiClient";
 import {
-  fetchOttoOrdersRange,
-  getOttoAccessToken,
   getOttoIntegrationConfig,
   parseYmdParam,
+  readOttoOrdersFromDashboard,
   ymdToUtcRangeExclusiveEnd,
 } from "@/shared/lib/ottoApiClient";
+
+const ORDERS_CACHE_MISS_HINT =
+  "Keine gecachten Daten für diesen Zeitraum. Synchronisation läuft z. B. alle 15 Minuten oder über „Aktualisieren“.";
 import { INTEGRATION_SECRETS_CONFIGURATION_HINT_DE } from "@/shared/lib/integrationSecrets";
 import { resolveSellerPortalOrderUrl } from "@/shared/lib/marketplaceSellerOrderLink";
 
@@ -134,25 +136,36 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Zeitraum muss 1–60 Tage umfassen." }, { status: 400 });
     }
 
-    const forceRefresh = searchParams.get("refresh") === "1";
-    const token = await getOttoAccessToken(config);
-    const orders = await fetchOttoOrdersRange({
-      baseUrl: config.baseUrl,
-      token,
-      startMs,
-      endMs,
-      forceRefresh,
-    });
+    const cached = await readOttoOrdersFromDashboard(config.baseUrl, fromYmd, toYmd);
+    if (cached.state === "miss") {
+      return NextResponse.json({
+        meta: {
+          from: fromYmd,
+          to: toYmd,
+          baseUrl: config.baseUrl,
+          cacheState: "miss" as const,
+          cacheMessage: ORDERS_CACHE_MISS_HINT,
+        },
+        totalCount: 0,
+        items: [] as OttoOrderListRow[],
+      });
+    }
 
-    const items = orders
+    const items = cached.value
       .map(mapOrderToRow)
-      .filter((row): row is OttoOrderListRow => row !== null);
+      .filter((row): row is OttoOrderListRow => {
+        if (!row) return false;
+        const t = Date.parse(row.purchaseDate);
+        return !Number.isNaN(t) && t >= startMs && t < endMs;
+      });
 
     return NextResponse.json({
       meta: {
         from: fromYmd,
         to: toYmd,
         baseUrl: config.baseUrl,
+        cacheState: cached.state,
+        cacheUpdatedAt: cached.updatedAt,
       },
       totalCount: items.length,
       items,

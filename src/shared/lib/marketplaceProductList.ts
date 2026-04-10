@@ -9,6 +9,11 @@ export type MarketplaceProductListRow = {
   priceEur?: number | null;
   /** Marktplatz-Bestand (falls Quelle vorhanden). */
   stockQty?: number | null;
+  /**
+   * Kuratierte Zusatzfelder aus der Marktplatz-Roh-API (Whitelist pro Quelle).
+   * Für Shell-Dialog / Detailansicht; nicht für Tabellen-Spalten vorgesehen.
+   */
+  extras?: Record<string, unknown>;
 };
 
 export type MarketplaceProductsListResponse = {

@@ -1,4 +1,5 @@
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/shared/lib/supabase/env";
+import { resolveLocalDevEmailFromRequest } from "@/shared/lib/localDevAuth";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -22,6 +23,7 @@ export async function middleware(request: NextRequest) {
     "/api/invitations/register-init",
     "/api/invitations/lookup",
     "/api/invitations/complete",
+    "/api/dev/local-auth",
     // Cron (Bearer CRON_SECRET / INTEGRATION_CACHE_WARM_SECRET) — kein User-Cookie.
     "/api/integration-cache/warm",
   ];
@@ -31,7 +33,15 @@ export async function middleware(request: NextRequest) {
   const isAuthPageThatShouldRedirectWhenLoggedIn =
     request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/forgot-password");
+  const localDevEmail = resolveLocalDevEmailFromRequest(request);
   let response = NextResponse.next({ request });
+
+  if (localDevEmail) {
+    if (isPublicPath && isAuthPageThatShouldRedirectWhenLoggedIn) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+    return response;
+  }
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {

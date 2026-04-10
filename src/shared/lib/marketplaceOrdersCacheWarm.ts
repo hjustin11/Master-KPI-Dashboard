@@ -1,8 +1,7 @@
 import { fetchFressnapfOrdersPaginated, getFressnapfIntegrationConfig } from "@/shared/lib/fressnapfApiClient";
 import { fetchKauflandOrderUnitsAllStatuses, getKauflandIntegrationConfig } from "@/shared/lib/kauflandApiClient";
 import { fetchOttoOrdersRange, getOttoAccessToken, getOttoIntegrationConfig } from "@/shared/lib/ottoApiClient";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { ymdRangeInclusiveDayCountLocal, ymdToUtcRangeExclusiveEnd } from "@/shared/lib/orderDateParams";
 
 export type MiscMarketplaceOrdersWarmResult = {
   otto?: { ok: true; windows: Array<{ days: number; count: number; durationMs: number }> } | { ok: false; error: string };
@@ -19,7 +18,6 @@ export async function primeMiscMarketplaceOrdersCaches(
   dayWindows: number[]
 ): Promise<MiscMarketplaceOrdersWarmResult> {
   const out: MiscMarketplaceOrdersWarmResult = {};
-  const now = Date.now();
   const windows = dayWindows
     .map((d) => Math.min(Math.max(Math.floor(d), 1), 60))
     .filter((d, i, a) => a.indexOf(d) === i);
@@ -36,12 +34,15 @@ export async function primeMiscMarketplaceOrdersCaches(
       });
       for (const days of windows) {
         const started = Date.now();
-        const startMs = now - days * DAY_MS;
+        const { fromYmd, toYmd } = ymdRangeInclusiveDayCountLocal(days);
+        const { startMs, endMs } = ymdToUtcRangeExclusiveEnd(fromYmd, toYmd);
         const orders = await fetchOttoOrdersRange({
           baseUrl: ottoCfg.baseUrl,
           token,
           startMs,
-          endMs: now,
+          endMs,
+          fromYmd,
+          toYmd,
           forceRefresh: true,
         });
         winResults.push({ days, count: orders.length, durationMs: Date.now() - started });
@@ -69,10 +70,10 @@ export async function primeMiscMarketplaceOrdersCaches(
     try {
       for (const days of windows) {
         const started = Date.now();
-        const startMs = now - days * DAY_MS;
+        const { fromYmd, toYmd } = ymdRangeInclusiveDayCountLocal(days);
         const orders = await fetchFressnapfOrdersPaginated(fnCfg, {
-          createdFromMs: startMs,
-          createdToMsExclusive: now,
+          fromYmd,
+          toYmd,
           forceRefresh: true,
         });
         winResults.push({ days, count: orders.length, durationMs: Date.now() - started });

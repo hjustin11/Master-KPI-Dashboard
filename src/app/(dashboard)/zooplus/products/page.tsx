@@ -13,6 +13,7 @@ export default function ZooplusProductsPage() {
       cacheKey="zooplus_products_cache_v1"
       logoSrc={WIKIMEDIA_ZOOPLUS_LOGO_PNG}
       brandAlt="ZooPlus"
+      marketplaceSlug="zooplus"
       logoFrameClassName={DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_LG}
       titleRowGapClassName="gap-1"
     />

@@ -9,6 +9,7 @@ export default function OttoProductsPage() {
       cacheKey="otto_products_cache_v1"
       logoSrc="/brand/marketplaces/otto.svg"
       brandAlt="Otto"
+      marketplaceSlug="otto"
     />
   );
 }

@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import {
   centsToAmount,
-  fetchKauflandOrderUnitsAllStatuses,
   filterOrderUnitsByCreatedRange,
   getKauflandIntegrationConfig,
   parseYmdParam,
+  readKauflandOrderUnitsFromDashboard,
   ymdToUtcRangeExclusiveEnd,
   type KauflandOrderUnit,
 } from "@/shared/lib/kauflandApiClient";
+
+const ORDERS_CACHE_MISS_HINT =
+  "Keine gecachten Daten. Synchronisation läuft z. B. alle 15 Minuten oder über „Aktualisieren“.";
 
 export type KauflandOrderListRow = {
   orderId: string;
@@ -95,9 +98,23 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Zeitraum muss 1–60 Tage umfassen." }, { status: 400 });
     }
 
-    const forceRefresh = searchParams.get("refresh") === "1";
-    const allUnits = await fetchKauflandOrderUnitsAllStatuses({ config, forceRefresh });
-    const filtered = filterOrderUnitsByCreatedRange(allUnits, startMs, endMs);
+    const cached = await readKauflandOrderUnitsFromDashboard({ config });
+    if (cached.state === "miss") {
+      return NextResponse.json({
+        meta: {
+          from: fromYmd,
+          to: toYmd,
+          baseUrl: config.baseUrl,
+          storefront: config.storefront,
+          cacheState: "miss" as const,
+          cacheMessage: ORDERS_CACHE_MISS_HINT,
+        },
+        totalCount: 0,
+        items: [] as KauflandOrderListRow[],
+      });
+    }
+
+    const filtered = filterOrderUnitsByCreatedRange(cached.value, startMs, endMs);
     const byOrder = new Map<string, KauflandOrderUnit[]>();
     for (const u of filtered) {
       const oid = typeof u.id_order === "string" ? u.id_order.trim() : "";
@@ -115,6 +132,8 @@ export async function GET(request: Request) {
         to: toYmd,
         baseUrl: config.baseUrl,
         storefront: config.storefront,
+        cacheState: cached.state,
+        cacheUpdatedAt: cached.updatedAt,
       },
       totalCount: items.length,
       items,

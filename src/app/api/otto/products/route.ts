@@ -13,7 +13,7 @@ import type { MarketplaceProductsListResponse } from "@/shared/lib/marketplacePr
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const forceRefresh = url.searchParams.get("refresh") === "1";
+    const forceRefresh = false;
     const config = await getOttoIntegrationConfig();
     const missing = {
       OTTO_API_CLIENT_ID: !config.clientId,

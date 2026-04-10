@@ -52,6 +52,7 @@ export function useUser() {
     const supabase = createClient();
     let cancelled = false;
     let hydrateGen = 0;
+    let sawAuthEvent = false;
 
     /**
      * Kein getUser() hier: parallel zu onAuthStateChange (INITIAL_SESSION) löst das den
@@ -62,6 +63,37 @@ export function useUser() {
 
       const authUser = session?.user ?? null;
       if (!authUser) {
+        try {
+          const localRes = await fetch("/api/dev/local-auth", { cache: "no-store" });
+          if (localRes.ok) {
+            const payload = (await localRes.json()) as {
+              user?: {
+                id?: string;
+                email?: string;
+                fullName?: string;
+                roleKey?: string;
+                profileRoleRaw?: string | null;
+              } | null;
+            };
+            const localUser = payload.user;
+            if (localUser?.email && localUser.id) {
+              const fullName = localUser.fullName || "Lokaler Entwickler";
+              if (cancelled || gen !== hydrateGen) return;
+              setUser({
+                id: localUser.id,
+                email: localUser.email,
+                fullName,
+                roleKey: localUser.roleKey || "owner",
+                profileRoleRaw: localUser.profileRoleRaw ?? "owner",
+                initials: buildInitials(fullName, localUser.email),
+                isLoading: false,
+              });
+              return;
+            }
+          }
+        } catch {
+          // ignore and fall through to default user
+        }
         if (cancelled || gen !== hydrateGen) return;
         setUser({ ...DEFAULT_USER, isLoading: false, profileRoleRaw: null });
         return;
@@ -135,20 +167,31 @@ export function useUser() {
       });
     };
 
-    void supabase.auth.getSession().then((result: Awaited<ReturnType<typeof supabase.auth.getSession>>) => {
-      if (cancelled) return;
-      void hydrateFromSession(result.data.session);
-    });
+    const fallbackSessionBootstrap = window.setTimeout(() => {
+      if (cancelled || sawAuthEvent) return;
+      void supabase.auth
+        .getSession()
+        .then((result: Awaited<ReturnType<typeof supabase.auth.getSession>>) => {
+          if (cancelled || sawAuthEvent) return;
+          void hydrateFromSession(result.data.session);
+        })
+        .catch(() => {
+          if (cancelled || sawAuthEvent) return;
+          setUser({ ...DEFAULT_USER, isLoading: false, profileRoleRaw: null });
+        });
+    }, 600);
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       if (cancelled) return;
+      sawAuthEvent = true;
       void hydrateFromSession(session);
     });
 
     return () => {
       cancelled = true;
+      window.clearTimeout(fallbackSessionBootstrap);
       subscription.unsubscribe();
     };
   }, []);

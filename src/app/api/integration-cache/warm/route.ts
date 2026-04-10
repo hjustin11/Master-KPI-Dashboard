@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
-import { primeAmazonProductsIntegrationCache } from "@/shared/lib/amazonProductsSpApiCatalog";
+import { primeAmazonOrdersForYmdRange } from "@/app/api/amazon/orders/route";
+import {
+  primeAllMarketplaceProductListsForWarm,
+  type MarketplaceProductPrimeResult,
+} from "@/shared/lib/marketplaceProductCachesPrime";
+import { ymdRangeInclusiveDayCountLocal } from "@/shared/lib/orderDateParams";
 import { primeMiscMarketplaceOrdersCaches } from "@/shared/lib/marketplaceOrdersCacheWarm";
 import { primeXentralIntegrationCaches } from "@/shared/lib/xentralIntegrationCacheWarm";
 import {
-  FLEX_DAY_MS,
   FLEX_MARKETPLACE_EBAY_SPEC,
   FLEX_MARKETPLACE_MMS_SPEC,
   FLEX_MARKETPLACE_SHOPIFY_SPEC,
@@ -25,8 +29,8 @@ const FLEX_SPECS: FlexMarketplaceSpec[] = [
   FLEX_MARKETPLACE_ZOOPLUS_SPEC,
 ];
 
-/** Häufige Analytics-Zeiträume — je Spezifikation zwei Cache-Keys. */
-const DEFAULT_WARM_DAY_WINDOWS = [7, 30];
+/** Kalendertage inkl. heute — passend zu Dashboard-Datepickern (z. B. 2 = gestern–heute). */
+const DEFAULT_WARM_DAY_WINDOWS = [2, 7, 30];
 
 function resolveWarmSecret(): string {
   return (process.env.CRON_SECRET ?? process.env.INTEGRATION_CACHE_WARM_SECRET ?? "").trim();
@@ -46,7 +50,6 @@ type WarmResult = {
 };
 
 async function runFlexMarketplaceWarm(dayWindows: number[]): Promise<WarmResult[]> {
-  const now = Date.now();
   const results: WarmResult[] = [];
 
   for (const spec of FLEX_SPECS) {
@@ -65,10 +68,10 @@ async function runFlexMarketplaceWarm(dayWindows: number[]): Promise<WarmResult[
       for (const days of dayWindows) {
         const d = Math.min(Math.max(Math.floor(days), 1), 120);
         const started = Date.now();
-        const span = d * FLEX_DAY_MS;
+        const { fromYmd, toYmd } = ymdRangeInclusiveDayCountLocal(d);
         const { rawCount, normalizedCount } = await primeFlexOrdersCaches(config, {
-          createdFromMs: now - span,
-          createdToMsExclusive: now,
+          fromYmd,
+          toYmd,
         });
         windows.push({
           days: d,
@@ -134,17 +137,36 @@ async function handleWarm(request: Request): Promise<Response> {
     miscOrders = { durationMs: Date.now() - miscOrdersStarted, otto: { ok: false, error: msg } };
   }
 
-  const amazonStarted = Date.now();
-  let amazon: Awaited<ReturnType<typeof primeAmazonProductsIntegrationCache>> & { durationMs: number };
+  const amazonOrdersStarted = Date.now();
+  let amazonOrders: { windows: Array<{ days: number; ok: boolean; count?: number; error?: string }>; durationMs: number };
   try {
-    const ar = await primeAmazonProductsIntegrationCache();
-    amazon = { ...ar, durationMs: Date.now() - amazonStarted };
+    const winResults: Array<{ days: number; ok: boolean; count?: number; error?: string }> = [];
+    for (const days of dayWindows) {
+      const d = Math.min(Math.max(Math.floor(days), 1), 60);
+      const { fromYmd, toYmd } = ymdRangeInclusiveDayCountLocal(d);
+      const r = await primeAmazonOrdersForYmdRange(fromYmd, toYmd);
+      winResults.push({
+        days: d,
+        ok: r.ok,
+        count: r.count,
+        error: r.error,
+      });
+    }
+    amazonOrders = { windows: winResults, durationMs: Date.now() - amazonOrdersStarted };
   } catch (e) {
-    amazon = {
-      ok: false,
-      error: e instanceof Error ? e.message : String(e),
-      durationMs: Date.now() - amazonStarted,
+    amazonOrders = {
+      windows: [],
+      durationMs: Date.now() - amazonOrdersStarted,
     };
+  }
+
+  const marketplaceProductsStarted = Date.now();
+  let marketplaceProducts: { rows: MarketplaceProductPrimeResult[]; durationMs: number };
+  try {
+    const rows = await primeAllMarketplaceProductListsForWarm();
+    marketplaceProducts = { rows, durationMs: Date.now() - marketplaceProductsStarted };
+  } catch {
+    marketplaceProducts = { rows: [], durationMs: Date.now() - marketplaceProductsStarted };
   }
 
   const xentralStarted = Date.now();
@@ -166,7 +188,8 @@ async function handleWarm(request: Request): Promise<Response> {
     durationMs: Date.now() - started,
     flex,
     miscOrders,
-    amazon,
+    amazonOrders,
+    marketplaceProducts,
     xentral,
     dayWindows,
   });

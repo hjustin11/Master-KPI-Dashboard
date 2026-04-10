@@ -1,20 +1,26 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { createClient } from "@/shared/lib/supabase/client";
 import { useTranslation } from "@/i18n/I18nProvider";
 
 export function LogoutMenuItem() {
-  const router = useRouter();
   const { t } = useTranslation();
 
   const handleLogout = async () => {
     const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // ignore when auth provider is temporarily unreachable
+    }
+    try {
+      await fetch("/api/dev/local-auth", { method: "DELETE" });
+    } catch {
+      // ignore
+    }
+    window.location.assign("/login");
   };
 
   return (

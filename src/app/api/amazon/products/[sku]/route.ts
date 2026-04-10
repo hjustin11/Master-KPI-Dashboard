@@ -6,12 +6,20 @@ import { isOwnerFromSources } from "@/shared/lib/roles";
 import {
   draftValuesFromSource,
   emptyDraftValues,
+  mergeAmazonDraftValuesWithFresh,
   normalizeDraftValues,
   normalizeSourceSnapshot,
+  sanitizeAmazonBulletPoints,
+  sanitizeAmazonDescription,
   sourceSnapshotFromRow,
 } from "@/shared/lib/amazonProductDraft";
 import type { MarketplaceProductListRow } from "@/shared/lib/marketplaceProductList";
 import type { AmazonProductSourceSnapshot } from "@/shared/lib/amazonProductDraft";
+import {
+  resolveEffectiveAmazonSellerId,
+  type AmazonSpApiProductsConfig,
+} from "@/shared/lib/amazonProductsSpApiCatalog";
+import { isLikelyAmazonShippingUuid } from "@/shared/lib/amazonMeasureDisplay";
 
 async function getCurrentUser() {
   const supabase = await createServerSupabase();
@@ -76,6 +84,7 @@ function collectMissingAmazonSecretKeys(): string[] {
   if (!env("AMAZON_SP_API_MARKETPLACE_IDS") && !env("AMAZON_SP_API_MARKETPLACE_ID")) {
     m.push("AMAZON_SP_API_MARKETPLACE_IDS", "AMAZON_SP_API_MARKETPLACE_ID");
   }
+  if (!env("AMAZON_SP_API_SELLER_ID")) m.push("AMAZON_SP_API_SELLER_ID");
   return [...new Set(m)];
 }
 
@@ -117,6 +126,7 @@ async function getAmazonConfig() {
     .split(",")
     .map((v) => v.trim())
     .filter(Boolean);
+  const sellerId = (env("AMAZON_SP_API_SELLER_ID") || s("AMAZON_SP_API_SELLER_ID")).trim();
   return {
     refreshToken,
     lwaClientId,
@@ -127,6 +137,7 @@ async function getAmazonConfig() {
     region,
     endpoint,
     marketplaceIds,
+    sellerId,
   };
 }
 
@@ -269,6 +280,296 @@ function extractStringsDeep(input: unknown): string[] {
   return out;
 }
 
+const AMAZON_ATTRIBUTE_META_KEYS = new Set([
+  "language_tag",
+  "language",
+  "locale",
+  "marketplace_id",
+  "marketplaceid",
+  "marketplace",
+  "audience",
+  "channel",
+  "business_type",
+  "contributor",
+]);
+
+function isNoiseToken(value: string) {
+  const v = value.trim();
+  if (!v) return true;
+  if (/^[a-z]{2}_[A-Z]{2}$/.test(v)) return true;
+  if (/^A[0-9A-Z]{9,14}$/.test(v)) return true;
+  return false;
+}
+
+function collectAttributeTextValues(input: unknown, out: string[] = []): string[] {
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    if (trimmed && !isNoiseToken(trimmed)) out.push(trimmed);
+    return out;
+  }
+  if (Array.isArray(input)) {
+    for (const item of input) collectAttributeTextValues(item, out);
+    return out;
+  }
+  if (!input || typeof input !== "object") return out;
+  const record = input as Record<string, unknown>;
+  if (typeof record.value === "string") {
+    const value = record.value.trim();
+    if (value && !isNoiseToken(value)) out.push(value);
+  } else if (typeof record.value === "number" && Number.isFinite(record.value)) {
+    const asText = String(record.value);
+    if (!isNoiseToken(asText)) out.push(asText);
+  }
+  for (const [key, nested] of Object.entries(record)) {
+    if (key === "value") continue;
+    if (AMAZON_ATTRIBUTE_META_KEYS.has(key.toLowerCase())) continue;
+    collectAttributeTextValues(nested, out);
+  }
+  return out;
+}
+
+function firstAttributeText(input: unknown): string {
+  return dedupe(collectAttributeTextValues(input))[0] ?? "";
+}
+
+function parseNumberishValue(input: unknown): number | null {
+  if (typeof input === "number" && Number.isFinite(input)) return input;
+  if (typeof input === "string") {
+    const normalized = input.replace(/[^\d,.-]/g, "").replace(",", ".");
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      const parsed = parseNumberishValue(item);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+  if (!input || typeof input !== "object") return null;
+  const record = input as Record<string, unknown>;
+  for (const key of ["amount", "value", "our_price", "standard_price", "list_price"]) {
+    const parsed = parseNumberishValue(record[key]);
+    if (parsed != null) return parsed;
+  }
+  for (const [key, nested] of Object.entries(record)) {
+    if (AMAZON_ATTRIBUTE_META_KEYS.has(key.toLowerCase())) continue;
+    const parsed = parseNumberishValue(nested);
+    if (parsed != null) return parsed;
+  }
+  return null;
+}
+
+function parsePriceScheduleRow(row: unknown): number | null {
+  if (row == null) return null;
+  if (typeof row === "object") {
+    const r = row as Record<string, unknown>;
+    const direct = parseNumberishValue(r.value_with_tax ?? r.value);
+    if (direct != null) return direct;
+    const sched = r.schedule;
+    if (Array.isArray(sched)) {
+      for (const s of sched) {
+        const n = parseNumberishValue(
+          (s as Record<string, unknown>)?.value_with_tax ?? (s as Record<string, unknown>)?.value
+        );
+        if (n != null) return n;
+      }
+    }
+  }
+  return parseNumberishValue(row);
+}
+
+function extractOurPriceFromPurchasableOffer(input: unknown): number | null {
+  if (input == null) return null;
+  const offers = Array.isArray(input) ? input : [input];
+  for (const offer of offers) {
+    if (!offer || typeof offer !== "object") continue;
+    const o = offer as Record<string, unknown>;
+    for (const key of ["our_price", "discounted_price", "minimum_seller_allowed_price"]) {
+      const block = o[key];
+      if (block == null) continue;
+      const rows = Array.isArray(block) ? block : [block];
+      for (const row of rows) {
+        const n = parsePriceScheduleRow(row);
+        if (n != null) return n;
+      }
+    }
+  }
+  return null;
+}
+
+function extractListPriceFromPurchasableOffer(input: unknown): number | null {
+  if (input == null) return null;
+  const offers = Array.isArray(input) ? input : [input];
+  for (const offer of offers) {
+    if (!offer || typeof offer !== "object") continue;
+    const o = offer as Record<string, unknown>;
+    const lp = o.list_price;
+    if (lp == null) continue;
+    const rows = Array.isArray(lp) ? lp : [lp];
+    for (const row of rows) {
+      const n = parsePriceScheduleRow(row);
+      if (n != null) return n;
+    }
+  }
+  return null;
+}
+
+function formatDimensionPart(dim: unknown): string {
+  if (dim == null) return "";
+  if (typeof dim === "number" && Number.isFinite(dim)) return String(dim);
+  if (typeof dim === "string" && dim.trim()) return dim.trim();
+  if (typeof dim !== "object") return "";
+  const d = dim as Record<string, unknown>;
+  const v = d.value;
+  const unit = typeof d.unit === "string" ? d.unit.trim() : "";
+  if (typeof v === "number" && Number.isFinite(v)) return unit ? `${v} ${unit}` : String(v);
+  if (typeof v === "string" && v.trim()) return unit ? `${v.trim()} ${unit}` : v.trim();
+  return "";
+}
+
+function extractPackageDimensionsFromAttributes(attributes: Record<string, unknown>): {
+  length: string;
+  width: string;
+  height: string;
+  weight: string;
+} {
+  const keys = ["item_package_dimensions", "package_dimensions", "item_dimensions"] as const;
+  for (const key of keys) {
+    const raw = attributes[key];
+    const blocks = Array.isArray(raw) ? raw : raw != null ? [raw] : [];
+    for (const block of blocks) {
+      if (!block || typeof block !== "object") continue;
+      const b = block as Record<string, unknown>;
+      const len = formatDimensionPart(b.length);
+      const wid = formatDimensionPart(b.width);
+      const hgt = formatDimensionPart(b.height);
+      const wgt = formatDimensionPart(b.weight);
+      if (len || wid || hgt || wgt) {
+        return { length: len, width: wid, height: hgt, weight: wgt };
+      }
+    }
+  }
+  return { length: "", width: "", height: "", weight: "" };
+}
+
+function extractHandlingTimeFromAttributes(attributes: Record<string, unknown>): string {
+  const fa = attributes.fulfillment_availability;
+  if (Array.isArray(fa)) {
+    for (const row of fa) {
+      if (!row || typeof row !== "object") continue;
+      const r = row as Record<string, unknown>;
+      for (const k of [
+        "lead_time_to_ship_max_days",
+        "lead_time_to_ship_maximum_days",
+        "lead_time_to_ship_minimum_days",
+        "lead_time_to_ship_min_max",
+      ]) {
+        const v = r[k];
+        if (typeof v === "number" && Number.isFinite(v)) return String(Math.trunc(v));
+        if (typeof v === "string" && v.trim()) return v.trim();
+      }
+    }
+  }
+  return "";
+}
+
+const SHIPPING_LABEL_KEYS = [
+  "merchant_shipping_group_name",
+  "name",
+  "group_name",
+  "display_name",
+  "label",
+  "title",
+  "shipping_group_name",
+] as const;
+
+function collectShippingStringsFromObject(obj: Record<string, unknown>, bucket: string[]): void {
+  for (const k of SHIPPING_LABEL_KEYS) {
+    const val = obj[k];
+    if (typeof val === "string" && val.trim()) bucket.push(val.trim());
+  }
+}
+
+function walkShippingPayload(v: unknown, bucket: string[]): void {
+  if (v == null) return;
+  if (typeof v === "string") {
+    if (v.trim()) bucket.push(v.trim());
+    return;
+  }
+  if (Array.isArray(v)) {
+    for (const item of v) walkShippingPayload(item, bucket);
+    return;
+  }
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    collectShippingStringsFromObject(o, bucket);
+    for (const [k, val] of Object.entries(o)) {
+      if ((SHIPPING_LABEL_KEYS as readonly string[]).includes(k)) continue;
+      walkShippingPayload(val, bucket);
+    }
+  }
+}
+
+function bestShippingTemplateFromPayload(v: unknown): string {
+  const bucket: string[] = [];
+  walkShippingPayload(v, bucket);
+  const human = bucket.find((s) => !isLikelyAmazonShippingUuid(s));
+  if (human) return human;
+  return bucket[0] ?? "";
+}
+
+function extractShippingTemplateFromAttributes(attributes: Record<string, unknown>): string {
+  for (const key of [
+    "merchant_shipping_group",
+    "merchant_shipping_group_name",
+    "merchant_shipping_group_key",
+  ] as const) {
+    const raw = attributes[key];
+    const picked = bestShippingTemplateFromPayload(raw);
+    if (picked) return picked;
+  }
+  return "";
+}
+
+function extractEan(attributes: Record<string, unknown>): string {
+  const externalIdKeys = [
+    "externally_assigned_product_identifier",
+    "external_product_id",
+    "ean",
+    "ean_value",
+    "gtin",
+    "product_identifier",
+  ];
+  for (const key of externalIdKeys) {
+    const raw = attributes[key];
+    if (!raw) continue;
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        const rec = item as Record<string, unknown>;
+        const typeText = firstAttributeText(rec.type ?? rec.type_name ?? rec.identifier_type).toLowerCase();
+        const valueText =
+          firstAttributeText(rec.value ?? rec.identifier ?? rec.id ?? rec.gtin) ||
+          (typeof rec.value === "number" && Number.isFinite(rec.value) ? String(rec.value) : "");
+        if (
+          valueText &&
+          (!typeText ||
+            typeText.includes("ean") ||
+            typeText.includes("gtin") ||
+            typeText.includes("upc"))
+        ) {
+          return valueText.replace(/\s/g, "");
+        }
+      }
+      continue;
+    }
+    const direct = firstAttributeText(raw);
+    if (direct) return direct;
+  }
+  return "";
+}
+
 function dedupe(values: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -279,6 +580,41 @@ function dedupe(values: string[]): string[] {
     out.push(key);
   }
   return out;
+}
+
+function extractPricesFromTopLevelOffers(offers: unknown): { our: number | null; list: number | null } {
+  let our: number | null = null;
+  let list: number | null = null;
+  const blocks = Array.isArray(offers) ? offers : offers != null ? [offers] : [];
+  for (const block of blocks) {
+    if (!block || typeof block !== "object") continue;
+    const o = block as Record<string, unknown>;
+    const po = (o.purchasable_offer ?? o.purchasableOffer ?? o) as unknown;
+    const oOur = extractOurPriceFromPurchasableOffer(po);
+    const oList = extractListPriceFromPurchasableOffer(po);
+    if (our == null && oOur != null) our = oOur;
+    if (list == null && oList != null) list = oList;
+  }
+  return { our, list };
+}
+
+function extractQuantityFromFulfillmentBlocks(input: unknown): number | null {
+  const blocks = Array.isArray(input) ? input : input != null ? [input] : [];
+  for (const b of blocks) {
+    if (!b || typeof b !== "object") continue;
+    const r = b as Record<string, unknown>;
+    for (const key of [
+      "quantity",
+      "fulfillableQuantity",
+      "fulfillable_quantity",
+      "afn_fulfillable_quantity",
+      "mfn_fulfillable_quantity",
+    ]) {
+      const n = parseNumberishValue(r[key]);
+      if (n != null) return Math.trunc(n);
+    }
+  }
+  return null;
 }
 
 function extractDetailFromListingsPayload(
@@ -297,17 +633,15 @@ function extractDetailFromListingsPayload(
   ];
   const bullets = dedupe(
     bulletCandidates
-      .flatMap((candidate) => extractStringsDeep(candidate))
+      .flatMap((candidate) => collectAttributeTextValues(candidate))
       .filter((line) => line.length > 2)
       .slice(0, 12)
   );
 
-  const descriptionCandidates = [
-    attributes.product_description,
-    attributes.description,
-    attributes.generic_keyword,
-  ];
-  const description = dedupe(descriptionCandidates.flatMap((candidate) => extractStringsDeep(candidate))).join("\n\n");
+  const descriptionCandidates = [attributes.product_description, attributes.description];
+  const description = dedupe(descriptionCandidates.flatMap((candidate) => collectAttributeTextValues(candidate))).join(
+    "\n\n"
+  );
 
   const imageKeys = [
     "main_product_image_locator",
@@ -328,15 +662,85 @@ function extractDetailFromListingsPayload(
 
   const titleFromPayload =
     (typeof summary.itemName === "string" && summary.itemName.trim()) ||
-    extractStringsDeep(attributes.item_name)[0] ||
+    firstAttributeText(attributes.item_name) ||
     source.title;
+
+  const productTypeFromPayload =
+    firstAttributeText(attributes.product_type) ||
+    firstAttributeText(attributes.item_type_name) ||
+    source.productType;
+
+  const brandFromPayload =
+    firstAttributeText(attributes.brand) ||
+    firstAttributeText(attributes.manufacturer) ||
+    source.brand;
+
+  const topOffers = extractPricesFromTopLevelOffers(obj.offers);
+  const offerOur =
+    extractOurPriceFromPurchasableOffer(attributes.purchasable_offer) ?? topOffers.our;
+  const offerList =
+    extractListPriceFromPurchasableOffer(attributes.purchasable_offer) ?? topOffers.list;
+  const listPriceEur =
+    offerOur ??
+    parseNumberishValue(attributes.standard_price) ??
+    parseNumberishValue(attributes.our_price) ??
+    parseNumberishValue(attributes.list_price) ??
+    source.listPriceEur;
+  const uvpEur =
+    offerList ??
+    parseNumberishValue(attributes.msrp) ??
+    parseNumberishValue(attributes.maximum_retail_price) ??
+    parseNumberishValue(attributes.manufacturer_minimum_advertised_price) ??
+    parseNumberishValue(attributes.listing_price) ??
+    parseNumberishValue(attributes.list_price) ??
+    source.uvpEur;
+  const dims = extractPackageDimensionsFromAttributes(attributes);
+  const handlingFromFa = extractHandlingTimeFromAttributes(attributes);
+  const handlingTime =
+    handlingFromFa || firstAttributeText(attributes.fulfillment_latency) || source.handlingTime;
+  const shippingTemplate =
+    extractShippingTemplateFromAttributes(attributes) ||
+    firstAttributeText(attributes.merchant_shipping_group_name) ||
+    source.shippingTemplate;
+  const packageLength = dims.length || firstAttributeText(attributes.item_package_length) || source.packageLength;
+  const packageWidth = dims.width || firstAttributeText(attributes.item_package_width) || source.packageWidth;
+  const packageHeight = dims.height || firstAttributeText(attributes.item_package_height) || source.packageHeight;
+  const packageWeight = dims.weight || firstAttributeText(attributes.item_package_weight) || source.packageWeight;
+  const ean = extractEan(attributes);
+
+  const qtyTop = extractQuantityFromFulfillmentBlocks(obj.fulfillmentAvailability);
+  const qtyAttrs = extractQuantityFromFulfillmentBlocks(attributes.fulfillment_availability);
+  const quantityResolved =
+    qtyTop ?? qtyAttrs ?? (source.quantity != null && Number.isFinite(source.quantity) ? source.quantity : null);
+
+  const conditionFromSummary =
+    typeof summary.conditionType === "string" && summary.conditionType.trim()
+      ? summary.conditionType.trim()
+      : "";
+
+  const mergedBullets = bullets.length > 0 ? bullets : source.bulletPoints;
+  const mergedDesc = description || source.description;
 
   return {
     ...source,
     title: titleFromPayload || source.title,
-    bulletPoints: bullets.length > 0 ? bullets : source.bulletPoints,
-    description: description || source.description,
+    bulletPoints: sanitizeAmazonBulletPoints(mergedBullets),
+    description: sanitizeAmazonDescription(mergedDesc),
     images: images.length > 0 ? images : source.images,
+    productType: productTypeFromPayload || source.productType,
+    brand: brandFromPayload || source.brand,
+    conditionType: conditionFromSummary || source.conditionType,
+    listPriceEur,
+    uvpEur,
+    handlingTime,
+    shippingTemplate,
+    quantity: quantityResolved,
+    packageLength,
+    packageWidth,
+    packageHeight,
+    packageWeight,
+    externalProductId: ean || source.externalProductId,
+    externalProductIdType: ean ? "ean" : source.externalProductIdType,
   };
 }
 
@@ -379,6 +783,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
 
   const source = sourceSnapshotFromRow(row);
   let enrichedSource = source;
+  let detailLoadHint: string | null = null;
   try {
     const config = await getAmazonConfig();
     if (
@@ -394,15 +799,22 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
         lwaClientId: config.lwaClientId,
         lwaClientSecret: config.lwaClientSecret,
       });
-      const sellerId = ((listPayload as { sellerId?: string }).sellerId ?? "").trim();
-      if (sellerId) {
+      let sellerId = ((listPayload as { sellerId?: string }).sellerId ?? "").trim();
+      if (!sellerId) sellerId = (config.sellerId ?? "").trim();
+      if (!sellerId) {
+        sellerId = await resolveEffectiveAmazonSellerId(config as AmazonSpApiProductsConfig, lwaAccessToken);
+      }
+      if (!sellerId) {
+        detailLoadHint =
+          "Seller-ID fehlt (weder Produktliste noch Umgebung). Amazon-Listings-Details können nicht geladen werden.";
+      } else {
         const detailRes = await spApiGet({
           endpoint: config.endpoint,
           region: config.region,
           path: `/listings/2021-08-01/items/${encodeURIComponent(sellerId)}/${encodeURIComponent(sku)}`,
           query: {
             marketplaceIds: config.marketplaceIds[0] ?? "",
-            includedData: "summaries,attributes",
+            includedData: "summaries,attributes,offers,fulfillmentAvailability",
           },
           awsAccessKeyId: config.awsAccessKeyId,
           awsSecretAccessKey: config.awsSecretAccessKey,
@@ -411,20 +823,28 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
         });
         if (detailRes.res.ok && detailRes.json) {
           enrichedSource = extractDetailFromListingsPayload(detailRes.json, source);
+        } else {
+          const st = detailRes.res.status;
+          detailLoadHint =
+            st === 401 || st === 403
+              ? "Listings-Details nicht geladen (Zugriff verweigert). Listings-API-Rechte in Seller Central prüfen."
+              : `Listings-Details nicht geladen (HTTP ${st}). Es werden nur Tabellen-Daten angezeigt.`;
         }
       }
     }
   } catch {
-    // detail fallback bleibt Listenwert
+    if (!detailLoadHint) detailLoadHint = "Listings-Details konnten nicht geladen werden.";
   }
 
+  const freshDraft = draftValuesFromSource(enrichedSource);
   const canManageDrafts = await isOwnerUser(currentUser);
   if (!canManageDrafts) {
     return NextResponse.json({
       sku,
       sourceSnapshot: enrichedSource,
-      draftValues: draftValuesFromSource(enrichedSource),
+      draftValues: freshDraft,
       draft: null,
+      ...(detailLoadHint ? { detailLoadHint } : {}),
     });
   }
 
@@ -448,10 +868,14 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
         draft_values: normalizeDraftValues(draftRes.data.draft_values),
       }
     : null;
+  const draftValuesOut = draft
+    ? mergeAmazonDraftValuesWithFresh(draft.draft_values, freshDraft)
+    : freshDraft;
   return NextResponse.json({
     sku,
     sourceSnapshot: draft?.source_snapshot ?? enrichedSource,
-    draftValues: draft?.draft_values ?? draftValuesFromSource(enrichedSource) ?? emptyDraftValues(),
+    draftValues: draftValuesOut ?? emptyDraftValues(),
     draft,
+    ...(detailLoadHint ? { detailLoadHint } : {}),
   });
 }

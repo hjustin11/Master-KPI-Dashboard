@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { primeFlexOrdersCaches } from "@/shared/lib/flexMarketplaceApiClient";
+import { readFlexOrdersNormalizedFromDashboard } from "@/shared/lib/flexMarketplaceApiClient";
 import {
-  fetchMmsOrdersPaginated,
   filterOrdersByCreatedRange,
   getMmsIntegrationConfig,
   mmsMissingKeysForConfig,
@@ -9,6 +8,9 @@ import {
   ymdToUtcRangeExclusiveEnd,
 } from "@/shared/lib/mmsApiClient";
 import { resolveSellerPortalOrderUrl } from "@/shared/lib/marketplaceSellerOrderLink";
+
+const ORDERS_CACHE_MISS_HINT =
+  "Keine gecachten Daten für diesen Zeitraum. Synchronisation läuft z. B. alle 15 Minuten oder über „Aktualisieren“.";
 
 export type MmsOrderListRow = {
   orderId: string;
@@ -60,18 +62,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Zeitraum muss 1–60 Tage umfassen." }, { status: 400 });
     }
 
-    const forceRefresh = searchParams.get("refresh") === "1";
-    if (forceRefresh) {
-      await primeFlexOrdersCaches(config, {
-        createdFromMs: startMs,
-        createdToMsExclusive: endMs,
+    const cached = await readFlexOrdersNormalizedFromDashboard(config, fromYmd, toYmd);
+    if (cached.state === "miss") {
+      return NextResponse.json({
+        meta: {
+          from: fromYmd,
+          to: toYmd,
+          baseUrl: config.baseUrl,
+          cacheState: "miss" as const,
+          cacheMessage: ORDERS_CACHE_MISS_HINT,
+        },
+        totalCount: 0,
+        items: [] as MmsOrderListRow[],
       });
     }
-    const allOrders = await fetchMmsOrdersPaginated(config, {
-      createdFromMs: startMs,
-      createdToMsExclusive: endMs,
-    });
-    const filtered = filterOrdersByCreatedRange(allOrders, startMs, endMs);
+
+    const filtered = filterOrdersByCreatedRange(cached.value, startMs, endMs);
 
     const items: MmsOrderListRow[] = filtered.map((o) => ({
       orderId: o.id,
@@ -88,6 +94,8 @@ export async function GET(request: Request) {
         from: fromYmd,
         to: toYmd,
         baseUrl: config.baseUrl,
+        cacheState: cached.state,
+        cacheUpdatedAt: cached.updatedAt,
       },
       totalCount: items.length,
       items,

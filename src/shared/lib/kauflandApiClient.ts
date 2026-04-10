@@ -1,6 +1,11 @@
 import crypto from "node:crypto";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
-import { getIntegrationCachedOrLoad, writeIntegrationCache } from "@/shared/lib/integrationDataCache";
+import {
+  readIntegrationCache,
+  readIntegrationCacheForDashboard,
+  writeIntegrationCache,
+  type IntegrationDashboardCacheRead,
+} from "@/shared/lib/integrationDataCache";
 import {
   marketplaceIntegrationFreshMs,
   marketplaceIntegrationStaleMs,
@@ -179,14 +184,12 @@ async function fetchKauflandOrderUnitsAllStatusesLive(args: {
   return out;
 }
 
-export async function fetchKauflandOrderUnitsAllStatuses(args: {
+function kauflandOrderUnitsCacheKey(args: {
   config: KauflandIntegrationConfig;
-  /** Optional: z. B. de */
   storefront?: string;
   maxPagesPerStatus?: number;
-  forceRefresh?: boolean;
-}): Promise<KauflandOrderUnit[]> {
-  const cacheKey = [
+}): string {
+  return [
     "kaufland:order-units",
     crypto
       .createHash("sha256")
@@ -201,6 +204,25 @@ export async function fetchKauflandOrderUnitsAllStatuses(args: {
       .digest("hex")
       .slice(0, 24),
   ].join(":");
+}
+
+export async function readKauflandOrderUnitsFromDashboard(args: {
+  config: KauflandIntegrationConfig;
+  storefront?: string;
+  maxPagesPerStatus?: number;
+}): Promise<IntegrationDashboardCacheRead<KauflandOrderUnit[]>> {
+  const cacheKey = kauflandOrderUnitsCacheKey(args);
+  return readIntegrationCacheForDashboard<KauflandOrderUnit[]>(cacheKey);
+}
+
+export async function fetchKauflandOrderUnitsAllStatuses(args: {
+  config: KauflandIntegrationConfig;
+  /** Optional: z. B. de */
+  storefront?: string;
+  maxPagesPerStatus?: number;
+  forceRefresh?: boolean;
+}): Promise<KauflandOrderUnit[]> {
+  const cacheKey = kauflandOrderUnitsCacheKey(args);
   const freshMs = marketplaceIntegrationFreshMs();
   const staleMs = marketplaceIntegrationStaleMs();
   if (args.forceRefresh) {
@@ -214,13 +236,17 @@ export async function fetchKauflandOrderUnitsAllStatuses(args: {
     });
     return live;
   }
-  return getIntegrationCachedOrLoad({
+  const hit = await readIntegrationCache<KauflandOrderUnit[]>(cacheKey);
+  if (hit.state === "fresh" || hit.state === "stale") return hit.value;
+  const live = await fetchKauflandOrderUnitsAllStatusesLive(args);
+  await writeIntegrationCache({
     cacheKey,
     source: "kaufland:order-units",
+    value: live,
     freshMs,
     staleMs,
-    loader: () => fetchKauflandOrderUnitsAllStatusesLive(args),
   });
+  return live;
 }
 
 function parseUnitCreatedMs(u: KauflandOrderUnit): number | null {

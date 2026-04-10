@@ -39,6 +39,30 @@ function miraklOfferQuantity(o: Record<string, unknown>): number | null {
   return null;
 }
 
+function miraklExtras(o: Record<string, unknown>): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {};
+  const put = (k: string, v: unknown) => {
+    if (v === undefined || v === null) return;
+    if (typeof v === "string" && !v.trim()) return;
+    out[k] = v;
+  };
+  put("category_label", o.category_label ?? o.categoryLabel ?? o.category_code);
+  put("leadtime_to_ship", o.leadtime_to_ship ?? o.leadtimeToShip);
+  const minShip = o.min_shipping_price ?? o.minShippingPrice;
+  if (minShip && typeof minShip === "object" && minShip !== null) {
+    const m = minShip as Record<string, unknown>;
+    const amt = m.amount;
+    if (typeof amt === "number" && Number.isFinite(amt)) put("min_shipping_price_amount", amt);
+    else if (typeof amt === "string" && Number.isFinite(Number(amt))) put("min_shipping_price_amount", Number(amt));
+  }
+  put("state", o.state ?? o.activity_status);
+  const rawDesc = String(o.description ?? o.offer_description ?? "").trim();
+  if (rawDesc) {
+    out.description_excerpt = rawDesc.length > 220 ? `${rawDesc.slice(0, 217)}…` : rawDesc;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function mapMiraklOffer(o: Record<string, unknown>): MarketplaceProductListRow {
   const sku = String(o.shop_sku ?? o.shopSku ?? "").trim();
   const offerId = String(o.offer_id ?? o.id ?? "").trim();
@@ -52,6 +76,7 @@ function mapMiraklOffer(o: Record<string, unknown>): MarketplaceProductListRow {
     String(o.activity_status ?? "").toUpperCase() === "ACTIVE";
   const stateLabel = String(o.state ?? o.activity_status ?? o.state_code ?? (active ? "ACTIVE" : "INACTIVE"));
   const skuOut = sku || offerId;
+  const extras = miraklExtras(o);
   return {
     sku: skuOut || "—",
     secondaryId: offerId || skuOut || "—",
@@ -60,6 +85,7 @@ function mapMiraklOffer(o: Record<string, unknown>): MarketplaceProductListRow {
     isActive: active,
     priceEur: offerPriceEur(o),
     stockQty: miraklOfferQuantity(o),
+    ...(extras ? { extras } : {}),
   };
 }
 

@@ -6,6 +6,15 @@ export const maxDuration = 60;
 import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import {
+  readIntegrationCacheForDashboard,
+  writeIntegrationCache,
+} from "@/shared/lib/integrationDataCache";
+import {
+  marketplaceIntegrationFreshMs,
+  marketplaceIntegrationStaleMs,
+} from "@/shared/lib/integrationCacheTtl";
+import { parseYmdParam } from "@/shared/lib/orderDateParams";
+import {
   amazonSpApiGetWithQuotaRetry,
   amazonSpApiSleepMs,
 } from "@/shared/lib/amazonSpApiQuotaRetry";
@@ -67,12 +76,48 @@ function canonicalQuery(query: Record<string, string>) {
     .join("&");
 }
 
-function parseDateInput(value: string | null): Date | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = new Date(trimmed);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+export type AmazonOrderListRow = {
+  orderId: string;
+  purchaseDate: string;
+  lastUpdateDate: string;
+  amount: number;
+  currency: string;
+  fulfillment: string;
+  status: string;
+  statusRaw: string;
+  channelRaw: string;
+  units: number;
+  customerName: string;
+  salesChannel: string;
+};
+
+export type AmazonOrdersCachePayload = {
+  items: AmazonOrderListRow[];
+  meta: {
+    from: string;
+    to: string;
+    marketplaces: string[];
+  };
+};
+
+function amazonOrdersListCacheKey(fromYmd: string, toYmd: string): string {
+  return `amazon:orders:v1:${fromYmd}:${toYmd}`;
+}
+
+function ymdBoundsToAmazonCreatedIso(fromYmd: string, toYmd: string) {
+  const [fy, fm, fd] = fromYmd.split("-").map(Number);
+  const fromDate = new Date(fy, fm - 1, fd);
+  const [ty, tm, td] = toYmd.split("-").map(Number);
+  const toDate = new Date(ty, tm - 1, td);
+  return {
+    createdAfterIso: startOfDayIso(fromDate),
+    createdBeforeIso: endOfDayIso(clampToNow(toDate)),
+  };
+}
+
+function localYmd(d: Date): string {
+  const x = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return x.toISOString().slice(0, 10);
 }
 
 function startOfDayIso(date: Date) {
@@ -287,98 +332,71 @@ function mapStatus(status: string) {
   return normalized || "unknown";
 }
 
-export async function GET(request: Request) {
-  try {
-    const config = await getConfig();
-    const missing = {
-      AMAZON_SP_API_REFRESH_TOKEN: !config.refreshToken,
-      AMAZON_SP_API_CLIENT_ID: !config.lwaClientId,
-      AMAZON_SP_API_CLIENT_SECRET: !config.lwaClientSecret,
-      AMAZON_AWS_ACCESS_KEY_ID: !config.awsAccessKeyId,
-      AMAZON_AWS_SECRET_ACCESS_KEY: !config.awsSecretAccessKey,
-      AMAZON_SP_API_MARKETPLACE_ID: config.marketplaceIds.length === 0,
-    };
-    if (Object.values(missing).some(Boolean)) {
-      return amazonSpApiIncompleteJson(missing);
+async function fetchAmazonOrdersLivePayload(
+  config: Awaited<ReturnType<typeof getConfig>>,
+  fromYmd: string,
+  toYmd: string
+): Promise<AmazonOrdersCachePayload> {
+  const { createdAfterIso, createdBeforeIso } = ymdBoundsToAmazonCreatedIso(fromYmd, toYmd);
+  const lwaAccessToken = await getLwaAccessToken({
+    refreshToken: config.refreshToken,
+    lwaClientId: config.lwaClientId,
+    lwaClientSecret: config.lwaClientSecret,
+  });
+
+  const allOrders: AmazonOrder[] = [];
+  let nextToken = "";
+  let guard = 0;
+  while (guard < 30) {
+    if (nextToken && config.ordersPageDelayMs > 0) {
+      await amazonSpApiSleepMs(config.ordersPageDelayMs);
     }
+    const query: Record<string, string> = nextToken
+      ? { NextToken: nextToken }
+      : {
+          MarketplaceIds: config.marketplaceIds.join(","),
+          CreatedAfter: createdAfterIso,
+          MaxResultsPerPage: "100",
+        };
 
-    const { searchParams } = new URL(request.url);
-    const now = new Date();
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
-
-    const fromInput = parseDateInput(searchParams.get("from"));
-    const toInput = parseDateInput(searchParams.get("to"));
-
-    const rawFrom = fromInput ?? yesterday;
-    const rawTo = toInput ?? now;
-    const createdAfterIso = startOfDayIso(rawFrom);
-    const createdBeforeIso = endOfDayIso(clampToNow(rawTo));
-
-    const lwaAccessToken = await getLwaAccessToken({
-      refreshToken: config.refreshToken,
-      lwaClientId: config.lwaClientId,
-      lwaClientSecret: config.lwaClientSecret,
-    });
-
-    const allOrders: AmazonOrder[] = [];
-    let nextToken = "";
-    let guard = 0;
-    while (guard < 30) {
-      if (nextToken && config.ordersPageDelayMs > 0) {
-        await amazonSpApiSleepMs(config.ordersPageDelayMs);
-      }
-      const query: Record<string, string> = nextToken
-        ? { NextToken: nextToken }
-        : {
-            MarketplaceIds: config.marketplaceIds.join(","),
-            CreatedAfter: createdAfterIso,
-            MaxResultsPerPage: "100",
-          };
-
-      const ordersResult = await amazonSpApiGetWithQuotaRetry(
-        () =>
-          spApiGet({
-            endpoint: config.endpoint,
-            region: config.region,
-            path: "/orders/v0/orders",
-            query,
-            awsAccessKeyId: config.awsAccessKeyId,
-            awsSecretAccessKey: config.awsSecretAccessKey,
-            awsSessionToken: config.awsSessionToken,
-            lwaAccessToken,
-          }),
-        { max429Retries: config.max429Retries }
+    const ordersResult = await amazonSpApiGetWithQuotaRetry(
+      () =>
+        spApiGet({
+          endpoint: config.endpoint,
+          region: config.region,
+          path: "/orders/v0/orders",
+          query,
+          awsAccessKeyId: config.awsAccessKeyId,
+          awsSecretAccessKey: config.awsSecretAccessKey,
+          awsSessionToken: config.awsSessionToken,
+          lwaAccessToken,
+        }),
+      { max429Retries: config.max429Retries }
+    );
+    if (!ordersResult.res.ok || !ordersResult.json) {
+      throw new Error(
+        `Amazon orders request failed (HTTP ${ordersResult.res.status}). ${(ordersResult.text ?? "").slice(0, 200)}`
       );
-      if (!ordersResult.res.ok || !ordersResult.json) {
-        return NextResponse.json(
-          {
-            error: "Amazon orders could not be loaded.",
-            status: ordersResult.res.status,
-            preview: (ordersResult.text ?? "").slice(0, 320),
-          },
-          { status: 502 }
-        );
-      }
-
-      const payload = ordersResult.json as {
-        payload?: { Orders?: AmazonOrder[]; NextToken?: string };
-      };
-      const chunk = payload?.payload?.Orders ?? [];
-      allOrders.push(...chunk);
-      nextToken = payload?.payload?.NextToken ?? "";
-      if (!nextToken) break;
-      guard += 1;
     }
 
-    const createdBeforeTs = new Date(createdBeforeIso).getTime();
-    const items = allOrders
-      .filter((order) => {
-        const ts = order.PurchaseDate ? new Date(order.PurchaseDate).getTime() : NaN;
-        if (Number.isNaN(ts)) return false;
-        return ts <= createdBeforeTs;
-      })
-      .map((order) => {
+    const payload = ordersResult.json as {
+      payload?: { Orders?: AmazonOrder[]; NextToken?: string };
+    };
+    const chunk = payload?.payload?.Orders ?? [];
+    allOrders.push(...chunk);
+    nextToken = payload?.payload?.NextToken ?? "";
+    if (!nextToken) break;
+    guard += 1;
+  }
+
+  const createdBeforeTs = new Date(createdBeforeIso).getTime();
+  const items: AmazonOrderListRow[] = allOrders
+    .filter((order) => {
+      const ts = order.PurchaseDate ? new Date(order.PurchaseDate).getTime() : NaN;
+      if (Number.isNaN(ts)) return false;
+      return ts <= createdBeforeTs;
+    })
+    .map((order) => {
       const amount = numberValue(order.OrderTotal?.Amount);
       const currency = order.OrderTotal?.CurrencyCode || "EUR";
       const orderStatus = order.OrderStatus || "";
@@ -403,16 +421,110 @@ export async function GET(request: Request) {
         customerName,
         salesChannel: order.SalesChannel || "",
       };
+    });
+
+  return {
+    items,
+    meta: {
+      from: createdAfterIso,
+      to: createdBeforeIso,
+      marketplaces: config.marketplaceIds,
+    },
+  };
+}
+
+/** Cron / Refresh: SP-API laden und Cache füllen. */
+export async function primeAmazonOrdersForYmdRange(
+  fromYmd: string,
+  toYmd: string
+): Promise<{ ok: boolean; error?: string; count?: number }> {
+  try {
+    const config = await getConfig();
+    const missing =
+      !config.refreshToken ||
+      !config.lwaClientId ||
+      !config.lwaClientSecret ||
+      !config.awsAccessKeyId ||
+      !config.awsSecretAccessKey ||
+      config.marketplaceIds.length === 0;
+    if (missing) {
+      return { ok: false, error: "Amazon SP-API nicht vollständig konfiguriert." };
+    }
+    const payload = await fetchAmazonOrdersLivePayload(config, fromYmd, toYmd);
+    const freshMs = marketplaceIntegrationFreshMs();
+    const staleMs = marketplaceIntegrationStaleMs();
+    await writeIntegrationCache({
+      cacheKey: amazonOrdersListCacheKey(fromYmd, toYmd),
+      source: "amazon:orders",
+      value: payload,
+      freshMs,
+      staleMs,
+    });
+    return { ok: true, count: payload.items.length };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const config = await getConfig();
+    const missing = {
+      AMAZON_SP_API_REFRESH_TOKEN: !config.refreshToken,
+      AMAZON_SP_API_CLIENT_ID: !config.lwaClientId,
+      AMAZON_SP_API_CLIENT_SECRET: !config.lwaClientSecret,
+      AMAZON_AWS_ACCESS_KEY_ID: !config.awsAccessKeyId,
+      AMAZON_AWS_SECRET_ACCESS_KEY: !config.awsSecretAccessKey,
+      AMAZON_SP_API_MARKETPLACE_ID: config.marketplaceIds.length === 0,
+    };
+    if (Object.values(missing).some(Boolean)) {
+      return amazonSpApiIncompleteJson(missing);
+    }
+
+    const { searchParams } = new URL(request.url);
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+
+    const fromYmd = parseYmdParam(searchParams.get("from")) ?? localYmd(yesterday);
+    const toYmd = parseYmdParam(searchParams.get("to")) ?? localYmd(now);
+
+    if (fromYmd > toYmd) {
+      return NextResponse.json(
+        { error: "Ungültiger Zeitraum: „von“ muss vor oder gleich „bis“ liegen." },
+        { status: 400 }
+      );
+    }
+
+    const hit = await readIntegrationCacheForDashboard<AmazonOrdersCachePayload>(
+      amazonOrdersListCacheKey(fromYmd, toYmd)
+    );
+
+    if (hit.state === "miss") {
+      return NextResponse.json({
+        meta: {
+          from: fromYmd,
+          to: toYmd,
+          marketplaces: config.marketplaceIds,
+          cacheState: "miss" as const,
+          cacheMessage:
+            "Keine gecachten Daten für diesen Zeitraum. Synchronisation läuft z. B. alle 15 Minuten oder über „Aktualisieren“.",
+        },
+        totalCount: 0,
+        items: [] as AmazonOrderListRow[],
       });
+    }
 
     return NextResponse.json({
       meta: {
-        from: createdAfterIso,
-        to: createdBeforeIso,
-        marketplaces: config.marketplaceIds,
+        ...hit.value.meta,
+        fromYmd,
+        toYmd,
+        cacheState: hit.state,
+        cacheUpdatedAt: hit.updatedAt,
       },
-      totalCount: items.length,
-      items,
+      totalCount: hit.value.items.length,
+      items: hit.value.items,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unbekannter Fehler.";

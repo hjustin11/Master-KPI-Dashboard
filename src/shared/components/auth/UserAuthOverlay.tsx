@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -41,7 +40,6 @@ export function UserAuthOverlay({
   invitedRole,
   inviteToken,
 }: UserAuthOverlayProps) {
-  const router = useRouter();
   const { locale } = useTranslation();
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
@@ -119,7 +117,29 @@ export function UserAuthOverlay({
         email: values.email,
         password: values.password ?? "",
       };
-      const { error } = await supabase.auth.signInWithPassword(payload);
+      let error: { message: string } | null = null;
+      try {
+        const signInResult = await supabase.auth.signInWithPassword(payload);
+        error = signInResult.error;
+      } catch {
+        try {
+          const devRes = await fetch("/api/dev/local-auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: payload.email }),
+          });
+          if (devRes.ok) {
+            window.location.assign("/");
+            return;
+          }
+        } catch {
+          // ignore and show generic message below
+        }
+        setServerMessage(
+          "Login-Server aktuell nicht erreichbar. Lokal kannst du dich nur mit freigegebener Entwickler-E-Mail anmelden."
+        );
+        return;
+      }
       if (error) {
         // Wenn der User eingeladen wurde (Invite-only), leite ihn zur Registrierung/Invite-Abschluss.
         const errorText = error.message.toLowerCase();
@@ -148,8 +168,7 @@ export function UserAuthOverlay({
         setServerMessage(error.message);
         return;
       }
-      router.push("/");
-      router.refresh();
+      window.location.assign("/");
       return;
     }
 
@@ -196,8 +215,7 @@ export function UserAuthOverlay({
         }
 
         if ("invited" in data && data.invited) {
-          router.push(data.inviteUrl);
-          router.refresh();
+          window.location.assign(data.inviteUrl);
           return;
         }
 
@@ -247,16 +265,14 @@ export function UserAuthOverlay({
           refresh_token: payload.session.refresh_token,
         });
         if (!sessionError) {
-          router.push("/");
-          router.refresh();
+          window.location.assign("/");
           return;
         }
       }
 
       const existingSession = await supabase.auth.getSession();
       if (existingSession.data.session) {
-        router.push("/");
-        router.refresh();
+        window.location.assign("/");
         return;
       }
 
@@ -278,13 +294,11 @@ export function UserAuthOverlay({
           payload.message ??
             "Registrierung abgeschlossen. Bitte melde dich jetzt mit E-Mail und Passwort an."
         );
-        router.push(`/login?email=${encodeURIComponent(initialEmail)}`);
-        router.refresh();
+        window.location.assign(`/login?email=${encodeURIComponent(initialEmail)}`);
         return;
       }
 
-      router.push("/");
-      router.refresh();
+      window.location.assign("/");
     } catch {
       setServerMessage("Registrierung konnte nicht abgeschlossen werden. Bitte versuche es erneut.");
     }

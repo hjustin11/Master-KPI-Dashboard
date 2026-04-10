@@ -167,6 +167,11 @@ function ParityCellValue({
 }) {
   const { t, locale } = useTranslation();
   const intlTag = intlLocaleTag(locale);
+  const showNoValueHint = (state === "no_price" || stockState === "no_price") && !editing;
+  const showApiUnavailableHint =
+    !editing &&
+    ((state === "not_connected" && (price == null || !Number.isFinite(price))) ||
+      (stockState === "not_connected" && (stock == null || !Number.isFinite(stock))));
   const formatPrice = (value: number | null) => {
     if (value == null || !Number.isFinite(value)) return "—";
     return new Intl.NumberFormat(intlTag, {
@@ -230,10 +235,10 @@ function ParityCellValue({
         <span className="w-3 shrink-0 text-[9px] font-semibold text-muted-foreground">B</span>
         <div className="min-w-0 flex-1 text-muted-foreground">{stockLine}</div>
       </div>
-      {(state === "no_price" || stockState === "no_price") && !editing ? (
+      {showNoValueHint ? (
         <span className="text-[10px] text-muted-foreground">n/a</span>
       ) : null}
-      {(state === "not_connected" || stockState === "not_connected") && !editing ? (
+      {showApiUnavailableHint ? (
         <span className="text-[10px] text-amber-700">{t("priceParity.apiUnavailable")}</span>
       ) : null}
       {state === "mismatch" || stockState === "mismatch" ? (
@@ -496,18 +501,23 @@ export function MarketplacePriceParitySection() {
             failures?: Array<{ marketplaceSlug?: string; sku?: string; reason?: string }>;
           };
           const failed = Array.isArray(syncJson.failures) ? syncJson.failures : [];
-          if (!syncRes.ok || failed.length > 0) {
-            const first = failed[0];
-            const detail = first?.sku
-              ? `${first.marketplaceSlug ?? "marketplace"} · ${first.sku}: ${first.reason ?? t("priceParity.stockSyncError")}`
-              : syncJson.error ?? t("priceParity.stockSyncError");
-            throw new Error(detail);
+          if (!syncRes.ok && failed.length === 0) {
+            throw new Error(syncJson.error ?? t("priceParity.stockSyncError"));
           }
-          toast.success(
-            t("priceParity.stockSyncSaved", {
-              count: String(syncJson.updatedCount ?? marketplaceSyncUpdates.length),
-            })
-          );
+          if (failed.length > 0) {
+            const lines = failed.map((f) =>
+              `${f.marketplaceSlug ?? "marketplace"} · ${f.sku ?? "—"}: ${f.reason ?? t("priceParity.stockSyncError")}`
+            );
+            toast.warning(t("priceParity.stockSyncError"), {
+              description: lines.join("\n"),
+            });
+          } else {
+            toast.success(
+              t("priceParity.stockSyncSaved", {
+                count: String(syncJson.updatedCount ?? marketplaceSyncUpdates.length),
+              })
+            );
+          }
         }
       }
 

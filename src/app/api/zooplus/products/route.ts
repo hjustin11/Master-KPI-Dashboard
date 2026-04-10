@@ -4,7 +4,6 @@ import { fetchMiraklProductRowsFlex } from "@/shared/lib/miraklProductOffers";
 import type { MarketplaceProductsListResponse } from "@/shared/lib/marketplaceProductList";
 import {
   loadMarketplaceProductListCached,
-  parseProductListForceRefresh,
 } from "@/shared/lib/marketplaceProductsListCache";
 
 export async function GET(request: Request) {
@@ -20,12 +19,11 @@ export async function GET(request: Request) {
         { status: 500 }
       );
     }
-    const forceRefresh = parseProductListForceRefresh(request);
     const payload = await loadMarketplaceProductListCached({
       marketplaceSlug: "zooplus",
       variant: "full",
       fingerprintParts: [config.baseUrl, config.ordersPath],
-      forceRefresh,
+      forceRefresh: false,
       loader: async () => {
         const items = await fetchMiraklProductRowsFlex(config);
         return { items };

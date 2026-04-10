@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
-import { getIntegrationCachedOrLoad, writeIntegrationCache } from "@/shared/lib/integrationDataCache";
+import {
+  readIntegrationCache,
+  readIntegrationCacheForDashboard,
+  writeIntegrationCache,
+  type IntegrationDashboardCacheRead,
+} from "@/shared/lib/integrationDataCache";
 import {
   marketplaceIntegrationFreshMs,
   marketplaceIntegrationStaleMs,
@@ -166,6 +171,8 @@ function retryAfterToMs(header: string | null): number | null {
 }
 
 export type FetchFressnapfOrdersOptions = {
+  fromYmd?: string;
+  toYmd?: string;
   /** Nur Bestellungen ab (Mirakl `start_date` wenn aktiv). */
   createdFromMs?: number;
   /** Exklusives Ende (Mirakl `end_date` = letzter inkl. Zeitpunkt). */
@@ -174,6 +181,26 @@ export type FetchFressnapfOrdersOptions = {
   /** Live-Fetch und Cache neu schreiben (z. B. `refresh=1` in der Route). */
   forceRefresh?: boolean;
 };
+
+export function normalizeFressnapfOrdersOptions(
+  options: FetchFressnapfOrdersOptions
+): FetchFressnapfOrdersOptions {
+  if (options.fromYmd && options.toYmd) {
+    const { startMs, endMs } = ymdToUtcRangeExclusiveEnd(options.fromYmd, options.toYmd);
+    return { ...options, createdFromMs: startMs, createdToMsExclusive: endMs };
+  }
+  return { ...options };
+}
+
+function fressnapfOrdersCacheRangePart(options: FetchFressnapfOrdersOptions): unknown {
+  if (options.fromYmd && options.toYmd) {
+    return { fromYmd: options.fromYmd, toYmd: options.toYmd };
+  }
+  return {
+    createdFromMs: options.createdFromMs ?? null,
+    createdToMsExclusive: options.createdToMsExclusive ?? null,
+  };
+}
 
 function buildOrdersListQuery(
   config: FressnapfIntegrationConfig,
@@ -263,6 +290,20 @@ export type FressnapfNormalizedOrder = {
   status: string;
 };
 
+export async function readFressnapfOrdersNormalizedFromDashboard(
+  config: FressnapfIntegrationConfig,
+  fromYmd: string,
+  toYmd: string
+): Promise<IntegrationDashboardCacheRead<FressnapfNormalizedOrder[]>> {
+  const cacheKey = `fressnapf:orders:normalized:${hashCacheInput({
+    range: { fromYmd, toYmd },
+    maxPages: null,
+    ordersPath: config.ordersPath,
+    amountScale: config.amountScale,
+  })}`;
+  return readIntegrationCacheForDashboard<FressnapfNormalizedOrder[]>(cacheKey);
+}
+
 export function normalizeFressnapfOrder(
   raw: unknown,
   amountScale: number
@@ -330,11 +371,12 @@ async function fetchFressnapfOrdersPaginatedLive(
   config: FressnapfIntegrationConfig,
   options: FetchFressnapfOrdersOptions = {}
 ): Promise<FressnapfNormalizedOrder[]> {
-  const maxPages = options.maxPages ?? 40;
+  const opts = normalizeFressnapfOrdersOptions(options);
+  const maxPages = opts.maxPages ?? 40;
   const limit = 100;
   const dateFilter =
-    options.createdFromMs != null && options.createdToMsExclusive != null
-      ? { fromMs: options.createdFromMs, toMsExclusive: options.createdToMsExclusive }
+    opts.createdFromMs != null && opts.createdToMsExclusive != null
+      ? { fromMs: opts.createdFromMs, toMsExclusive: opts.createdToMsExclusive }
       : undefined;
 
   const out: FressnapfNormalizedOrder[] = [];
@@ -379,11 +421,12 @@ async function fetchFressnapfOrdersRawPaginatedLive(
   config: FressnapfIntegrationConfig,
   options: FetchFressnapfOrdersOptions = {}
 ): Promise<unknown[]> {
-  const maxPages = options.maxPages ?? 40;
+  const opts = normalizeFressnapfOrdersOptions(options);
+  const maxPages = opts.maxPages ?? 40;
   const limit = 100;
   const dateFilter =
-    options.createdFromMs != null && options.createdToMsExclusive != null
-      ? { fromMs: options.createdFromMs, toMsExclusive: options.createdToMsExclusive }
+    opts.createdFromMs != null && opts.createdToMsExclusive != null
+      ? { fromMs: opts.createdFromMs, toMsExclusive: opts.createdToMsExclusive }
       : undefined;
 
   const out: unknown[] = [];
@@ -427,10 +470,10 @@ export async function fetchFressnapfOrdersRawPaginated(
   config: FressnapfIntegrationConfig,
   options: FetchFressnapfOrdersOptions = {}
 ): Promise<unknown[]> {
-  const { forceRefresh, ...optsForKey } = options;
+  const { forceRefresh, ...rest } = options;
+  const optsForKey = normalizeFressnapfOrdersOptions(rest);
   const cacheKey = `fressnapf:orders:raw:${hashCacheInput({
-    createdFromMs: optsForKey.createdFromMs ?? null,
-    createdToMsExclusive: optsForKey.createdToMsExclusive ?? null,
+    range: fressnapfOrdersCacheRangePart(optsForKey),
     maxPages: optsForKey.maxPages ?? null,
     ordersPath: config.ordersPath,
     amountScale: config.amountScale,
@@ -448,23 +491,27 @@ export async function fetchFressnapfOrdersRawPaginated(
     });
     return live;
   }
-  return getIntegrationCachedOrLoad({
+  const hit = await readIntegrationCache<unknown[]>(cacheKey);
+  if (hit.state === "fresh" || hit.state === "stale") return hit.value;
+  const live = await fetchFressnapfOrdersRawPaginatedLive(config, options);
+  await writeIntegrationCache({
     cacheKey,
     source: "fressnapf:orders:raw",
+    value: live,
     freshMs,
     staleMs,
-    loader: () => fetchFressnapfOrdersRawPaginatedLive(config, options),
   });
+  return live;
 }
 
 export async function fetchFressnapfOrdersPaginated(
   config: FressnapfIntegrationConfig,
   options: FetchFressnapfOrdersOptions = {}
 ): Promise<FressnapfNormalizedOrder[]> {
-  const { forceRefresh, ...optsForKey } = options;
+  const { forceRefresh, ...rest } = options;
+  const optsForKey = normalizeFressnapfOrdersOptions(rest);
   const cacheKey = `fressnapf:orders:normalized:${hashCacheInput({
-    createdFromMs: optsForKey.createdFromMs ?? null,
-    createdToMsExclusive: optsForKey.createdToMsExclusive ?? null,
+    range: fressnapfOrdersCacheRangePart(optsForKey),
     maxPages: optsForKey.maxPages ?? null,
     ordersPath: config.ordersPath,
     amountScale: config.amountScale,
@@ -482,13 +529,17 @@ export async function fetchFressnapfOrdersPaginated(
     });
     return live;
   }
-  return getIntegrationCachedOrLoad({
+  const hit = await readIntegrationCache<FressnapfNormalizedOrder[]>(cacheKey);
+  if (hit.state === "fresh" || hit.state === "stale") return hit.value;
+  const live = await fetchFressnapfOrdersPaginatedLive(config, options);
+  await writeIntegrationCache({
     cacheKey,
     source: "fressnapf:orders:normalized",
+    value: live,
     freshMs,
     staleMs,
-    loader: () => fetchFressnapfOrdersPaginatedLive(config, options),
   });
+  return live;
 }
 
 export function filterOrdersByCreatedRange(

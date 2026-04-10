@@ -12,6 +12,7 @@ import {
   getKauflandIntegrationConfig,
   signKauflandRequest,
 } from "@/shared/lib/kauflandApiClient";
+import { syncAmazonMfnStockQuantities } from "@/shared/lib/amazonListingsMfnStock";
 
 type MarketplaceSlug =
   | "amazon"
@@ -21,7 +22,24 @@ type MarketplaceSlug =
   | "fressnapf"
   | "mediamarkt-saturn"
   | "zooplus"
-  | "shopify";
+  | "shopify"
+  | "tiktok";
+
+const KNOWN_MARKETPLACE_SLUGS = new Set<string>([
+  "amazon",
+  "otto",
+  "ebay",
+  "kaufland",
+  "fressnapf",
+  "mediamarkt-saturn",
+  "zooplus",
+  "shopify",
+  "tiktok",
+]);
+
+function isKnownMarketplaceSlug(s: string): s is MarketplaceSlug {
+  return KNOWN_MARKETPLACE_SLUGS.has(s);
+}
 
 type UpdateItem = {
   sku: string;
@@ -31,13 +49,13 @@ type UpdateItem = {
 };
 
 type Failure = {
-  marketplaceSlug: MarketplaceSlug;
+  marketplaceSlug: string;
   sku: string;
   reason: string;
 };
 
 type Success = {
-  marketplaceSlug: MarketplaceSlug;
+  marketplaceSlug: string;
   sku: string;
 };
 
@@ -50,25 +68,34 @@ function asFiniteNumber(v: unknown): number | null {
   return null;
 }
 
-function normalizeUpdates(raw: unknown): UpdateItem[] {
-  if (!Array.isArray(raw)) return [];
+function normalizeUpdates(raw: unknown): { items: UpdateItem[]; unknownSlugFailures: Failure[] } {
+  if (!Array.isArray(raw)) return { items: [], unknownSlugFailures: [] };
   const out: UpdateItem[] = [];
+  const unknownSlugFailures: Failure[] = [];
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const r = item as Record<string, unknown>;
     const sku = String(r.sku ?? "").trim();
-    const marketplaceSlug = String(r.marketplaceSlug ?? "").trim() as MarketplaceSlug;
+    const slugRaw = String(r.marketplaceSlug ?? "").trim();
     const stockQtyRaw = asFiniteNumber(r.stockQty);
     const priceEurRaw = asFiniteNumber(r.priceEur);
-    if (!sku || !marketplaceSlug || (stockQtyRaw == null && priceEurRaw == null)) continue;
+    if (!sku || !slugRaw || (stockQtyRaw == null && priceEurRaw == null)) continue;
+    if (!isKnownMarketplaceSlug(slugRaw)) {
+      unknownSlugFailures.push({
+        marketplaceSlug: slugRaw,
+        sku,
+        reason: `Unbekannter oder nicht unterstützter Marktplatz-Slug "${slugRaw}".`,
+      });
+      continue;
+    }
     out.push({
       sku,
-      marketplaceSlug,
+      marketplaceSlug: slugRaw,
       stockQty: stockQtyRaw == null ? undefined : Math.max(0, Math.trunc(stockQtyRaw)),
       priceEur: priceEurRaw == null ? undefined : Number(priceEurRaw.toFixed(2)),
     });
   }
-  return out;
+  return { items: out, unknownSlugFailures };
 }
 
 function parseShopifyNextPath(linkHeader: string | null, baseUrlRaw: string): string | null {
@@ -479,9 +506,15 @@ export async function PUT(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as { updates?: unknown } | null;
-  const updates = normalizeUpdates(body?.updates);
+  const { items: updates, unknownSlugFailures } = normalizeUpdates(body?.updates);
   if (updates.length === 0) {
-    return NextResponse.json({ ok: true, updatedCount: 0, successes: [], failures: [] });
+    const failuresOnly = unknownSlugFailures;
+    return NextResponse.json({
+      ok: failuresOnly.length === 0,
+      updatedCount: 0,
+      successes: [],
+      failures: failuresOnly,
+    });
   }
 
   const bySlug = new Map<MarketplaceSlug, UpdateItem[]>();
@@ -492,7 +525,8 @@ export async function PUT(request: Request) {
   }
 
   const successes: Success[] = [];
-  const failures: Failure[] = [];
+  const failures: Failure[] = [...unknownSlugFailures];
+  const handled = new Set<MarketplaceSlug>();
 
   const pushResult = (res: { success: Success[]; failures: Failure[] }) => {
     successes.push(...res.success);
@@ -501,9 +535,11 @@ export async function PUT(request: Request) {
 
   if (bySlug.has("shopify")) {
     pushResult(await syncViaInternalShopifyRoute(request, bySlug.get("shopify")!));
+    handled.add("shopify");
   }
   if (bySlug.has("ebay")) {
     pushResult(await syncEbay(bySlug.get("ebay")!));
+    handled.add("ebay");
   }
   if (bySlug.has("fressnapf")) {
     const cfg = await getFressnapfIntegrationConfig();
@@ -514,6 +550,7 @@ export async function PUT(request: Request) {
         apiKey: cfg.apiKey,
       })
     );
+    handled.add("fressnapf");
   }
   if (bySlug.has("mediamarkt-saturn")) {
     const cfg = await getFlexIntegrationConfig(FLEX_MARKETPLACE_MMS_SPEC);
@@ -524,6 +561,7 @@ export async function PUT(request: Request) {
         apiKey: cfg.apiKey,
       })
     );
+    handled.add("mediamarkt-saturn");
   }
   if (bySlug.has("zooplus")) {
     const cfg = await getFlexIntegrationConfig(FLEX_MARKETPLACE_ZOOPLUS_SPEC);
@@ -534,22 +572,66 @@ export async function PUT(request: Request) {
         apiKey: cfg.apiKey,
       })
     );
+    handled.add("zooplus");
   }
   if (bySlug.has("kaufland")) {
     pushResult(await syncKaufland(bySlug.get("kaufland")!));
+    handled.add("kaufland");
   }
 
-  for (const slug of ["amazon", "otto"] as const) {
-    const list = bySlug.get(slug);
-    if (!list?.length) continue;
+  if (bySlug.has("amazon")) {
+    const list = bySlug.get("amazon")!;
+    for (const u of list) {
+      if (u.priceEur != null && u.stockQty == null) {
+        failures.push({
+          marketplaceSlug: "amazon",
+          sku: u.sku,
+          reason:
+            "Amazon: über diese Route wird nur der MFN-Bestand (stockQty) geschrieben; Preis-Updates sind nicht implementiert.",
+        });
+      }
+    }
+    const stockOnly = list.filter((u) => u.stockQty != null);
+    if (stockOnly.length > 0) {
+      const r = await syncAmazonMfnStockQuantities(
+        stockOnly.map((u) => ({ sku: u.sku, stockQty: u.stockQty! }))
+      );
+      for (const s of r.success) successes.push({ marketplaceSlug: "amazon", sku: s.sku });
+      for (const f of r.failures) failures.push({ marketplaceSlug: "amazon", sku: f.sku, reason: f.reason });
+    }
+    handled.add("amazon");
+  }
+
+  if (bySlug.has("otto")) {
+    for (const u of bySlug.get("otto")!) {
+      failures.push({
+        marketplaceSlug: "otto",
+        sku: u.sku,
+        reason:
+          "Otto: Bestand- und Preis-Schreibzugriffe sind über die aktuelle Otto-Anbindung nicht verfügbar (kein mutierender Produkt-/Lager-Endpunkt angebunden).",
+      });
+    }
+    handled.add("otto");
+  }
+
+  if (bySlug.has("tiktok")) {
+    for (const u of bySlug.get("tiktok")!) {
+      failures.push({
+        marketplaceSlug: "tiktok",
+        sku: u.sku,
+        reason: "TikTok: Bestand-/Preis-Write ist in dieser App noch nicht angebunden.",
+      });
+    }
+    handled.add("tiktok");
+  }
+
+  for (const [slug, list] of bySlug.entries()) {
+    if (handled.has(slug)) continue;
     for (const u of list) {
       failures.push({
         marketplaceSlug: slug,
         sku: u.sku,
-        reason:
-          slug === "amazon"
-            ? "Amazon Preis/Bestand-Write in dieser App noch nicht implementiert (SP-API Listings/Feeds nötig)."
-            : "Otto Preis/Bestand-Write in dieser App noch nicht implementiert.",
+        reason: `Marktplatz "${slug}" wird für Bestand-/Preis-Schreibzugriffe nicht unterstützt.`,
       });
     }
   }

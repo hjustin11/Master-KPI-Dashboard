@@ -28,6 +28,8 @@ export type XentralArticle = {
   totalSold: number;
   /** Verkaufsmengen je Projektname — Basis für dynamische Tabellenspalten. */
   soldByProject: Record<string, number>;
+  /** EAN/GTIN aus Stammdaten, falls von der Xentral-API geliefert. */
+  ean: string | null;
 };
 
 type XentralArticleRaw = {
@@ -42,6 +44,7 @@ type XentralArticleRaw = {
   projectId: string | null;
   totalSold: number;
   soldByProjectRaw: Record<string, number>;
+  ean: string | null;
 };
 
 export type XentralArticlesApiPayload = {
@@ -418,6 +421,45 @@ async function fetchPurchasePriceByProductIdMap(args: {
   return out;
 }
 
+/** Erste plausibel EAN/GTIN (8–14 Ziffern) aus flachen Attributen. */
+function extractEanFromProductAttributes(a: Record<string, unknown>, raw: Record<string, unknown>): string | null {
+  const tryVal = (value: unknown): string | null => {
+    if (value == null) return null;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      const s = String(Math.abs(Math.trunc(value)));
+      return /^\d{8,14}$/.test(s) ? s : null;
+    }
+    if (typeof value === "string") {
+      const digits = value.replace(/\D/g, "");
+      if (digits.length >= 8 && digits.length <= 14) return digits;
+    }
+    return null;
+  };
+
+  const keys = [
+    "ean",
+    "EAN",
+    "gtin",
+    "GTIN",
+    "barcode",
+    "Barcode",
+    "barCode",
+    "manufacturerEan",
+    "manufacturer_ean",
+    "articleEan",
+    "article_ean",
+    "externeIdentifikation",
+    "externalIdentification",
+    "upc",
+    "UPC",
+  ];
+  for (const k of keys) {
+    const v = tryVal(a[k] ?? raw[k]);
+    if (v) return v;
+  }
+  return null;
+}
+
 function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
   const root = payload as Record<string, unknown> | null;
   const candidates: unknown[] =
@@ -549,6 +591,7 @@ function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
 
     const soldByProjectRaw = extractSoldByProjectRaw(a);
     const totalSold = extractTotalSold(a, soldByProjectRaw);
+    const ean = extractEanFromProductAttributes(a, raw);
 
     if (!sku && !name) continue;
     if (shouldExcludeArticle({ sku, name })) continue;
@@ -563,6 +606,7 @@ function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
       projectId,
       totalSold,
       soldByProjectRaw,
+      ean,
     });
   }
 
@@ -621,6 +665,7 @@ function enrichArticles(
       projectDisplay,
       totalSold,
       soldByProject,
+      ean: r.ean,
     };
   });
 }

@@ -13,6 +13,7 @@ export default function FressnapfProductsPage() {
       cacheKey="fressnapf_products_cache_v1"
       logoSrc={WIKIMEDIA_FRESSNAPF_LOGO_2023_SVG}
       brandAlt="Fressnapf"
+      marketplaceSlug="fressnapf"
       logoFrameClassName={DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_MD}
     />
   );

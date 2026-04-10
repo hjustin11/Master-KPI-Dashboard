@@ -22,6 +22,8 @@ import {
   sumStatusAmounts,
 } from "@/shared/lib/marketplace-profitability";
 
+export const maxDuration = 60;
+
 type KauflandSalesPoint = {
   date: string;
   orders: number;

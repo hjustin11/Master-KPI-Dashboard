@@ -83,6 +83,19 @@ function mapKauflandUnit(u: Record<string, unknown>): MarketplaceProductListRow 
     u.available_quantity ??
     u.availableQuantity;
   const stockNum = pickNumber(stockRaw);
+  const extras: Record<string, unknown> = {};
+  const put = (k: string, v: unknown) => {
+    if (v === undefined || v === null) return;
+    if (typeof v === "string" && !v.trim()) return;
+    extras[k] = v;
+  };
+  put("id_offer", u.id_offer ?? u.idOffer);
+  put("id_unit", u.id_unit ?? u.idUnit);
+  put("id_product", u.id_product ?? u.idProduct);
+  put("unit_status", u.unit_status ?? u.unitStatus);
+  put("listing_status", u.listing_status ?? u.listingStatus);
+  put("fixed_price_raw", u.fixed_price ?? u.price);
+
   return {
     sku,
     secondaryId,
@@ -91,6 +104,7 @@ function mapKauflandUnit(u: Record<string, unknown>): MarketplaceProductListRow 
     isActive,
     priceEur,
     stockQty: Number.isFinite(stockNum) ? stockNum : null,
+    ...(Object.keys(extras).length > 0 ? { extras } : {}),
   };
 }
 

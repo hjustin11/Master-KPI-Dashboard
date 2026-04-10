@@ -6,6 +6,8 @@ import {
   marketplaceIntegrationFreshMs,
   marketplaceIntegrationStaleMs,
 } from "@/shared/lib/integrationCacheTtl";
+import { extractListingsItemPriceAndStock } from "@/shared/lib/amazonListingsCommerceExtract";
+import { dedupeMarketplaceRowsBySkuAndSecondary } from "@/shared/lib/marketplaceProductClientMerge";
 
 type ListingSummary = {
   asin?: string;
@@ -603,6 +605,36 @@ function isActiveStatus(statuses: string[]) {
   return normalized.includes("BUYABLE") || normalized.includes("DISCOVERABLE");
 }
 
+function normalizedSkuKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function mergeMissingCommerceFieldsBySku(target: ProductRow[], source: ProductRow[]): ProductRow[] {
+  const sourceBySku = new Map<string, { price: number | null; stockQty: number | null }>();
+  for (const row of source) {
+    const key = normalizedSkuKey(row.sku);
+    if (!key) continue;
+    const prev = sourceBySku.get(key) ?? { price: null, stockQty: null };
+    sourceBySku.set(key, {
+      price: prev.price ?? row.price ?? null,
+      stockQty: prev.stockQty ?? row.stockQty ?? null,
+    });
+  }
+
+  return target.map((row) => {
+    const key = normalizedSkuKey(row.sku);
+    if (!key) return row;
+    const fallback = sourceBySku.get(key);
+    if (!fallback) return row;
+    if (row.price != null && row.stockQty != null) return row;
+    return {
+      ...row,
+      price: row.price ?? fallback.price,
+      stockQty: row.stockQty ?? fallback.stockQty,
+    };
+  });
+}
+
 export async function resolveEffectiveAmazonSellerId(
   config: AmazonSpApiProductsConfig,
   lwaAccessToken: string
@@ -652,21 +684,29 @@ export async function syncAmazonProductsToIntegrationCache(args: {
   const { config, lwaAccessToken, effectiveSellerId, marketplaceId, cacheKey } = args;
   const freshMs = marketplaceIntegrationFreshMs();
   const staleMs = marketplaceIntegrationStaleMs();
-  let pageToken = "";
+  /** SP-API searchListingsItems: Default pageSize 10, Maximum 20. Ohne korrektes Paging nur erste Seite → nach Dedupe wirkt die Liste „kaputt“. */
+  const listingsPageSize = "20";
+  let pageTokenForRequest = "";
   let guard = 0;
   const rows: ProductRow[] = [];
 
-  while (guard < 40) {
+  /** Nächste Seite: `pagination.nextToken` muss als Query `pageToken` gesendet werden (nicht `nextToken`). */
+  while (guard < 55) {
     const basePath = `/listings/2021-08-01/items/${encodeURIComponent(effectiveSellerId)}`;
-    const candidates: Array<Record<string, string>> = pageToken
-      ? [
-          { marketplaceIds: config.marketplaceIds[0], nextToken: pageToken },
-          { marketplaceIds: config.marketplaceIds[0], pageToken },
-        ]
+    const marketplace = config.marketplaceIds[0];
+    const withListingsDefaults = (extra: Record<string, string>): Record<string, string> => ({
+      marketplaceIds: marketplace,
+      includedData: "summaries,offers,fulfillmentAvailability",
+      pageSize: listingsPageSize,
+      ...extra,
+    });
+
+    const candidates: Array<Record<string, string>> = pageTokenForRequest
+      ? [withListingsDefaults({ pageToken: pageTokenForRequest })]
       : [
-          { marketplaceIds: config.marketplaceIds[0], includedData: "summaries" },
-          { marketplaceIds: config.marketplaceIds[0], issueLocale: "en_US" },
-          { marketplaceIds: config.marketplaceIds[0] },
+          withListingsDefaults({}),
+          withListingsDefaults({ issueLocale: "en_US" }),
+          { marketplaceIds: marketplace },
         ];
 
     let result:
@@ -719,12 +759,13 @@ export async function syncAmazonProductsToIntegrationCache(args: {
         return { outcome: "pending", source: fallback.source };
       }
       if (fallback.rows.length) {
+        const dedupedFallback = dedupeMarketplaceRowsBySkuAndSecondary(fallback.rows);
         await writeIntegrationCache({
           cacheKey,
           source: "amazon:products",
           value: {
             sellerId: effectiveSellerId,
-            rows: fallback.rows,
+            rows: dedupedFallback,
           } satisfies AmazonProductsCachedPayload,
           freshMs,
           staleMs,
@@ -732,7 +773,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
         return {
           outcome: "success",
           sellerId: effectiveSellerId,
-          rows: fallback.rows,
+          rows: dedupedFallback,
           source: fallback.source,
         };
       }
@@ -750,7 +791,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
             ? "Prüfe in Seller Central/Developer Console die Listings Items Berechtigung und autorisiere die App erneut. Orders können funktionieren, obwohl Listings blockiert sind."
             : undefined,
           status,
-          triedWithPageToken: Boolean(pageToken),
+          triedWithPageToken: Boolean(pageTokenForRequest),
           preview: (result?.text ?? "").slice(0, 320),
           attempts,
           sellerId: effectiveSellerId,
@@ -769,20 +810,48 @@ export async function syncAmazonProductsToIntegrationCache(args: {
       const summary = item.summaries?.[0];
       const statuses = Array.isArray(summary?.status) ? summary.status : [];
       const active = statuses.length > 0 ? isActiveStatus(statuses) : true;
+      const commerce = extractListingsItemPriceAndStock(item, { marketplaceId: marketplace });
       rows.push({
         sku: item.sku ?? "",
         secondaryId: summary?.asin ?? "",
         title: summary?.itemName ?? "",
         statusLabel: statuses.length ? statuses.join(", ") : "Unbekannt",
         isActive: active,
-        price: null,
-        stockQty: null,
+        price: commerce.price,
+        stockQty: commerce.stockQty,
       });
     }
 
-    pageToken = payload.pagination?.nextToken ?? "";
-    if (!pageToken) break;
+    const nextPage = payload.pagination?.nextToken ?? "";
+    if (!nextPage) break;
+    pageTokenForRequest = nextPage;
     guard += 1;
+  }
+
+  let dedupedRows = dedupeMarketplaceRowsBySkuAndSecondary(rows);
+  let source: string | undefined;
+  const hasMissingCommerce = dedupedRows.some((row) => row.price == null || row.stockQty == null);
+  if (hasMissingCommerce) {
+    const cached = await readIntegrationCache<AmazonProductsCachedPayload>(cacheKey);
+    if (cached.state !== "miss" && Array.isArray(cached.value?.rows)) {
+      dedupedRows = mergeMissingCommerceFieldsBySku(dedupedRows, cached.value.rows);
+    }
+  }
+  const stillMissingCommerce = dedupedRows.some((row) => row.price == null || row.stockQty == null);
+  if (stillMissingCommerce) {
+    const reportFallback = await fetchProductsFromReports({
+      endpoint: config.endpoint,
+      region: config.region,
+      awsAccessKeyId: config.awsAccessKeyId,
+      awsSecretAccessKey: config.awsSecretAccessKey,
+      awsSessionToken: config.awsSessionToken,
+      lwaAccessToken,
+      marketplaceId: config.marketplaceIds[0],
+    });
+    if (reportFallback.rows.length > 0) {
+      dedupedRows = mergeMissingCommerceFieldsBySku(dedupedRows, reportFallback.rows);
+      source = `listings+${reportFallback.source}`;
+    }
   }
 
   await writeIntegrationCache({
@@ -790,13 +859,18 @@ export async function syncAmazonProductsToIntegrationCache(args: {
     source: "amazon:products",
     value: {
       sellerId: effectiveSellerId,
-      rows,
+      rows: dedupedRows,
     } satisfies AmazonProductsCachedPayload,
     freshMs,
     staleMs,
   });
 
-  return { outcome: "success", sellerId: effectiveSellerId, rows };
+  return {
+    outcome: "success",
+    sellerId: effectiveSellerId,
+    rows: dedupedRows,
+    ...(source ? { source } : {}),
+  };
 }
 
 export async function primeAmazonProductsIntegrationCache(): Promise<{

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/shared/components/DataTable";
+import { MarketplaceCacheRefreshButton } from "@/shared/components/MarketplaceCacheRefreshButton";
 import {
   DASHBOARD_COMPACT_CARD,
   DASHBOARD_MARKETPLACE_LOGO_FRAME,
@@ -343,6 +344,16 @@ export default function MmsOrdersPage() {
           <div className="space-y-1">
             <p className="text-xs font-medium text-muted-foreground">{t("dates.to")}</p>
             <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          </div>
+          <div className="flex items-end pb-0.5">
+            <MarketplaceCacheRefreshButton
+              marketplace="mediamarkt-saturn"
+              resource="orders"
+              fromYmd={from}
+              toYmd={to}
+              disabled={!from || !to || from > to}
+              onAfterSuccess={() => loadOrders(fromRef.current, toRef.current, false, false)}
+            />
           </div>
         </div>
       </div>

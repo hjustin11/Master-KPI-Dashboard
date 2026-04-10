@@ -4,7 +4,6 @@ import type { MarketplaceProductsListResponse } from "@/shared/lib/marketplacePr
 import { getFressnapfIntegrationConfig } from "@/shared/lib/fressnapfApiClient";
 import {
   loadMarketplaceProductListCached,
-  parseProductListForceRefresh,
 } from "@/shared/lib/marketplaceProductsListCache";
 
 export async function GET(request: Request) {
@@ -25,12 +24,11 @@ export async function GET(request: Request) {
         { status: 500 }
       );
     }
-    const forceRefresh = parseProductListForceRefresh(request);
     const payload = await loadMarketplaceProductListCached({
       marketplaceSlug: "fressnapf",
       variant: "full",
       fingerprintParts: [config.baseUrl, config.ordersPath],
-      forceRefresh,
+      forceRefresh: false,
       loader: async () => {
         const items = await fetchMiraklProductRowsFressnapf(config);
         return { items };

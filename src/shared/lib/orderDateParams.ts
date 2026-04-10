@@ -23,3 +23,12 @@ export function toDateInputValue(date: Date): string {
     .toISOString()
     .slice(0, 10);
 }
+
+/** Letzte `dayCount` Kalendertage inkl. heute (lokale Datumslogik wie `<input type="date">`). */
+export function ymdRangeInclusiveDayCountLocal(dayCount: number): { fromYmd: string; toYmd: string } {
+  const n = Math.max(1, Math.floor(dayCount));
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - (n - 1));
+  return { fromYmd: toDateInputValue(start), toYmd: toDateInputValue(end) };
+}

@@ -8,7 +8,12 @@ function useDevIntegrationMemoryMirror(): boolean {
   );
 }
 
-type DevMemoryEntry = { payload: unknown; freshUntil: number; staleUntil: number };
+type DevMemoryEntry = {
+  payload: unknown;
+  freshUntil: number;
+  staleUntil: number;
+  updatedAtIso?: string;
+};
 const devIntegrationMemory = new Map<string, DevMemoryEntry>();
 
 type CacheRow = {
@@ -56,6 +61,7 @@ export async function readIntegrationCache<T>(cacheKey: string): Promise<CachedR
         payload: row.payload,
         freshUntil,
         staleUntil,
+        updatedAtIso: row.updated_at,
       });
     }
     if (Number.isFinite(freshUntil) && freshUntil > now) {
@@ -86,6 +92,7 @@ export async function writeIntegrationCache<T>(args: {
       payload: args.value,
       freshUntil: now + freshMs,
       staleUntil: now + staleMs,
+      updatedAtIso: new Date(now).toISOString(),
     });
   }
 
@@ -142,4 +149,55 @@ export async function getIntegrationCachedOrLoad<T>(args: {
     staleMs: args.staleMs,
   });
   return value;
+}
+
+/** Nur Supabase/Dev-Memory lesen — kein Live-Loader (Marktplatz-Dashboard). */
+export type IntegrationDashboardCacheRead<T> =
+  | { state: "miss" }
+  | { state: "fresh" | "stale"; value: T; updatedAt: string };
+
+export async function readIntegrationCacheForDashboard<T>(
+  cacheKey: string
+): Promise<IntegrationDashboardCacheRead<T>> {
+  const now = Date.now();
+  if (useDevIntegrationMemoryMirror()) {
+    const mem = devIntegrationMemory.get(cacheKey);
+    if (mem) {
+      const updatedAt = mem.updatedAtIso ?? new Date().toISOString();
+      if (Number.isFinite(mem.freshUntil) && mem.freshUntil > now) {
+        return { state: "fresh", value: mem.payload as T, updatedAt };
+      }
+      if (Number.isFinite(mem.staleUntil) && mem.staleUntil > now) {
+        return { state: "stale", value: mem.payload as T, updatedAt };
+      }
+      devIntegrationMemory.delete(cacheKey);
+    }
+    return { state: "miss" };
+  }
+
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("integration_data_cache")
+      .select("payload,fresh_until,stale_until,updated_at")
+      .eq("cache_key", cacheKey)
+      .maybeSingle();
+    if (error || !data) return { state: "miss" };
+    const row = data as CacheRow;
+    const freshUntil = Date.parse(row.fresh_until);
+    const staleUntil = Date.parse(row.stale_until);
+    const updatedAt =
+      typeof row.updated_at === "string" && row.updated_at.trim()
+        ? row.updated_at
+        : new Date().toISOString();
+    if (Number.isFinite(freshUntil) && freshUntil > now) {
+      return { state: "fresh", value: row.payload as T, updatedAt };
+    }
+    if (Number.isFinite(staleUntil) && staleUntil > now) {
+      return { state: "stale", value: row.payload as T, updatedAt };
+    }
+    return { state: "miss" };
+  } catch {
+    return { state: "miss" };
+  }
 }

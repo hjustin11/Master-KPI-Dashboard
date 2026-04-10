@@ -13,6 +13,7 @@ export default function MmsProductsPage() {
       cacheKey="mms_products_cache_v1"
       logoSrc={WIKIMEDIA_MEDIAMARKT_SATURN_LOGO_SVG}
       brandAlt="MediaMarkt & Saturn"
+      marketplaceSlug="mediamarkt-saturn"
       logoFrameClassName={DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_MD}
     />
   );

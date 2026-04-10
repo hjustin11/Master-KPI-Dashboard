@@ -3,6 +3,7 @@ import {
   ANALYTICS_MARKETPLACES,
   type AnalyticsMarketplaceSlug,
 } from "@/shared/lib/analytics-marketplaces";
+import { loadMarketplaceProductRowsForPriceParity } from "@/shared/lib/marketplaceProductCachesPrime";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 import {
   loadAmazonSpApiProductsConfig,
@@ -105,6 +106,16 @@ const ANALYTICS_PRODUCTS_API: Partial<Record<AnalyticsMarketplaceSlug, string>> 
   tiktok: "/api/tiktok/products",
   shopify: "/api/shopify/products",
 };
+
+/** Dieselbe Supabase-Cache-Schicht wie die Dashboard-Produkt-GETs (kein interner HTTP-Fetch). */
+const MP_PRODUCTS_INTEGRATION_CACHE_SLUGS = new Set<AnalyticsMarketplaceSlug>([
+  "shopify",
+  "ebay",
+  "kaufland",
+  "fressnapf",
+  "zooplus",
+  "mediamarkt-saturn",
+]);
 
 type SkuSnapshot = { price: number | null; stock: number | null };
 
@@ -448,6 +459,14 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
     ANALYTICS_MARKETPLACES.map(async (m) => {
       const path = ANALYTICS_PRODUCTS_API[m.slug];
       if (!path) return [m.slug, null] as const;
+      if (MP_PRODUCTS_INTEGRATION_CACHE_SLUGS.has(m.slug)) {
+        const rows = await loadMarketplaceProductRowsForPriceParity(m.slug, forceRefresh);
+        if (rows === null) return [m.slug, null] as const;
+        return [
+          m.slug,
+          skuSnapshotMapFromProductItems(rows as Array<Record<string, unknown>>, "priceEur"),
+        ] as const;
+      }
       const map = await fetchSkuPriceMapFromProductsApi(origin, path, authHeaders, forceRefresh);
       return [m.slug, map] as const;
     })

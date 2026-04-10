@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import {
-  fetchFressnapfOrdersPaginated,
   filterOrdersByCreatedRange,
   getFressnapfIntegrationConfig,
   parseYmdParam,
+  readFressnapfOrdersNormalizedFromDashboard,
   ymdToUtcRangeExclusiveEnd,
 } from "@/shared/lib/fressnapfApiClient";
+
+const ORDERS_CACHE_MISS_HINT =
+  "Keine gecachten Daten für diesen Zeitraum. Synchronisation läuft z. B. alle 15 Minuten oder über „Aktualisieren“.";
 import { resolveSellerPortalOrderUrl } from "@/shared/lib/marketplaceSellerOrderLink";
 
 export type FressnapfOrderListRow = {
@@ -61,13 +64,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Zeitraum muss 1–60 Tage umfassen." }, { status: 400 });
     }
 
-    const forceRefresh = searchParams.get("refresh") === "1";
-    const allOrders = await fetchFressnapfOrdersPaginated(config, {
-      createdFromMs: startMs,
-      createdToMsExclusive: endMs,
-      forceRefresh,
-    });
-    const filtered = filterOrdersByCreatedRange(allOrders, startMs, endMs);
+    const cached = await readFressnapfOrdersNormalizedFromDashboard(config, fromYmd, toYmd);
+    if (cached.state === "miss") {
+      return NextResponse.json({
+        meta: {
+          from: fromYmd,
+          to: toYmd,
+          baseUrl: config.baseUrl,
+          cacheState: "miss" as const,
+          cacheMessage: ORDERS_CACHE_MISS_HINT,
+        },
+        totalCount: 0,
+        items: [] as FressnapfOrderListRow[],
+      });
+    }
+
+    const filtered = filterOrdersByCreatedRange(cached.value, startMs, endMs);
 
     const items: FressnapfOrderListRow[] = filtered.map((o) => ({
       orderId: o.id,
@@ -84,6 +96,8 @@ export async function GET(request: Request) {
         from: fromYmd,
         to: toYmd,
         baseUrl: config.baseUrl,
+        cacheState: cached.state,
+        cacheUpdatedAt: cached.updatedAt,
       },
       totalCount: items.length,
       items,

@@ -4,6 +4,41 @@ import {
 } from "@/shared/lib/flexMarketplaceApiClient";
 import type { MarketplaceProductListRow } from "@/shared/lib/marketplaceProductList";
 
+function shopOrigin(baseUrlRaw: string): string {
+  try {
+    return new URL(baseUrlRaw.replace(/\/+$/, "")).origin;
+  } catch {
+    return "";
+  }
+}
+
+function stripHtmlToText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeImageUrls(raw: unknown, max = 12): string[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const out: string[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue;
+    const src = String((item as Record<string, unknown>).src ?? "").trim();
+    if (!src || out.includes(src)) continue;
+    out.push(src);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 function parseShopifyNextPath(linkHeader: string | null, baseUrlRaw: string): string | null {
   if (!linkHeader?.trim()) return null;
   let baseOrigin: string;
@@ -26,14 +61,25 @@ function parseShopifyNextPath(linkHeader: string | null, baseUrlRaw: string): st
   return null;
 }
 
-function mapShopifyProduct(p: Record<string, unknown>): MarketplaceProductListRow {
+function mapShopifyProduct(p: Record<string, unknown>, baseUrlRaw: string): MarketplaceProductListRow {
   const id = String(p.id ?? "");
   const title = String(p.title ?? "").trim();
   const status = String(p.status ?? "").trim().toLowerCase();
+  const handle = String(p.handle ?? "").trim();
   const variants = Array.isArray(p.variants) ? p.variants : [];
   const first = variants[0] as Record<string, unknown> | undefined;
   const sku = String(first?.sku ?? "").trim();
   const isActive = status === "active";
+  const baseOrigin = shopOrigin(baseUrlRaw);
+  const imageUrls = normalizeImageUrls(p.images);
+  const descriptionText = stripHtmlToText(p.body_html ?? p.bodyHtml);
+  const tagsRaw = String(p.tags ?? "").trim();
+  const tags = tagsRaw
+    ? tagsRaw
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean)
+    : [];
   const rawPrice = first?.price;
   const rawStock =
     first?.inventory_quantity ??
@@ -55,6 +101,29 @@ function mapShopifyProduct(p: Record<string, unknown>): MarketplaceProductListRo
   } else if (typeof rawStock === "string" && Number.isFinite(Number(rawStock))) {
     stockQty = Number(rawStock);
   }
+
+  const extras: Record<string, unknown> = {};
+  const put = (k: string, v: unknown) => {
+    if (v === undefined || v === null) return;
+    if (typeof v === "string" && !v.trim()) return;
+    extras[k] = v;
+  };
+  put("vendor", p.vendor);
+  put("product_type", p.product_type ?? p.productType);
+  put("handle", handle);
+  put("description_text", descriptionText);
+  put("tags", tags);
+  put("image_urls", imageUrls);
+  if (baseOrigin && handle) put("storefront_url", `${baseOrigin}/products/${encodeURIComponent(handle)}`);
+  if (baseOrigin && id) put("admin_product_url", `${baseOrigin}/admin/products/${encodeURIComponent(id)}`);
+  put("created_at", p.created_at ?? p.createdAt);
+  put("updated_at", p.updated_at ?? p.updatedAt);
+  if (first) {
+    put("variant_id", first.id);
+    put("variant_title", first.title);
+    put("variant_barcode", first.barcode);
+  }
+
   return {
     sku: sku || `—`,
     secondaryId: id || "—",
@@ -63,6 +132,7 @@ function mapShopifyProduct(p: Record<string, unknown>): MarketplaceProductListRo
     isActive,
     priceEur,
     stockQty,
+    ...(Object.keys(extras).length > 0 ? { extras } : {}),
   };
 }
 
@@ -119,7 +189,7 @@ export async function fetchShopifyProductRows(
       throw new Error(`Shopify products: ${apiErr}`);
     }
     for (const p of products) {
-      out.push(mapShopifyProduct(p as Record<string, unknown>));
+      out.push(mapShopifyProduct(p as Record<string, unknown>, config.baseUrl));
     }
     nextPath = parseShopifyNextPath(res.headers.get("Link"), config.baseUrl);
   }

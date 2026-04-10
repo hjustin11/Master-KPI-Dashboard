@@ -4,10 +4,7 @@ import {
   fetchEbayInventoryProductPage,
   fetchEbayInventoryProductRows,
 } from "@/shared/lib/ebayInventoryProducts";
-import {
-  loadMarketplaceProductListCached,
-  parseProductListForceRefresh,
-} from "@/shared/lib/marketplaceProductsListCache";
+import { loadMarketplaceProductListCached } from "@/shared/lib/marketplaceProductsListCache";
 import {
   parseProductListPagination,
   type MarketplaceProductsListResponse,
@@ -32,14 +29,13 @@ export async function GET(request: Request) {
     }
     const listPath =
       env("EBAY_PRODUCTS_PATH") || "/sell/inventory/v1/inventory_item";
-    const forceRefresh = parseProductListForceRefresh(request);
     const page = parseProductListPagination(request);
     if (page) {
       const payload = await loadMarketplaceProductListCached({
         marketplaceSlug: "ebay",
         variant: "page",
         fingerprintParts: [listPath, String(page.limit), String(page.offset)],
-        forceRefresh,
+        forceRefresh: false,
         loader: () =>
           fetchEbayInventoryProductPage(config, listPath, page.limit, page.offset),
       });
@@ -49,7 +45,7 @@ export async function GET(request: Request) {
       marketplaceSlug: "ebay",
       variant: "full",
       fingerprintParts: [listPath],
-      forceRefresh,
+      forceRefresh: false,
       loader: async () => {
         const items = await fetchEbayInventoryProductRows(config, listPath);
         return { items, totalCount: items.length };

@@ -50,6 +50,7 @@ import {
   buildMarketplaceReportHtml,
   type MarketplaceReportRow,
 } from "./MarketplaceReportPrintView";
+import { DevelopmentReportDialog } from "./DevelopmentReportDialog";
 import { MarketplaceBrandImg } from "@/shared/components/MarketplaceBrandImg";
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
@@ -72,6 +73,9 @@ type TrendDirection = "up" | "down" | "flat" | "unknown";
 
 const PLACEHOLDER = "—";
 const MAX_RANGE_DAYS = MAX_ANALYTICS_RANGE_DAYS;
+const MARKETPLACE_FETCH_TIMEOUT_MS = 60_000;
+const AMAZON_FETCH_TIMEOUT_MS = 120_000;
+const TOTAL_STRIP_MAX_BLOCK_MS = 15_000;
 
 function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -98,6 +102,35 @@ function formatRangeShort(fromYmd: string, toYmd: string, dfLocale: DateFnsLocal
   const b = parseYmdLocal(toYmd);
   if (fromYmd === toYmd) return format(a, "d. MMM yyyy", { locale: dfLocale });
   return `${format(a, "d. MMM", { locale: dfLocale })} – ${format(b, "d. MMM yyyy", { locale: dfLocale })}`;
+}
+
+async function fetchSalesCompareWithTimeout<T extends { error?: string }>(
+  url: string,
+  fallbackErrorMessage: string,
+  timeoutMs = MARKETPLACE_FETCH_TIMEOUT_MS
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+    let payload: T;
+    try {
+      payload = (await res.json()) as T;
+    } catch {
+      throw new Error(fallbackErrorMessage);
+    }
+    if (!res.ok) {
+      throw new Error(payload.error ?? fallbackErrorMessage);
+    }
+    return payload;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Zeitlimit erreicht. Bitte erneut versuchen.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 function inclusiveDayCount(fromYmd: string, toYmd: string): number {
@@ -561,6 +594,7 @@ function TotalMarketplacesKpiStrip({
   onPeriodChange,
   onOpenPromotionDeals,
   onOpenReport,
+  onOpenDevReport,
   backgroundSyncing,
   dfLocale,
   intlTag,
@@ -578,6 +612,7 @@ function TotalMarketplacesKpiStrip({
   onPeriodChange: (from: string, to: string) => void;
   onOpenPromotionDeals: () => void;
   onOpenReport: () => void;
+  onOpenDevReport: () => void;
   backgroundSyncing?: boolean;
   dfLocale: DateFnsLocale;
   intlTag: string;
@@ -612,6 +647,9 @@ function TotalMarketplacesKpiStrip({
           </Button>
           <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={onOpenReport}>
             Bericht erstellen (PDF)
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={onOpenDevReport}>
+            Entwicklungsbericht
           </Button>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1573,13 +1611,57 @@ function AnalyticsMarketplacesPage() {
   const [shopifyBackgroundSyncing, setShopifyBackgroundSyncing] = useState(false);
   const [shopifyError, setShopifyError] = useState<string | null>(null);
   const [analyticsHasMounted, setAnalyticsHasMounted] = useState(false);
+  const [ebaySalesEnabled, setEbaySalesEnabled] = useState(true);
+  const [tiktokSalesEnabled, setTiktokSalesEnabled] = useState(true);
+  const [forceUnblockTotalStrip, setForceUnblockTotalStrip] = useState(false);
   const periodRef = useRef(period);
+  const amazonRequestInFlightRef = useRef(false);
 
   useEffect(() => {
     periodRef.current = period;
   }, [period]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/marketplaces/sales-config-status", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        const payload = (await res.json()) as {
+          ebay?: { configured?: boolean };
+          tiktok?: { configured?: boolean };
+        };
+        return payload;
+      })
+      .then((payload) => {
+        if (cancelled || !payload) return;
+        if (payload.ebay?.configured === false) {
+          setEbaySalesEnabled(false);
+        }
+        if (payload.tiktok?.configured === false) {
+          setTiktokSalesEnabled(false);
+        }
+      })
+      .catch(() => {
+        // Bei Fehlern alle Kanaele aktiv lassen, um keine falschen Deaktivierungen auszulösen.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setForceUnblockTotalStrip(false);
+    const id = window.setTimeout(() => {
+      setForceUnblockTotalStrip(true);
+    }, TOTAL_STRIP_MAX_BLOCK_MS);
+    return () => window.clearTimeout(id);
+  }, [period.from, period.to]);
+
   const loadAmazonSales = useCallback(async (forceRefresh = false, silent = false) => {
+    if (amazonRequestInFlightRef.current) {
+      return;
+    }
+    amazonRequestInFlightRef.current = true;
     const { from, to } = periodRef.current;
     const cacheKey = `analytics_amazon_sales_compare_v1:${from}:${to}`;
     let hadCache = false;
@@ -1616,11 +1698,11 @@ function AnalyticsMarketplacesPage() {
         from,
         to,
       });
-      const res = await fetch(`/api/amazon/sales?${params}`, { cache: "no-store" });
-      const payload = (await res.json()) as AmazonSalesCompareResponse;
-      if (!res.ok) {
-        throw new Error(payload.error ?? t("analyticsMp.amazonMetricsError"));
-      }
+      const payload = await fetchSalesCompareWithTimeout<AmazonSalesCompareResponse>(
+        `/api/amazon/sales?${params}`,
+        t("analyticsMp.amazonMetricsError"),
+        AMAZON_FETCH_TIMEOUT_MS
+      );
       setAmazonData(payload);
       writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
     } catch (e) {
@@ -1636,6 +1718,7 @@ function AnalyticsMarketplacesPage() {
       if (showBackgroundIndicator) {
         setAmazonBackgroundSyncing(false);
       }
+      amazonRequestInFlightRef.current = false;
     }
   }, [t]);
 
@@ -1643,6 +1726,14 @@ function AnalyticsMarketplacesPage() {
     const { from, to } = periodRef.current;
     const cacheKey = `analytics_ebay_sales_compare_v1:${from}:${to}`;
     let hadCache = false;
+    if (!ebaySalesEnabled) {
+      setEbayLoading(false);
+      setEbayBackgroundSyncing(false);
+      if (!silent) {
+        setEbayError("eBay ist aktuell deaktiviert oder nicht konfiguriert.");
+      }
+      return;
+    }
 
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<{ savedAt: number } & EbaySalesCompareResponse>(cacheKey);
@@ -1676,11 +1767,10 @@ function AnalyticsMarketplacesPage() {
         from,
         to,
       });
-      const res = await fetch(`/api/ebay/sales?${params}`, { cache: "no-store" });
-      const payload = (await res.json()) as EbaySalesCompareResponse;
-      if (!res.ok) {
-        throw new Error(payload.error ?? t("analyticsMp.ebayMetricsError"));
-      }
+      const payload = await fetchSalesCompareWithTimeout<EbaySalesCompareResponse>(
+        `/api/ebay/sales?${params}`,
+        t("analyticsMp.ebayMetricsError")
+      );
       setEbayData(payload);
       writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
     } catch (e) {
@@ -1697,7 +1787,7 @@ function AnalyticsMarketplacesPage() {
         setEbayBackgroundSyncing(false);
       }
     }
-  }, [t]);
+  }, [ebaySalesEnabled, t]);
 
   const loadOttoSales = useCallback(async (forceRefresh = false, silent = false) => {
     const { from, to } = periodRef.current;
@@ -1736,11 +1826,10 @@ function AnalyticsMarketplacesPage() {
         from,
         to,
       });
-      const res = await fetch(`/api/otto/sales?${params}`, { cache: "no-store" });
-      const payload = (await res.json()) as OttoSalesCompareResponse;
-      if (!res.ok) {
-        throw new Error(payload.error ?? t("analyticsMp.ottoMetricsError"));
-      }
+      const payload = await fetchSalesCompareWithTimeout<OttoSalesCompareResponse>(
+        `/api/otto/sales?${params}`,
+        t("analyticsMp.ottoMetricsError")
+      );
       setOttoData(payload);
       writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
     } catch (e) {
@@ -1796,11 +1885,10 @@ function AnalyticsMarketplacesPage() {
         from,
         to,
       });
-      const res = await fetch(`/api/kaufland/sales?${params}`, { cache: "no-store" });
-      const payload = (await res.json()) as KauflandSalesCompareResponse;
-      if (!res.ok) {
-        throw new Error(payload.error ?? t("analyticsMp.kauflandMetricsError"));
-      }
+      const payload = await fetchSalesCompareWithTimeout<KauflandSalesCompareResponse>(
+        `/api/kaufland/sales?${params}`,
+        t("analyticsMp.kauflandMetricsError")
+      );
       setKauflandData(payload);
       writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
     } catch (e) {
@@ -1856,11 +1944,10 @@ function AnalyticsMarketplacesPage() {
         from,
         to,
       });
-      const res = await fetch(`/api/fressnapf/sales?${params}`, { cache: "no-store" });
-      const payload = (await res.json()) as FressnapfSalesCompareResponse;
-      if (!res.ok) {
-        throw new Error(payload.error ?? t("analyticsMp.fressnapfMetricsError"));
-      }
+      const payload = await fetchSalesCompareWithTimeout<FressnapfSalesCompareResponse>(
+        `/api/fressnapf/sales?${params}`,
+        t("analyticsMp.fressnapfMetricsError")
+      );
       setFressnapfData(payload);
       writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
     } catch (e) {
@@ -1916,11 +2003,10 @@ function AnalyticsMarketplacesPage() {
         from,
         to,
       });
-      const res = await fetch(`/api/mediamarkt-saturn/sales?${params}`, { cache: "no-store" });
-      const payload = (await res.json()) as MmsSalesCompareResponse;
-      if (!res.ok) {
-        throw new Error(payload.error ?? t("analyticsMp.mmsMetricsError"));
-      }
+      const payload = await fetchSalesCompareWithTimeout<MmsSalesCompareResponse>(
+        `/api/mediamarkt-saturn/sales?${params}`,
+        t("analyticsMp.mmsMetricsError")
+      );
       setMmsData(payload);
       writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
     } catch (e) {
@@ -1976,11 +2062,10 @@ function AnalyticsMarketplacesPage() {
         from,
         to,
       });
-      const res = await fetch(`/api/zooplus/sales?${params}`, { cache: "no-store" });
-      const payload = (await res.json()) as ZooplusSalesCompareResponse;
-      if (!res.ok) {
-        throw new Error(payload.error ?? t("analyticsMp.zooplusMetricsError"));
-      }
+      const payload = await fetchSalesCompareWithTimeout<ZooplusSalesCompareResponse>(
+        `/api/zooplus/sales?${params}`,
+        t("analyticsMp.zooplusMetricsError")
+      );
       setZooplusData(payload);
       writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
     } catch (e) {
@@ -2003,6 +2088,14 @@ function AnalyticsMarketplacesPage() {
     const { from, to } = periodRef.current;
     const cacheKey = `analytics_tiktok_sales_compare_v1:${from}:${to}`;
     let hadCache = false;
+    if (!tiktokSalesEnabled) {
+      setTiktokLoading(false);
+      setTiktokBackgroundSyncing(false);
+      if (!silent) {
+        setTiktokError("TikTok ist aktuell deaktiviert oder nicht konfiguriert.");
+      }
+      return;
+    }
 
     if (!forceRefresh && !silent) {
       const parsed = readLocalJsonCache<{ savedAt: number } & TiktokSalesCompareResponse>(cacheKey);
@@ -2036,11 +2129,10 @@ function AnalyticsMarketplacesPage() {
         from,
         to,
       });
-      const res = await fetch(`/api/tiktok/sales?${params}`, { cache: "no-store" });
-      const payload = (await res.json()) as TiktokSalesCompareResponse;
-      if (!res.ok) {
-        throw new Error(payload.error ?? t("analyticsMp.tiktokMetricsError"));
-      }
+      const payload = await fetchSalesCompareWithTimeout<TiktokSalesCompareResponse>(
+        `/api/tiktok/sales?${params}`,
+        t("analyticsMp.tiktokMetricsError")
+      );
       setTiktokData(payload);
       writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
     } catch (e) {
@@ -2057,7 +2149,7 @@ function AnalyticsMarketplacesPage() {
         setTiktokBackgroundSyncing(false);
       }
     }
-  }, [t]);
+  }, [t, tiktokSalesEnabled]);
 
   const loadShopifySales = useCallback(async (forceRefresh = false, silent = false) => {
     const { from, to } = periodRef.current;
@@ -2096,11 +2188,10 @@ function AnalyticsMarketplacesPage() {
         from,
         to,
       });
-      const res = await fetch(`/api/shopify/sales?${params}`, { cache: "no-store" });
-      const payload = (await res.json()) as ShopifySalesCompareResponse;
-      if (!res.ok) {
-        throw new Error(payload.error ?? t("analyticsMp.shopifyMetricsError"));
-      }
+      const payload = await fetchSalesCompareWithTimeout<ShopifySalesCompareResponse>(
+        `/api/shopify/sales?${params}`,
+        t("analyticsMp.shopifyMetricsError")
+      );
       setShopifyData(payload);
       writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
     } catch (e) {
@@ -2382,7 +2473,7 @@ function AnalyticsMarketplacesPage() {
   );
 
   /** Skeleton nur beim allerersten Laden ohne irgendeine Kanal-Summary; sonst alte Werte bis zum Replace. */
-  const totalStripBlocking = anySalesLoading && !hasAnyMarketplaceSummary;
+  const totalStripBlocking = anySalesLoading && !hasAnyMarketplaceSummary && !forceUnblockTotalStrip;
 
   const stripBackgroundSyncing =
     amazonBackgroundSyncing ||
@@ -2596,6 +2687,7 @@ function AnalyticsMarketplacesPage() {
   const [detailIndex, setDetailIndex] = useState(0);
   const [promotionsOpen, setPromotionsOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [devReportOpen, setDevReportOpen] = useState(false);
   const [reportMode, setReportMode] = useState<"all" | "single" | "selected">("all");
   const [reportMarketplaceId, setReportMarketplaceId] = useState<string>("amazon");
   const [reportSelectedIds, setReportSelectedIds] = useState<string[]>([
@@ -2707,6 +2799,7 @@ function AnalyticsMarketplacesPage() {
         onPeriodChange={(from, to) => setPeriod({ from, to })}
         onOpenPromotionDeals={() => setPromotionsOpen(true)}
         onOpenReport={() => setReportOpen(true)}
+        onOpenDevReport={() => setDevReportOpen(true)}
         backgroundSyncing={stripBackgroundSyncing}
         dfLocale={dfLocale}
         intlTag={intlTag}
@@ -3004,6 +3097,15 @@ function AnalyticsMarketplacesPage() {
         deals={promotionDeals}
         onPersist={persistPromotionDeals}
         remoteError={promotionRemoteError}
+      />
+      <DevelopmentReportDialog
+        open={devReportOpen}
+        onOpenChange={setDevReportOpen}
+        initialFrom={period.from}
+        initialTo={period.to}
+        intlTag={intlTag}
+        dfLocale={dfLocale}
+        t={t}
       />
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
         <DialogContent className="max-h-[92vh] max-w-[calc(100%-1rem)] w-full overflow-y-auto p-0 sm:max-w-5xl">

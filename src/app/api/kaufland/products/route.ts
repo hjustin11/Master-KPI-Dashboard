@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { getKauflandIntegrationConfig } from "@/shared/lib/kauflandApiClient";
 import { fetchKauflandProductPage, fetchKauflandProductRows } from "@/shared/lib/kauflandProductsList";
-import {
-  loadMarketplaceProductListCached,
-  parseProductListForceRefresh,
-} from "@/shared/lib/marketplaceProductsListCache";
+import { loadMarketplaceProductListCached } from "@/shared/lib/marketplaceProductsListCache";
 import {
   parseProductListPagination,
   type MarketplaceProductsListResponse,
@@ -28,14 +25,13 @@ export async function GET(request: Request) {
         { status: 500 }
       );
     }
-    const forceRefresh = parseProductListForceRefresh(request);
     const page = parseProductListPagination(request);
     if (page) {
       const payload = await loadMarketplaceProductListCached({
         marketplaceSlug: "kaufland",
         variant: "page",
         fingerprintParts: [config.baseUrl, String(page.limit), String(page.offset)],
-        forceRefresh,
+        forceRefresh: false,
         loader: () => fetchKauflandProductPage(config, page.limit, page.offset),
       });
       return NextResponse.json(payload satisfies MarketplaceProductsListResponse);
@@ -44,7 +40,7 @@ export async function GET(request: Request) {
       marketplaceSlug: "kaufland",
       variant: "full",
       fingerprintParts: [config.baseUrl],
-      forceRefresh,
+      forceRefresh: false,
       loader: async () => {
         const items = await fetchKauflandProductRows(config);
         return { items, totalCount: items.length };

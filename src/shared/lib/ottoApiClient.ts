@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { readIntegrationSecret } from "@/shared/lib/integrationSecrets";
-import { getIntegrationCachedOrLoad, writeIntegrationCache } from "@/shared/lib/integrationDataCache";
+import {
+  readIntegrationCache,
+  readIntegrationCacheForDashboard,
+  writeIntegrationCache,
+  type IntegrationDashboardCacheRead,
+} from "@/shared/lib/integrationDataCache";
 import {
   marketplaceIntegrationFreshMs,
   marketplaceIntegrationStaleMs,
@@ -191,19 +196,34 @@ async function fetchOttoOrdersRangeLive(args: {
   return out;
 }
 
+export async function readOttoOrdersFromDashboard(
+  baseUrl: string,
+  fromYmd: string,
+  toYmd: string
+): Promise<IntegrationDashboardCacheRead<OttoOrder[]>> {
+  const cacheKey = `otto:orders:${hashCacheInput({
+    baseUrl,
+    fromYmd,
+    toYmd,
+  })}`;
+  return readIntegrationCacheForDashboard<OttoOrder[]>(cacheKey);
+}
+
 export async function fetchOttoOrdersRange(args: {
   baseUrl: string;
   token: string;
   startMs: number;
   endMs: number;
+  fromYmd?: string;
+  toYmd?: string;
   /** Live-Fetch und Cache neu schreiben (z. B. `refresh=1` in der Route). */
   forceRefresh?: boolean;
 }): Promise<OttoOrder[]> {
-  const cacheKey = `otto:orders:${hashCacheInput({
-    baseUrl: args.baseUrl,
-    startMs: args.startMs,
-    endMs: args.endMs,
-  })}`;
+  const rangeKey =
+    args.fromYmd && args.toYmd
+      ? { baseUrl: args.baseUrl, fromYmd: args.fromYmd, toYmd: args.toYmd }
+      : { baseUrl: args.baseUrl, startMs: args.startMs, endMs: args.endMs };
+  const cacheKey = `otto:orders:${hashCacheInput(rangeKey)}`;
   const freshMs = marketplaceIntegrationFreshMs();
   const staleMs = marketplaceIntegrationStaleMs();
   if (args.forceRefresh) {
@@ -217,13 +237,17 @@ export async function fetchOttoOrdersRange(args: {
     });
     return live;
   }
-  return getIntegrationCachedOrLoad({
+  const hit = await readIntegrationCache<OttoOrder[]>(cacheKey);
+  if (hit.state === "fresh" || hit.state === "stale") return hit.value;
+  const live = await fetchOttoOrdersRangeLive(args);
+  await writeIntegrationCache({
     cacheKey,
     source: "otto:orders",
+    value: live,
     freshMs,
     staleMs,
-    loader: () => fetchOttoOrdersRangeLive(args),
   });
+  return live;
 }
 
 /** Scope `products` für GET /v4/products — wird ergänzt, falls nur `orders` gesetzt ist. */
@@ -408,19 +432,22 @@ export async function fetchOttoAvailabilityQuantitiesAll(args: {
     baseUrl: args.baseUrl,
     limit: args.limit ?? 200,
   })}`;
-  const cached = await getIntegrationCachedOrLoad<{
-    entries?: Array<[string, number]>;
-  }>({
+  const freshMs = marketplaceIntegrationFreshMs();
+  const staleMs = marketplaceIntegrationStaleMs();
+  const hit = await readIntegrationCache<{ entries?: Array<[string, number]> }>(cacheKey);
+  if (hit.state === "fresh" || hit.state === "stale") {
+    return new Map(hit.value.entries ?? []);
+  }
+  const live = await fetchOttoAvailabilityQuantitiesAllLive(args);
+  const value = { entries: Array.from(live.entries()) };
+  await writeIntegrationCache({
     cacheKey,
     source: "otto:availability",
-    freshMs: marketplaceIntegrationFreshMs(),
-    staleMs: marketplaceIntegrationStaleMs(),
-    loader: async () => {
-      const live = await fetchOttoAvailabilityQuantitiesAllLive(args);
-      return { entries: Array.from(live.entries()) };
-    },
+    value,
+    freshMs,
+    staleMs,
   });
-  return new Map(cached.entries ?? []);
+  return live;
 }
 
 type OttoProductsPayload = {
@@ -909,11 +936,17 @@ export async function fetchOttoProductsAll(args: {
     limit: args.limit ?? 100,
     productsPath: args.productsPath ?? "",
   })}`;
-  return getIntegrationCachedOrLoad({
+  const freshMs = marketplaceIntegrationFreshMs();
+  const staleMs = marketplaceIntegrationStaleMs();
+  const hit = await readIntegrationCache<OttoProductListRow[]>(cacheKey);
+  if (hit.state === "fresh" || hit.state === "stale") return hit.value;
+  const live = await fetchOttoProductsAllLive(args);
+  await writeIntegrationCache({
     cacheKey,
     source: "otto:products",
-    freshMs: marketplaceIntegrationFreshMs(),
-    staleMs: marketplaceIntegrationStaleMs(),
-    loader: () => fetchOttoProductsAllLive(args),
+    value: live,
+    freshMs,
+    staleMs,
   });
+  return live;
 }
