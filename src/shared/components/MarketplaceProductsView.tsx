@@ -58,9 +58,16 @@ import {
 import { getAmazonProductTypeOptions } from "@/shared/lib/amazonProductTypeSchema";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
-import { AmazonProductEditor } from "@/shared/components/AmazonProductEditor";
+import dynamic from "next/dynamic";
 import { useAmazonContentAudit } from "@/shared/hooks/useAmazonContentAudit";
 import { useAmazonDraftEditor } from "@/shared/hooks/useAmazonDraftEditor";
+
+// Dynamic import: AmazonProductEditor ist ~1.100 Zeilen und nur bei aktivem Editor relevant.
+// Reduziert Initial-Bundle der Produktseiten merklich.
+const AmazonProductEditor = dynamic(
+  () => import("@/shared/components/AmazonProductEditor").then((m) => m.AmazonProductEditor),
+  { ssr: false }
+);
 
 type ProductStatus = "active" | "inactive" | "all";
 

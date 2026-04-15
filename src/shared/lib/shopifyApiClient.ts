@@ -1,3 +1,6 @@
+// Thin re-export über flexMarketplaceApiClient. Keine marktplatz-spezifische Logik.
+// Namensgebung dient der Lesbarkeit am Call-Site (shopify-spezifische Funktionsnamen).
+// Bei neuen Marktplätzen bevorzugt direkt `getFlexIntegrationConfig()` verwenden.
 import {
   FLEX_DAY_MS,
   FLEX_MARKETPLACE_SHOPIFY_SPEC,

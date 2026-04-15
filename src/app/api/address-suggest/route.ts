@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  applyRateLimitHeaders,
+  checkRateLimit,
+  rateLimitKeyFromRequest,
+} from "@/shared/lib/rateLimit";
 
 /**
  * Adressabgleich online: Nominatim (OSM) + optional Photon (Komoot, ebenfalls OSM-basiert).
@@ -335,6 +340,18 @@ async function photonSearch(query: string): Promise<NominatimItem[]> {
 }
 
 export async function POST(req: Request) {
+  // Rate-Limit: 30 Suggest-Calls/min pro IP (Nominatim/Photon sind externe Dienste mit UA-Tracking).
+  const rl = checkRateLimit(rateLimitKeyFromRequest(req, "address-suggest"), 30, 60_000);
+  if (!rl.ok) {
+    const retryAfterSec = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+    const res = NextResponse.json(
+      { error: "Zu viele Anfragen. Bitte kurz warten." },
+      { status: 429 }
+    );
+    res.headers.set("Retry-After", String(retryAfterSec));
+    return applyRateLimitHeaders(res, rl);
+  }
+
   let body: { street?: string; postalcode?: string; city?: string; country?: string };
   try {
     body = (await req.json()) as typeof body;

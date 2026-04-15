@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
 import { isOwnerFromSources } from "@/shared/lib/roles";
+import {
+  applyRateLimitHeaders,
+  checkRateLimit,
+  rateLimitKeyFromRequest,
+} from "@/shared/lib/rateLimit";
 
 const MAX_FEEDBACK_FILES = 8;
 const MAX_FEEDBACK_FILE_BYTES = 5 * 1024 * 1024;
@@ -130,6 +135,18 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  // Rate-Limit: 5 Feedback-Submits/min pro IP. Authenticated, aber Attachment-Upload ist teuer.
+  const rl = checkRateLimit(rateLimitKeyFromRequest(request, "feedback-post"), 5, 60_000);
+  if (!rl.ok) {
+    const retryAfterSec = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+    const res = NextResponse.json(
+      { error: "Zu viele Anfragen. Bitte kurz warten." },
+      { status: 429 }
+    );
+    res.headers.set("Retry-After", String(retryAfterSec));
+    return applyRateLimitHeaders(res, rl);
+  }
+
   const supabase = await createServerSupabase();
   const {
     data: { user },

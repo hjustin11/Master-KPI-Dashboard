@@ -1,6 +1,8 @@
 import { Buffer } from "node:buffer";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
+import { parseRequestBody } from "@/shared/lib/apiValidation";
 import {
   FLEX_MARKETPLACE_EBAY_SPEC,
   FLEX_MARKETPLACE_MMS_SPEC,
@@ -473,6 +475,11 @@ async function syncKaufland(updates: UpdateItem[]): Promise<{ success: Success[]
   return { success, failures };
 }
 
+const stockSyncBodySchema = z.object({
+  // Max 500 Updates pro Request — schützt vor exzessiven Payloads
+  updates: z.array(z.unknown()).max(500),
+});
+
 export async function PUT(request: Request) {
   const supabase = await createServerSupabase();
   const {
@@ -483,8 +490,9 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
   }
 
-  const body = (await request.json().catch(() => null)) as { updates?: unknown } | null;
-  const { items: updates, unknownSlugFailures } = normalizeUpdates(body?.updates);
+  const parsed = await parseRequestBody(request, stockSyncBodySchema);
+  if (!parsed.ok) return parsed.response;
+  const { items: updates, unknownSlugFailures } = normalizeUpdates(parsed.data.updates);
   if (updates.length === 0) {
     const failuresOnly = unknownSlugFailures;
     return NextResponse.json({
