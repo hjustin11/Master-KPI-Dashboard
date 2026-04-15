@@ -1,27 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ADDRESS_ERROR_DEMO_ID_PREFIX } from "./addressErrorDemoOrders";
-import { XentralAddressErrorDialogRow } from "./components/XentralAddressErrorDialogRow";
+import { AddressErrorsDialog, SaveConfirmDialog } from "./components/AddressErrorsDialog";
 import { useXentralOrdersColumns } from "./components/XentralOrdersColumns";
 import { DataTable } from "@/shared/components/DataTable";
 import { DASHBOARD_PAGE_SHELL, DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboardUi";
@@ -744,223 +730,32 @@ export default function XentralOrdersPage() {
         </div>
       ) : (
         <>
-          <Dialog open={addressErrorsOpen} onOpenChange={handleAddressDialogOpenChange}>
-            <DialogContent
-              className="flex max-h-[96vh] w-[min(96rem,calc(100vw-1.25rem))] max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden border-border/50 bg-card p-0 shadow-xl sm:max-w-none"
-              showCloseButton
-            >
-              <DialogHeader className="shrink-0 space-y-1 border-b border-border/40 bg-gradient-to-b from-muted/45 to-muted/10 px-4 py-4 text-left sm:px-6">
-                <DialogTitle className="text-lg font-semibold tracking-tight">
-                  {addressDialogPhase === "edit"
-                    ? t("xentralOrders.dialogEditTitle")
-                    : t("xentralOrders.dialogReviewTitle")}
-                </DialogTitle>
-                <DialogDescription className="text-pretty text-sm text-muted-foreground">
-                  {addressDialogPhase === "edit"
-                    ? t("xentralOrders.dialogEditDesc")
-                    : t("xentralOrders.dialogReviewDesc")}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto px-4 py-4 sm:px-6">
-                {addressDraftRowsSorted.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border/60 bg-muted/20 py-12 text-center text-sm text-muted-foreground">
-                    {t("xentralOrders.dialogEmpty")}
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {addressDialogPhase === "review" && addressXentralError ? (
-                      <div
-                        className="rounded-lg border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm break-words text-destructive whitespace-pre-wrap"
-                        role="alert"
-                      >
-                        {addressXentralError}
-                      </div>
-                    ) : null}
-                    <div className="overflow-hidden rounded-xl border border-border/40 bg-background/80 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.04]">
-                    <Table className="w-full min-w-[min(100%,68rem)] max-w-full border-separate border-spacing-0 text-xs">
-                      <TableHeader>
-                        <TableRow className="border-0 hover:bg-transparent">
-                          <TableHead className="sticky left-0 z-20 w-12 min-w-12 max-w-12 border-b border-border/50 bg-muted/40 px-1 py-3 text-center shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
-                            <span className="sr-only">{t("xentralOrders.srRemoveFromList")}</span>
-                            <X
-                              className="mx-auto size-3.5 text-muted-foreground opacity-60"
-                              strokeWidth={2.25}
-                              aria-hidden
-                            />
-                          </TableHead>
-                          <TableHead className="sticky left-12 z-20 w-[9.5rem] min-w-[9.5rem] max-w-[9.5rem] border-b border-border/50 bg-muted/40 px-3 py-3 text-center align-middle shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
-                            <span className="inline-block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              {t("xentralOrders.documentNr")}
-                            </span>
-                          </TableHead>
-                          <TableHead className="sticky left-[12.5rem] z-20 w-[9.5rem] min-w-[9.5rem] max-w-[9.5rem] border-b border-border/50 bg-muted/40 px-3 py-3 text-center align-middle shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
-                            <span className="inline-block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              {t("xentralOrders.orderNrShort")}
-                            </span>
-                          </TableHead>
-                          <TableHead className="sticky left-[22rem] z-20 w-[9rem] min-w-[9rem] max-w-[9rem] border-b border-border/50 bg-muted/40 px-3 py-3 text-center align-middle shadow-[3px_0_14px_-4px_rgba(0,0,0,0.06)]">
-                            <span className="inline-block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              {t("xentralOrders.marketplace")}
-                            </span>
-                          </TableHead>
-                          <TableHead className="min-w-[8rem] max-w-[11rem] border-b border-border/50 bg-muted/40 px-2 py-3 text-left">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              {t("xentralOrders.fieldName")}
-                            </span>
-                          </TableHead>
-                          <TableHead className="min-w-[13rem] border-b border-border/50 bg-muted/40 px-3 py-3 text-left">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              {t("xentralOrders.fieldStreet")}
-                            </span>
-                          </TableHead>
-                          <TableHead className="w-[6.75rem] min-w-[6.75rem] border-b border-border/50 bg-muted/40 px-2 py-3 text-center">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              {t("xentralOrders.fieldZip")}
-                            </span>
-                          </TableHead>
-                          <TableHead className="min-w-[10rem] border-b border-border/50 bg-muted/40 px-3 py-3 text-left">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              {t("xentralOrders.fieldCity")}
-                            </span>
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {addressDraftRowsSorted.map((row, rowIndex) => (
-                          <XentralAddressErrorDialogRow
-                            key={row.id}
-                            row={row}
-                            rowIndex={rowIndex}
-                            dialogOpen={addressErrorsOpen}
-                            mode={addressDialogPhase}
-                            patchDraftField={patchAddressDraftField}
-                            patchDraftGeocode={patchAddressDraftGeocode}
-                            onRemoveFromDraft={removeAddressDraftRow}
-                            xentralOrderWebBase={xentralOrderWebBase}
-                            xentralSalesOrderWebPath={xentralSalesOrderWebPath}
-                          />
-                        ))}
-                      </TableBody>
-                    </Table>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="shrink-0 border-t border-border/40 bg-muted/25 px-4 py-3 sm:px-6">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-[11px] text-muted-foreground">
-                    {addressDialogPhase === "edit" ? (
-                      addressDraftRowsSorted.length === 0 ? (
-                        <span>{t("xentralOrders.footerEmptyList")}</span>
-                      ) : isAddressDraftDirty ? (
-                        t("xentralOrders.footerDirty")
-                      ) : (
-                        t("xentralOrders.footerCleanEdit")
-                      )
-                    ) : (
-                      <span className="font-medium text-foreground">
-                        {addressDraftRowsSorted.length === 1
-                          ? t("xentralOrders.footerReadyOne", {
-                              count: addressDraftRowsSorted.length,
-                            })
-                          : t("xentralOrders.footerReadyMany", {
-                              count: addressDraftRowsSorted.length,
-                            })}
-                      </span>
-                    )}
-                  </p>
-                  <div className="flex flex-wrap justify-end gap-2">
-                    {addressDialogPhase === "edit" ? (
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAddressDialogOpenChange(false)}
-                        >
-                          {t("xentralOrders.cancel")}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={addressDraftRowsSorted.length === 0}
-                          onClick={() => requestProceedToReview()}
-                          title={t("xentralOrders.saveAndReviewTitle")}
-                        >
-                          {t("xentralOrders.saveAndReview")}
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAddressDialogOpenChange(false)}
-                          disabled={addressXentralSubmitting}
-                        >
-                          {t("xentralOrders.cancel")}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setAddressDialogPhase("edit")}
-                          disabled={addressXentralSubmitting}
-                        >
-                          {t("xentralOrders.edit")}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={addressDraftRowsSorted.length === 0 || addressXentralSubmitting}
-                          onClick={() => void submitAddressDraftToXentral()}
-                        >
-                          {addressXentralSubmitting ? (
-                            <span className="inline-flex items-center gap-1.5">
-                              <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
-                              {t("xentralOrders.sending")}
-                            </span>
-                          ) : (
-                            t("xentralOrders.submitToXentral")
-                          )}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <AddressErrorsDialog
+            open={addressErrorsOpen}
+            onOpenChange={handleAddressDialogOpenChange}
+            phase={addressDialogPhase}
+            setPhase={setAddressDialogPhase}
+            rows={addressDraftRowsSorted}
+            isDirty={isAddressDraftDirty}
+            xentralError={addressXentralError}
+            xentralSubmitting={addressXentralSubmitting}
+            xentralOrderWebBase={xentralOrderWebBase}
+            xentralSalesOrderWebPath={xentralSalesOrderWebPath}
+            patchDraftField={patchAddressDraftField}
+            patchDraftGeocode={patchAddressDraftGeocode}
+            removeAddressDraftRow={removeAddressDraftRow}
+            requestProceedToReview={requestProceedToReview}
+            submitAddressDraftToXentral={submitAddressDraftToXentral}
+          />
 
-          <Dialog open={addressSaveConfirmOpen} onOpenChange={setAddressSaveConfirmOpen}>
-            <DialogContent
-              showCloseButton
-              className="z-[100] max-w-md shadow-lg"
-            >
-              <DialogHeader>
-                <DialogTitle>{t("xentralOrders.confirmOverviewTitle")}</DialogTitle>
-                <DialogDescription className="text-pretty">
-                  {t("xentralOrders.confirmOverviewDesc")}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <Button type="button" variant="outline" size="sm" onClick={() => setAddressSaveConfirmOpen(false)}>
-                  {t("xentralOrders.back")}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    setAddressSaveConfirmOpen(false);
-                    setAddressDialogPhase("review");
-                  }}
-                >
-                  {t("xentralOrders.toOverview")}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <SaveConfirmDialog
+            open={addressSaveConfirmOpen}
+            onOpenChange={setAddressSaveConfirmOpen}
+            onConfirm={() => {
+              setAddressSaveConfirmOpen(false);
+              setAddressDialogPhase("review");
+            }}
+          />
 
         <DataTable
           columns={columns}
