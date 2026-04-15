@@ -13,11 +13,6 @@ import {
 import { CollapsedMarketplacePopover } from "./sidebar/CollapsedMarketplacePopover";
 import { MarketplaceExpandedGroup } from "./sidebar/MarketplaceExpandedGroup";
 import { SingleNavItem } from "./sidebar/SingleNavItem";
-import { navItems } from "./sidebar/navItems";
-import {
-  navItemHasAnyAccessibleRoute,
-  partitionNavItems,
-} from "./sidebar/nav-utils";
 import {
   Sidebar,
   SidebarContent,
@@ -49,7 +44,6 @@ import { useUser } from "@/shared/hooks/useUser";
 import { usePermissions } from "@/shared/hooks/usePermissions";
 import {
   ROLE_OPTIONS,
-  type PermissionKey,
   type SidebarItemKey,
 } from "@/shared/lib/access-control";
 import { useAppStore } from "@/shared/stores/useAppStore";
@@ -57,6 +51,7 @@ import { useTranslation } from "@/i18n/I18nProvider";
 import { resolveRoleLabel } from "@/i18n/resolve-role-label";
 import { useTutorialNavGate } from "@/shared/components/tutorial/TutorialNavContext";
 import type { NavAccessEditConfig } from "@/shared/lib/nav-access-edit";
+import useSidebarNav from "@/shared/hooks/useSidebarNav";
 import useUpdatesPolling from "@/shared/hooks/useUpdatesPolling";
 
 export function AppSidebar() {
@@ -109,34 +104,18 @@ export function AppSidebar() {
   // erst nach dem Client-Mount den echten Sidebar-State verwenden.
   const collapsed = isHydrated ? state === "collapsed" : false;
   const canRoleSwitch = !user.isLoading && user.roleKey === "owner" && roleTestingEnabled;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const effectiveHasPermission: (permission: PermissionKey) => boolean = user.isLoading
-    ? () => true
-    : hasPermission;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const effectiveCanAccessSidebarItem: (itemKey: SidebarItemKey) => boolean = user.isLoading
-    ? () => true
-    : canAccessSidebarItem;
-
-  const filteredNavItems = useMemo(
-    () =>
-      navItems.filter(
-        (item) =>
-          effectiveCanAccessSidebarItem(item.key) &&
-          navItemHasAnyAccessibleRoute(item, effectiveHasPermission, canAccessPageByPath) &&
-          (item.requiredPermissions?.every((permission) => effectiveHasPermission(permission)) ?? true)
-      ),
-    [effectiveCanAccessSidebarItem, effectiveHasPermission, canAccessPageByPath]
-  );
-  const tutorialGatedNavItems = useMemo(() => {
-    if (visibleSidebarKeys === null) return filteredNavItems;
-    const allow = new Set(visibleSidebarKeys);
-    return filteredNavItems.filter((item) => allow.has(item.key));
-  }, [filteredNavItems, visibleSidebarKeys]);
-  const { start, marketplaces, rest } = useMemo(
-    () => partitionNavItems(tutorialGatedNavItems),
-    [tutorialGatedNavItems]
-  );
+  const {
+    start,
+    marketplaces,
+    rest,
+    effectiveHasPermission,
+  } = useSidebarNav({
+    hasPermission,
+    canAccessSidebarItem,
+    canAccessPageByPath,
+    visibleSidebarKeys,
+    userIsLoading: user.isLoading,
+  });
   const { updatesBellState } = useUpdatesPolling();
   const cycleRole = (direction: "prev" | "next") => {
     if (!canRoleSwitch) return;
@@ -414,34 +393,18 @@ export function MobileSidebarTrigger() {
     activeRole: effectiveRole,
     isAdvertisingDeveloper,
   } = usePermissions();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const effectiveHasPermission: (permission: PermissionKey) => boolean = user.isLoading
-    ? () => true
-    : hasPermission;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const effectiveCanAccessSidebarItem: (itemKey: SidebarItemKey) => boolean = user.isLoading
-    ? () => true
-    : canAccessSidebarItem;
-
-  const filteredNavItems = useMemo(
-    () =>
-      navItems.filter(
-        (item) =>
-          effectiveCanAccessSidebarItem(item.key) &&
-          navItemHasAnyAccessibleRoute(item, effectiveHasPermission, canAccessPageByPath) &&
-          (item.requiredPermissions?.every((permission) => effectiveHasPermission(permission)) ?? true)
-      ),
-    [effectiveCanAccessSidebarItem, effectiveHasPermission, canAccessPageByPath]
-  );
-  const tutorialGatedNavItems = useMemo(() => {
-    if (visibleSidebarKeys === null) return filteredNavItems;
-    const allow = new Set(visibleSidebarKeys);
-    return filteredNavItems.filter((item) => allow.has(item.key));
-  }, [filteredNavItems, visibleSidebarKeys]);
-  const { start, marketplaces, rest } = useMemo(
-    () => partitionNavItems(tutorialGatedNavItems),
-    [tutorialGatedNavItems]
-  );
+  const {
+    start,
+    marketplaces,
+    rest,
+    effectiveHasPermission,
+  } = useSidebarNav({
+    hasPermission,
+    canAccessSidebarItem,
+    canAccessPageByPath,
+    visibleSidebarKeys,
+    userIsLoading: user.isLoading,
+  });
   const { updatesBellState } = useUpdatesPolling();
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
   const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
