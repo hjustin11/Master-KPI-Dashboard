@@ -3,17 +3,11 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { ANALYTICS_MARKETPLACES, getMarketplaceBySlug } from "@/shared/lib/analytics-marketplaces";
+import { ANALYTICS_MARKETPLACES } from "@/shared/lib/analytics-marketplaces";
 import { MarketplacePriceParitySection } from "./MarketplacePriceParitySection";
-import { enumerateYmd } from "./MarketplaceRevenueChart";
-import {
-  MARKETPLACE_REVENUE_LINE_COLORS,
-  type MarketplaceRevenueLineSeries,
-} from "./MarketplaceTotalRevenueLinesChart";
 import { bandsForTotalChart } from "./marketplaceActionBands";
 import { PromotionDealsDialog } from "./PromotionDealsDialog";
 import { usePromotionDeals } from "./usePromotionDeals";
-import type { MarketplaceReportRow } from "./MarketplaceReportPrintView";
 import { DevelopmentReportDialog } from "./DevelopmentReportDialog";
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
@@ -38,13 +32,9 @@ import {
 } from "@/shared/lib/marketplace-sales-types";
 import {
   AMAZON_FETCH_TIMEOUT_MS,
-  buildMarketplaceTotals,
-  buildReportRow,
   defaultPeriod,
   fetchSalesCompareWithTimeout,
   formatTrendPct,
-  kpiLabelsForPeriod,
-  pickRevenueChartCurrency,
 } from "@/shared/lib/marketplace-analytics-utils";
 import { MarketplaceTile } from "./components/MarketplaceTile";
 import { PlaceholderTile } from "./components/MarketplacePlaceholderTile";
@@ -55,6 +45,8 @@ import { MarketplaceDetailDialog } from "./components/MarketplaceDetailDialog";
 import useMarketplacePeriod from "@/shared/hooks/useMarketplacePeriod";
 import useMarketplaceDetailNavigation from "@/shared/hooks/useMarketplaceDetailNavigation";
 import usePdfReportDialog from "@/shared/hooks/usePdfReportDialog";
+import useMarketplaceTotals from "@/shared/hooks/useMarketplaceTotals";
+import useMarketplaceReportRows from "@/shared/hooks/useMarketplaceReportRows";
 
 type AmazonSalesCompareResponse = SalesCompareResponse;
 type OttoSalesCompareResponse = SalesCompareResponse;
@@ -979,317 +971,72 @@ function AnalyticsMarketplacesPage() {
       )
     : { text: PLACEHOLDER, direction: "unknown" as TrendDirection };
 
-  const totals = useMemo(
-    () =>
-      buildMarketplaceTotals([
-        {
-          summary: amazonData?.summary,
-          previousSummary: amazonData?.previousSummary,
-          revenueDeltaPct: amazonData?.revenueDeltaPct,
-        },
-        {
-          summary: ebayData?.summary,
-          previousSummary: ebayData?.previousSummary,
-          revenueDeltaPct: ebayData?.revenueDeltaPct,
-        },
-        {
-          summary: ottoData?.summary,
-          previousSummary: ottoData?.previousSummary,
-          revenueDeltaPct: ottoData?.revenueDeltaPct,
-        },
-        {
-          summary: kauflandData?.summary,
-          previousSummary: kauflandData?.previousSummary,
-          revenueDeltaPct: kauflandData?.revenueDeltaPct,
-        },
-        {
-          summary: fressnapfData?.summary,
-          previousSummary: fressnapfData?.previousSummary,
-          revenueDeltaPct: fressnapfData?.revenueDeltaPct,
-        },
-        {
-          summary: mmsData?.summary,
-          previousSummary: mmsData?.previousSummary,
-          revenueDeltaPct: mmsData?.revenueDeltaPct,
-        },
-        {
-          summary: zooplusData?.summary,
-          previousSummary: zooplusData?.previousSummary,
-          revenueDeltaPct: zooplusData?.revenueDeltaPct,
-        },
-        {
-          summary: tiktokData?.summary,
-          previousSummary: tiktokData?.previousSummary,
-          revenueDeltaPct: tiktokData?.revenueDeltaPct,
-        },
-        {
-          summary: shopifyData?.summary,
-          previousSummary: shopifyData?.previousSummary,
-          revenueDeltaPct: shopifyData?.revenueDeltaPct,
-        },
-      ]),
+  const marketplaceDataMap = useMemo(
+    () => ({
+      amazon: amazonData,
+      ebay: ebayData,
+      otto: ottoData,
+      kaufland: kauflandData,
+      fressnapf: fressnapfData,
+      mms: mmsData,
+      zooplus: zooplusData,
+      tiktok: tiktokData,
+      shopify: shopifyData,
+    }),
     [amazonData, ebayData, ottoData, kauflandData, fressnapfData, mmsData, zooplusData, tiktokData, shopifyData]
   );
-
-  const anySalesLoading = useMemo(
-    () =>
-      amazonLoading ||
-      ebayLoading ||
-      ottoLoading ||
-      kauflandLoading ||
-      fressnapfLoading ||
-      mmsLoading ||
-      zooplusLoading ||
-      tiktokLoading ||
-      shopifyLoading,
-    [
-      amazonLoading,
-      ebayLoading,
-      ottoLoading,
-      kauflandLoading,
-      fressnapfLoading,
-      mmsLoading,
-      zooplusLoading,
-      tiktokLoading,
-      shopifyLoading,
-    ]
+  const marketplaceLoadingMap = useMemo(
+    () => ({
+      amazon: amazonLoading,
+      ebay: ebayLoading,
+      otto: ottoLoading,
+      kaufland: kauflandLoading,
+      fressnapf: fressnapfLoading,
+      mms: mmsLoading,
+      zooplus: zooplusLoading,
+      tiktok: tiktokLoading,
+      shopify: shopifyLoading,
+    }),
+    [amazonLoading, ebayLoading, ottoLoading, kauflandLoading, fressnapfLoading, mmsLoading, zooplusLoading, tiktokLoading, shopifyLoading]
+  );
+  const marketplaceBackgroundSyncMap = useMemo(
+    () => ({
+      amazon: amazonBackgroundSyncing,
+      ebay: ebayBackgroundSyncing,
+      otto: ottoBackgroundSyncing,
+      kaufland: kauflandBackgroundSyncing,
+      fressnapf: fressnapfBackgroundSyncing,
+      mms: mmsBackgroundSyncing,
+      zooplus: zooplusBackgroundSyncing,
+      tiktok: tiktokBackgroundSyncing,
+      shopify: shopifyBackgroundSyncing,
+    }),
+    [amazonBackgroundSyncing, ebayBackgroundSyncing, ottoBackgroundSyncing, kauflandBackgroundSyncing, fressnapfBackgroundSyncing, mmsBackgroundSyncing, zooplusBackgroundSyncing, tiktokBackgroundSyncing, shopifyBackgroundSyncing]
   );
 
-  const hasAnyMarketplaceSummary = useMemo(
-    () =>
-      !!(
-        amazonData?.summary ||
-        ebayData?.summary ||
-        ottoData?.summary ||
-        kauflandData?.summary ||
-        fressnapfData?.summary ||
-        mmsData?.summary ||
-        zooplusData?.summary ||
-        tiktokData?.summary ||
-        shopifyData?.summary
-      ),
-    [
-      amazonData,
-      ebayData,
-      ottoData,
-      kauflandData,
-      fressnapfData,
-      mmsData,
-      zooplusData,
-      tiktokData,
-      shopifyData,
-    ]
-  );
-
-  /** Skeleton nur beim allerersten Laden ohne irgendeine Kanal-Summary; sonst alte Werte bis zum Replace. */
-  const totalStripBlocking = anySalesLoading && !hasAnyMarketplaceSummary && !forceUnblockTotalStrip;
-
-  const stripBackgroundSyncing =
-    amazonBackgroundSyncing ||
-    ebayBackgroundSyncing ||
-    ottoBackgroundSyncing ||
-    kauflandBackgroundSyncing ||
-    fressnapfBackgroundSyncing ||
-    mmsBackgroundSyncing ||
-    zooplusBackgroundSyncing ||
-    tiktokBackgroundSyncing ||
-    shopifyBackgroundSyncing ||
-    (anySalesLoading && hasAnyMarketplaceSummary);
-
-  const revenueChartCurrency = useMemo(
-    () =>
-      pickRevenueChartCurrency(
-        totals,
-        amazonData,
-        ebayData,
-        ottoData,
-        kauflandData,
-        fressnapfData,
-        mmsData,
-        zooplusData,
-        tiktokData,
-        shopifyData
-      ),
-    [
-      totals,
-      amazonData,
-      ebayData,
-      ottoData,
-      kauflandData,
-      fressnapfData,
-      mmsData,
-      zooplusData,
-      tiktokData,
-      shopifyData,
-    ]
-  );
-
-  const revenueLineSeries = useMemo((): MarketplaceRevenueLineSeries[] => {
-    const ref = revenueChartCurrency;
-    const pts = (data: AmazonSalesCompareResponse | null | undefined) =>
-      data?.summary?.currency === ref ? data.points ?? [] : [];
-    const out: MarketplaceRevenueLineSeries[] = [
-      {
-        id: "amazon",
-        dataKey: "amazon",
-        label: "Amazon",
-        color: MARKETPLACE_REVENUE_LINE_COLORS.amazon,
-        points: pts(amazonData),
-      },
-    ];
-    const slugList = [
-      "ebay",
-      "otto",
-      "kaufland",
-      "fressnapf",
-      "mediamarkt-saturn",
-      "zooplus",
-      "tiktok",
-      "shopify",
-    ] as const;
-    for (const slug of slugList) {
-      const mp = getMarketplaceBySlug(slug);
-      const data =
-        slug === "ebay"
-          ? ebayData
-          : slug === "otto"
-          ? ottoData
-          : slug === "kaufland"
-            ? kauflandData
-            : slug === "fressnapf"
-              ? fressnapfData
-              : slug === "mediamarkt-saturn"
-                ? mmsData
-                : slug === "zooplus"
-                  ? zooplusData
-                  : slug === "tiktok"
-                    ? tiktokData
-                    : shopifyData;
-      out.push({
-        id: slug,
-        dataKey: slug,
-        label: mp?.label ?? slug,
-        color: MARKETPLACE_REVENUE_LINE_COLORS[slug] ?? "#64748b",
-        points: pts(data),
-      });
-    }
-    return out;
-  }, [
+  const {
+    totals,
+    totalStripBlocking,
+    stripBackgroundSyncing,
     revenueChartCurrency,
-    amazonData,
-    ebayData,
-    ottoData,
-    kauflandData,
-    fressnapfData,
-    mmsData,
-    zooplusData,
-    tiktokData,
-    shopifyData,
-  ]);
+    revenueLineSeries,
+    totalChartDailyOrdersAndPrev,
+    periodKpis,
+  } = useMarketplaceTotals({
+    data: marketplaceDataMap,
+    loading: marketplaceLoadingMap,
+    backgroundSyncing: marketplaceBackgroundSyncMap,
+    periodFrom: period.from,
+    periodTo: period.to,
+    forceUnblockTotalStrip,
+    dfLocale,
+    t,
+  });
 
-  const totalChartDailyOrdersAndPrev = useMemo(() => {
-    const dates = enumerateYmd(period.from, period.to);
-    const ref = revenueChartCurrency;
-    const channels: (AmazonSalesCompareResponse | null | undefined)[] = [
-      amazonData,
-      ebayData,
-      ottoData,
-      kauflandData,
-      fressnapfData,
-      mmsData,
-      zooplusData,
-      tiktokData,
-      shopifyData,
-    ];
-    const dailyOrders = dates.map((date) =>
-      channels.reduce((sum, d) => {
-        if (!d?.summary || d.summary.currency !== ref) return sum;
-        const pt = d.points?.find((p) => p.date === date);
-        return sum + (pt?.orders ?? 0);
-      }, 0)
-    );
-    const prevRevenue = dates.map((_, i) =>
-      channels.reduce((sum, d) => {
-        if (!d?.summary || d.summary.currency !== ref) return sum;
-        const pv = d.previousPoints?.[i];
-        return sum + (pv?.amount ?? 0);
-      }, 0)
-    );
-    const hasPrev = prevRevenue.some((v) => v > 0);
-    return { dailyOrders, previousRevenue: hasPrev ? prevRevenue : null };
-  }, [
-    period.from,
-    period.to,
-    revenueChartCurrency,
-    amazonData,
-    ebayData,
-    ottoData,
-    kauflandData,
-    fressnapfData,
-    mmsData,
-    zooplusData,
-    tiktokData,
-    shopifyData,
-  ]);
-
-  const periodKpis = useMemo(
-    () => kpiLabelsForPeriod(period.from, period.to, dfLocale, t),
-    [period.from, period.to, dfLocale, t]
-  );
-  const reportRows = useMemo<MarketplaceReportRow[]>(
-    () => [
-      buildReportRow({ id: "amazon", label: "Amazon", data: amazonData }),
-      buildReportRow({ id: "ebay", label: "eBay", data: ebayData }),
-      buildReportRow({ id: "otto", label: "Otto", data: ottoData }),
-      buildReportRow({ id: "kaufland", label: "Kaufland", data: kauflandData }),
-      buildReportRow({ id: "fressnapf", label: "Fressnapf", data: fressnapfData }),
-      buildReportRow({ id: "mediamarkt-saturn", label: "MediaMarkt Saturn", data: mmsData }),
-      buildReportRow({ id: "zooplus", label: "Zooplus", data: zooplusData }),
-      buildReportRow({ id: "tiktok", label: "TikTok Shop", data: tiktokData }),
-      buildReportRow({ id: "shopify", label: "Shopify", data: shopifyData }),
-    ],
-    [amazonData, ebayData, ottoData, kauflandData, fressnapfData, mmsData, zooplusData, tiktokData, shopifyData]
-  );
-  const netSummary = useMemo(() => {
-    if (!totals) return null;
-    const sameCurrencyRows = reportRows.filter((row) => row.currency === totals.currency);
-    const current = {
-      revenue: sameCurrencyRows.reduce((sum, row) => sum + row.currentRevenue, 0),
-      orders: sameCurrencyRows.reduce((sum, row) => sum + row.currentOrders, 0),
-      units: sameCurrencyRows.reduce((sum, row) => sum + row.currentUnits, 0),
-      returnedAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentReturned, 0),
-      cancelledAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentCancelled, 0),
-      returnsAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentReturns, 0),
-      feesAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentFees, 0),
-      adSpendAmount: sameCurrencyRows.reduce((sum, row) => sum + row.currentAds, 0),
-    };
-    const previous = {
-      revenue: sameCurrencyRows.reduce((sum, row) => sum + row.previousRevenue, 0),
-      orders: sameCurrencyRows.reduce((sum, row) => sum + row.previousOrders, 0),
-      units: sameCurrencyRows.reduce((sum, row) => sum + row.previousUnits, 0),
-      returnedAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousReturned, 0),
-      cancelledAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousCancelled, 0),
-      returnsAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousReturns, 0),
-      feesAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousFees, 0),
-      adSpendAmount: sameCurrencyRows.reduce((sum, row) => sum + row.previousAds, 0),
-    };
-    const currentNet =
-      current.revenue - current.returnsAmount - current.feesAmount - current.adSpendAmount;
-    const previousNet =
-      previous.revenue - previous.returnsAmount - previous.feesAmount - previous.adSpendAmount;
-    const coverageOrder = { api: 0, mixed: 1, estimated: 2 } as const;
-    const coverage = sameCurrencyRows.reduce<"api" | "mixed" | "estimated">((worst, row) => {
-      return coverageOrder[row.costCoverage] > coverageOrder[worst] ? row.costCoverage : worst;
-    }, "api");
-    return {
-      currency: totals.currency,
-      current,
-      previous,
-      currentNet,
-      previousNet,
-      note: `Datendeckung gesamt: ${coverage}. Returned/Cancelled werden statusbasiert ausgewertet, Gebühren via API oder konfigurierten Prozentsatz.`,
-    };
-  }, [totals, reportRows]);
+  const { reportRows, netSummary } = useMarketplaceReportRows({
+    data: marketplaceDataMap,
+    totals,
+  });
 
   const { detailOpen, setDetailOpen, detailIndex, stepDetail, openDetailAt } =
     useMarketplaceDetailNavigation();
