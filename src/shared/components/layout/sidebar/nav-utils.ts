@@ -1,6 +1,8 @@
 import type { ComponentType } from "react";
 import type { PermissionKey, SidebarItemKey } from "@/shared/lib/access-control";
 
+export type UpdatesBellState = "none" | "updates";
+
 export type NavItem = {
   key: SidebarItemKey;
   labelKey: string;
