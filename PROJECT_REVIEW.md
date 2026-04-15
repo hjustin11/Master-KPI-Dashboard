@@ -186,8 +186,8 @@ master-dashboard/
 - **Stark konsistent (verbessert):**
   - Marktplatz-Pages nutzen einheitlich `MarketplaceProductsView`.
   - **NEU:** Vier großen Pages folgen gleichem Muster: dünner Orchestrator + Hooks + Components-Folder.
-- **Inkonsistent (unverändert):**
-  - `src/features/` existiert, ist leer.
+- **Bereinigt (Phase 1.6):**
+  - `src/features/` wurde gelöscht (war leer, ungenutzt).
 - **Neu entstanden (zu bewerten):**
   - Duplizierte Muster zwischen `useArticleForecastLoader` / `useMarketplaceSalesLoader` / `useXentralOrdersLoader` (alle folgen demselben `fetchGenerationRef` + Cache-Hydration + Background-Sync-Intervall-Pattern). Ein gemeinsamer `useBackgroundSyncedResource`-Hook könnte extrahiert werden.
 
@@ -650,7 +650,7 @@ graph TD
 - TTL-Konstanten teilweise benannt (`SECRETS_CACHE_TTL_MS`, `DASHBOARD_CLIENT_BACKGROUND_SYNC_MS`).
 
 ### Dead Code
-- **`src/features/`** weiterhin leer (Schuld #10).
+- **`src/features/`** in Phase 1.6 gelöscht (war leer, ungenutzt) — Schuld #10 geschlossen.
 - **Keine Zombies** aus dem Refactor — Explore-Agent hat 5 `eslint-disable` weniger als vor Refactor bestätigt.
 
 ### Kommentar-Qualität
@@ -789,7 +789,7 @@ Legende: **GESCHLOSSEN** (seit letztem Review gelöst) · **OFFEN** (weiterhin) 
 | 7 | OFFEN (leicht besser) | Test-Coverage ~0 % | Projekt | Hoch | Monate | 3 neue Tests ergänzt; Foundation fehlt weiterhin |
 | 8 | OFFEN | Auth-Boilerplate in 30 Routen | API | Mittel | Tag | `withAuth(roleFilter)`-HOF |
 | 9 | OFFEN | Marktplatz-Client-Wrapper-Duplikation | `mmsApiClient`, `zooplusApiClient`, `fressnapfApiClient`, … | Mittel | Tag | Config-Registry statt einzelner Dateien |
-| 10 | OFFEN | `src/features/` angelegt, unbenutzt | Verzeichnis | Niedrig | Stunden | Nutzen oder löschen |
+| 10 | **GESCHLOSSEN** | `src/features/` angelegt, unbenutzt | Verzeichnis | Niedrig | — | In Phase 1.6 gelöscht — Verzeichnis nicht mehr im Tree. |
 | 11 | OFFEN | Xentral-Delivery-Sales-Cache JSON-Datei | `xentralDeliverySalesCache.ts` | Mittel | Tag | Supabase-Tabelle oder File-Lock |
 | 12 | **GESCHLOSSEN** | Security-Headers (CSP/HSTS/XFO) | `next.config.ts` | Mittel | — | `headers()`-Export mit CSP, HSTS, XFO, Referrer-Policy |
 | 13 | OFFEN | `integration_data_cache` ohne RLS | Migration | Niedrig | Stunden | Auth-Read-RLS |
@@ -808,7 +808,7 @@ Legende: **GESCHLOSSEN** (seit letztem Review gelöst) · **OFFEN** (weiterhin) 
 | 26 | **GESCHLOSSEN** | Doppelt gelinkter Supabase-Workspace — Parent `Master-Dashboard/supabase/` (leeres `migrations/`, nur Edge-Functions-Ordner) erzeugte `db push --include-all`-Mismatch-Fehler | `Master-Dashboard/supabase/.temp/project-ref` | Niedrig | — | `supabase unlink` im Parent-Workspace. `Master-Dashboard/supabase/functions/{hello-world,master-dashboard}` unberührt gelassen. |
 
 **Zusammenfassung:**
-- **Geschlossen seit letztem Review:** 5 (#1 Supabase-Pool via Pro-Upgrade, #3 Monolith-Pages, #12 Security-Headers, #25 Remote-Drift, #26 Workspace-Doppel-Link)
+- **Geschlossen seit letztem Review:** 6 (#1 Supabase-Pool via Pro-Upgrade, #3 Monolith-Pages, #10 `src/features/` gelöscht, #12 Security-Headers, #25 Remote-Drift, #26 Workspace-Doppel-Link)
 - **Teilweise geschlossen:** 2 (#2 Rate-Limit-Lib da, #5 Zod-Helper da)
 - **Neu aufgetaucht:** 4 (#21 Amazon-Editor + Lib-Monolithen, #22 Loader-Duplikation, #23 `any`-Anstieg, #24 console.log)
 - **Gesamtsaldo:** Qualität **deutlich verbessert** — der kritischste Produktionsvorfall-Auslöser (DB-Pool) ist infrastrukturell gelöst und der letzte latente 500-Fehler aus Remote-Drift ist behoben.
@@ -906,7 +906,7 @@ graph LR
 - Marktplatz-Client-Wrapper Config-Registry
 
 **Phase D (laufend):** Härtung
-- Weitere Tests, `next/image`, `src/features/` entsorgen, `any`-Hunt, Dependabot.
+- Weitere Tests, `next/image`, `any`-Hunt, Dependabot.
 
 ---
 
@@ -939,7 +939,6 @@ graph LR
 ### Quick-Wins
 - **Auth-HOF** (~4 h)
 - **Env-Validator** (~4 h)
-- **`src/features/` löschen** (~1 h)
 - **`useBackgroundSyncedResource` extrahieren** (~4 h)
 - **Unit-Tests für reine Funktionen** (`sidebar/nav-utils`, `article-forecast-utils`) (~4 h)
 
@@ -992,7 +991,6 @@ Internes Business-Dashboard mit Analytics (Profit/Retouren), Produkt-Editoren (i
 - `middleware.ts` Public-Path-Allowlist — Auth-Sicherheit.
 - `useAppStore` Persist-Version ohne Migration-Handling.
 - `integration_secrets` direkt.
-- `src/features/` (leere Zone).
 - Secrets/Keys in Git.
 
 ### Aktueller Stand:
