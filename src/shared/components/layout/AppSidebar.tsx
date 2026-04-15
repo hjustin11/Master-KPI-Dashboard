@@ -3,30 +3,27 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useSyncExternalStore, type ComponentType } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
-  BarChart3,
-  Bell,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
-  Cat,
   Construction,
-  Megaphone,
-  Monitor,
-  Package,
-  Home,
   PanelLeft,
-  Settings,
-  ShoppingBag,
-  ShoppingBasket,
-  ShoppingCart,
-  PawPrint,
   Store,
   User,
-  Video,
 } from "lucide-react";
+import { navItems } from "./sidebar/navItems";
+import {
+  isActivePath,
+  isMarketplaceItemActive,
+  navItemHasAnyAccessibleRoute,
+  partitionNavItems,
+  resolveNavLink,
+  visibleNavChildren,
+  type NavItem,
+} from "./sidebar/nav-utils";
 import {
   Sidebar,
   SidebarContent,
@@ -79,15 +76,6 @@ import {
   UPDATES_SEEN_EVENT,
 } from "@/shared/lib/updatesFeed";
 import { DASHBOARD_CLIENT_BACKGROUND_SYNC_MS } from "@/shared/lib/dashboardClientCache";
-
-type NavItem = {
-  key: SidebarItemKey;
-  labelKey: string;
-  href: string;
-  icon: ComponentType<{ className?: string }>;
-  requiredPermissions?: PermissionKey[];
-  children?: Array<{ labelKey: string; href: string; requiredPermissions?: PermissionKey[] }>;
-};
 
 type UpdatesBellState = "none" | "updates";
 
@@ -146,273 +134,6 @@ function NavAccessCheckbox({
   );
 }
 
-const navItems: NavItem[] = [
-  {
-    key: "overview",
-    labelKey: "nav.start",
-    href: "/",
-    icon: Home,
-  },
-  {
-    key: "myArea",
-    labelKey: "nav.myArea",
-    href: "/mein-bereich",
-    icon: User,
-    requiredPermissions: ["manage_integrations"],
-  },
-  {
-    key: "amazon",
-    labelKey: "nav.amazon",
-    href: "/amazon",
-    icon: ShoppingCart,
-    requiredPermissions: ["manage_integrations"],
-    children: [
-      { labelKey: "nav.amazonOrders", href: "/amazon/orders" },
-      { labelKey: "nav.amazonProducts", href: "/amazon/products" },
-    ],
-  },
-  {
-    key: "ebay",
-    labelKey: "nav.ebay",
-    href: "/ebay",
-    icon: ShoppingBag,
-    requiredPermissions: ["manage_integrations"],
-    children: [
-      { labelKey: "nav.ebayOrders", href: "/ebay/orders" },
-      { labelKey: "nav.ebayProducts", href: "/ebay/products" },
-    ],
-  },
-  {
-    key: "otto",
-    labelKey: "nav.otto",
-    href: "/otto",
-    icon: ShoppingBag,
-    requiredPermissions: ["manage_integrations"],
-    children: [
-      { labelKey: "nav.ottoOrders", href: "/otto/orders" },
-      { labelKey: "nav.ottoProducts", href: "/otto/products" },
-    ],
-  },
-  {
-    key: "kaufland",
-    labelKey: "nav.kaufland",
-    href: "/kaufland",
-    icon: Store,
-    requiredPermissions: ["manage_integrations"],
-    children: [
-      { labelKey: "nav.kauflandOrders", href: "/kaufland/orders" },
-      { labelKey: "nav.kauflandProducts", href: "/kaufland/products" },
-    ],
-  },
-  {
-    key: "fressnapf",
-    labelKey: "nav.fressnapf",
-    href: "/fressnapf",
-    icon: PawPrint,
-    requiredPermissions: ["manage_integrations"],
-    children: [
-      { labelKey: "nav.fressnapfOrders", href: "/fressnapf/orders" },
-      { labelKey: "nav.fressnapfProducts", href: "/fressnapf/products" },
-    ],
-  },
-  {
-    key: "mediamarktSaturn",
-    labelKey: "nav.mediamarktSaturn",
-    href: "/mediamarkt-saturn",
-    icon: Monitor,
-    requiredPermissions: ["manage_integrations"],
-    children: [
-      { labelKey: "nav.mediamarktSaturnOrders", href: "/mediamarkt-saturn/orders" },
-      { labelKey: "nav.mediamarktSaturnProducts", href: "/mediamarkt-saturn/products" },
-    ],
-  },
-  {
-    key: "zooplus",
-    labelKey: "nav.zooplus",
-    href: "/zooplus",
-    icon: Cat,
-    requiredPermissions: ["manage_integrations"],
-    children: [
-      { labelKey: "nav.zooplusOrders", href: "/zooplus/orders" },
-      { labelKey: "nav.zooplusProducts", href: "/zooplus/products" },
-    ],
-  },
-  {
-    key: "tiktok",
-    labelKey: "nav.tiktok",
-    href: "/tiktok",
-    icon: Video,
-    requiredPermissions: ["manage_integrations"],
-    children: [
-      { labelKey: "nav.tiktokOrders", href: "/tiktok/orders" },
-      { labelKey: "nav.tiktokProducts", href: "/tiktok/products" },
-    ],
-  },
-  {
-    key: "shopify",
-    labelKey: "nav.shopify",
-    href: "/shopify",
-    icon: ShoppingBasket,
-    requiredPermissions: ["manage_integrations"],
-    children: [
-      { labelKey: "nav.shopifyOrders", href: "/shopify/orders" },
-      { labelKey: "nav.shopifyProducts", href: "/shopify/products" },
-    ],
-  },
-  {
-    key: "xentral",
-    labelKey: "nav.xentral",
-    href: "/xentral",
-    icon: Package,
-    requiredPermissions: ["manage_integrations"],
-    children: [
-      { labelKey: "nav.xentralProducts", href: "/xentral/products" },
-      { labelKey: "nav.xentralOrders", href: "/xentral/orders" },
-    ],
-  },
-  {
-    key: "advertising",
-    labelKey: "nav.advertising",
-    href: "/advertising",
-    icon: Megaphone,
-    requiredPermissions: ["manage_integrations"],
-    children: [
-      { labelKey: "nav.adCampaigns", href: "/advertising/campaigns" },
-      { labelKey: "nav.adPerformance", href: "/advertising/performance" },
-    ],
-  },
-  {
-    key: "analytics",
-    labelKey: "nav.analytics",
-    href: "/analytics",
-    icon: BarChart3,
-    requiredPermissions: ["export_data"],
-    children: [
-      { labelKey: "nav.analyticsMarketplaces", href: "/analytics/marketplaces" },
-      { labelKey: "nav.analyticsArticleForecast", href: "/analytics/article-forecast" },
-      { labelKey: "nav.analyticsProcurement", href: "/analytics/procurement" },
-    ],
-  },
-  {
-    key: "settings",
-    labelKey: "nav.settings",
-    href: "/settings",
-    icon: Settings,
-    children: [
-      { labelKey: "nav.settingsUsers", href: "/settings/users" },
-      { labelKey: "nav.settingsProfile", href: "/settings/profile" },
-      { labelKey: "nav.settingsTutorials", href: "/settings/tutorials" },
-    ],
-  },
-  {
-    key: "updates",
-    labelKey: "nav.updates",
-    href: "/updates",
-    icon: Bell,
-  },
-];
-
-function isActivePath(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-/** Hauptklick Ziel = erster Unterpunkt (ohne separate Übersichtsseite). */
-const NAV_PRIMARY_CHILD_KEYS = new Set<SidebarItemKey>([
-  "amazon",
-  "ebay",
-  "otto",
-  "kaufland",
-  "fressnapf",
-  "mediamarktSaturn",
-  "zooplus",
-  "tiktok",
-  "shopify",
-  "xentral",
-  "advertising",
-  "analytics",
-  "settings",
-]);
-
-function visibleNavChildren(
-  item: NavItem,
-  hasPermission: (permission: PermissionKey) => boolean,
-  canAccessPageByPath: (pathname: string) => boolean
-) {
-  return (
-    item.children?.filter(
-      (child) =>
-        (child.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true) &&
-        canAccessPageByPath(child.href)
-    ) ?? []
-  );
-}
-
-function navItemHasAnyAccessibleRoute(
-  item: NavItem,
-  hasPermission: (permission: PermissionKey) => boolean,
-  canAccessPageByPath: (pathname: string) => boolean
-) {
-  if (canAccessPageByPath(item.href)) return true;
-  return visibleNavChildren(item, hasPermission, canAccessPageByPath).length > 0;
-}
-
-function resolveNavLink(
-  item: NavItem,
-  hasPermission: (permission: PermissionKey) => boolean,
-  canAccessPageByPath: (pathname: string) => boolean
-): { primaryHref: string; activePrefix: string } {
-  if (NAV_PRIMARY_CHILD_KEYS.has(item.key)) {
-    const visible = visibleNavChildren(item, hasPermission, canAccessPageByPath);
-    const primary = visible[0]?.href ?? item.href;
-    const prefix = primary.replace(/\/[^/]+$/, "") || item.href;
-    return { primaryHref: primary, activePrefix: prefix };
-  }
-  return { primaryHref: item.href, activePrefix: item.href };
-}
-
-const MARKETPLACE_NAV_KEYS = new Set<SidebarItemKey>([
-  "amazon",
-  "ebay",
-  "otto",
-  "kaufland",
-  "fressnapf",
-  "mediamarktSaturn",
-  "zooplus",
-  "tiktok",
-  "shopify",
-]);
-
-const START_NAV_KEYS = new Set<SidebarItemKey>(["overview", "myArea"]);
-
-function partitionNavItems(items: NavItem[]): {
-  start: NavItem[];
-  marketplaces: NavItem[];
-  rest: NavItem[];
-} {
-  const start: NavItem[] = [];
-  const marketplaces: NavItem[] = [];
-  const rest: NavItem[] = [];
-  for (const item of items) {
-    if (START_NAV_KEYS.has(item.key)) start.push(item);
-    else if (MARKETPLACE_NAV_KEYS.has(item.key)) marketplaces.push(item);
-    else rest.push(item);
-  }
-  return { start, marketplaces, rest };
-}
-
-function isMarketplaceItemActive(
-  pathname: string,
-  item: NavItem,
-  hasPermission: (permission: PermissionKey) => boolean,
-  canAccessPageByPath: (pathname: string) => boolean
-): boolean {
-  const { activePrefix } = resolveNavLink(item, hasPermission, canAccessPageByPath);
-  if (isActivePath(pathname, activePrefix)) return true;
-  return visibleNavChildren(item, hasPermission, canAccessPageByPath).some((child) =>
-    isActivePath(pathname, child.href)
-  );
-}
 
 function SingleNavItem({
   item,
