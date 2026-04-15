@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -17,7 +17,6 @@ import { navItems } from "./sidebar/navItems";
 import {
   navItemHasAnyAccessibleRoute,
   partitionNavItems,
-  type UpdatesBellState,
 } from "./sidebar/nav-utils";
 import {
   Sidebar,
@@ -58,42 +57,7 @@ import { useTranslation } from "@/i18n/I18nProvider";
 import { resolveRoleLabel } from "@/i18n/resolve-role-label";
 import { useTutorialNavGate } from "@/shared/components/tutorial/TutorialNavContext";
 import type { NavAccessEditConfig } from "@/shared/lib/nav-access-edit";
-import {
-  getUpdatesSignature,
-  readSeenUpdatesSignature,
-  UPDATES_SEEN_EVENT,
-} from "@/shared/lib/updatesFeed";
-import { DASHBOARD_CLIENT_BACKGROUND_SYNC_MS } from "@/shared/lib/dashboardClientCache";
-
-type ManagedUpdatePayloadItem = {
-  date?: string;
-  title?: string;
-  text?: string;
-  release_key?: string | null;
-};
-
-async function fetchCurrentUpdatesSignature(): Promise<string | null> {
-  try {
-    const res = await fetch("/api/updates", { cache: "no-store" });
-    if (!res.ok) return null;
-    const payload = (await res.json()) as { items?: ManagedUpdatePayloadItem[] };
-    if (!Array.isArray(payload.items)) return null;
-    const entries = payload.items
-      .map((item) => ({
-        date: typeof item.date === "string" ? item.date : "",
-        title: typeof item.title === "string" ? item.title : "",
-        text: typeof item.text === "string" ? item.text : "",
-        releaseKey: typeof item.release_key === "string" ? item.release_key : undefined,
-      }))
-      .filter((item) => item.date && item.title && item.text);
-    if (entries.length === 0) return null;
-    return getUpdatesSignature(entries);
-  } catch {
-    return null;
-  }
-}
-
-
+import useUpdatesPolling from "@/shared/hooks/useUpdatesPolling";
 
 export function AppSidebar() {
   const router = useRouter();
@@ -173,39 +137,7 @@ export function AppSidebar() {
     () => partitionNavItems(tutorialGatedNavItems),
     [tutorialGatedNavItems]
   );
-  const [hasUnseenUpdates, setHasUnseenUpdates] = useState(false);
-  const [currentUpdatesSignature, setCurrentUpdatesSignature] = useState(() => readSeenUpdatesSignature());
-  const updatesBellState: UpdatesBellState = hasUnseenUpdates ? "updates" : "none";
-
-  useEffect(() => {
-    let cancelled = false;
-    const refreshSignature = async () => {
-      const signature = await fetchCurrentUpdatesSignature();
-      if (!cancelled && signature) setCurrentUpdatesSignature(signature);
-    };
-    void refreshSignature();
-    const id = window.setInterval(() => {
-      void refreshSignature();
-    }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, []);
-
-  useEffect(() => {
-    const syncSeenState = () => {
-      const seen = readSeenUpdatesSignature();
-      setHasUnseenUpdates(currentUpdatesSignature !== seen);
-    };
-    syncSeenState();
-    window.addEventListener("storage", syncSeenState);
-    window.addEventListener(UPDATES_SEEN_EVENT, syncSeenState);
-    return () => {
-      window.removeEventListener("storage", syncSeenState);
-      window.removeEventListener(UPDATES_SEEN_EVENT, syncSeenState);
-    };
-  }, [currentUpdatesSignature]);
+  const { updatesBellState } = useUpdatesPolling();
   const cycleRole = (direction: "prev" | "next") => {
     if (!canRoleSwitch) return;
     const values = roleOptions.map((r) => r.value);
@@ -510,39 +442,7 @@ export function MobileSidebarTrigger() {
     () => partitionNavItems(tutorialGatedNavItems),
     [tutorialGatedNavItems]
   );
-  const [hasUnseenUpdates, setHasUnseenUpdates] = useState(false);
-  const [currentUpdatesSignature, setCurrentUpdatesSignature] = useState(() => readSeenUpdatesSignature());
-  const updatesBellState: UpdatesBellState = hasUnseenUpdates ? "updates" : "none";
-
-  useEffect(() => {
-    let cancelled = false;
-    const refreshSignature = async () => {
-      const signature = await fetchCurrentUpdatesSignature();
-      if (!cancelled && signature) setCurrentUpdatesSignature(signature);
-    };
-    void refreshSignature();
-    const id = window.setInterval(() => {
-      void refreshSignature();
-    }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, []);
-
-  useEffect(() => {
-    const syncSeenState = () => {
-      const seen = readSeenUpdatesSignature();
-      setHasUnseenUpdates(currentUpdatesSignature !== seen);
-    };
-    syncSeenState();
-    window.addEventListener("storage", syncSeenState);
-    window.addEventListener(UPDATES_SEEN_EVENT, syncSeenState);
-    return () => {
-      window.removeEventListener("storage", syncSeenState);
-      window.removeEventListener(UPDATES_SEEN_EVENT, syncSeenState);
-    };
-  }, [currentUpdatesSignature]);
+  const { updatesBellState } = useUpdatesPolling();
   const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
   const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
   const roleTestAccessEditMode = useAppStore((stateFromStore) => stateFromStore.roleTestAccessEditMode);
