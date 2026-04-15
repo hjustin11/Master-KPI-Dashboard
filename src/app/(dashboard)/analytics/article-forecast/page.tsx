@@ -9,8 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Loader2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { DataTable } from "@/shared/components/DataTable";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
@@ -40,9 +38,10 @@ import { usePromotionDeals } from "../marketplaces/usePromotionDeals";
 import { ArticleForecastHeader } from "./components/ArticleForecastHeader";
 import { ArticleForecastAlerts } from "./components/ArticleForecastAlerts";
 import { ArticleForecastMetaBanner } from "./components/ArticleForecastMetaBanner";
-import { MarketplaceColumnPicker } from "./components/MarketplaceColumnPicker";
-import { WarehouseColumnPicker } from "./components/WarehouseColumnPicker";
-import { ArticleForecastRulesPopover } from "./components/ArticleForecastRulesPopover";
+import {
+  ArticleForecastDateRangePicker,
+  ArticleForecastToolbarBetween,
+} from "./components/ArticleForecastToolbar";
 import {
   ARTICLE_FORECAST_CACHE_KEY,
   ARTICLE_FORECAST_RULE_SCOPE_KEY,
@@ -952,74 +951,36 @@ export default function AnalyticsArticleForecastPage() {
           tableWrapClassName="min-h-0 max-w-full overflow-x-auto"
           getRowClassName={(row) => rowClassBySku.get(normalizeSkuKey(row.original.sku))}
           toolbarBetween={
-            <div className="flex flex-wrap items-center gap-2">
-              {isLoading ? (
-                <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                  {hasLoadedOnce ? t("articleForecast.refreshing") : t("articleForecast.loading")}
-                </span>
-              ) : null}
-              <MarketplaceColumnPicker
-                projectColumns={projectColumns}
-                visibility={marketplaceColumnVisibility}
-                setVisibility={setMarketplaceColumnVisibility}
-              />
-              <WarehouseColumnPicker
-                warehouseColumns={warehouseColumns}
-                visibility={warehouseColumnVisibility}
-                setVisibility={setWarehouseColumnVisibility}
-              />
-              <ArticleForecastRulesPopover
-                ruleScope={ruleScope}
-                setRuleScope={setRuleScope}
-                activeRules={activeRules}
-                setRulesByScope={setRulesByScope}
-                saveRules={saveRules}
-                rulesSaving={rulesSaving}
-                rulesLoading={rulesLoading}
-                rulesError={rulesError}
-                rulesNotice={rulesNotice}
-              />
-              <div className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background px-2 py-1 text-[11px] text-muted-foreground">
-                <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-                <span>{t("articleForecast.legendLow")}</span>
-                <span className="mx-0.5">·</span>
-                <span>{t("articleForecast.legendCritical")}</span>
-              </div>
-            </div>
+            <ArticleForecastToolbarBetween
+              isLoading={isLoading}
+              hasLoadedOnce={hasLoadedOnce}
+              projectColumns={projectColumns}
+              marketplaceColumnVisibility={marketplaceColumnVisibility}
+              setMarketplaceColumnVisibility={setMarketplaceColumnVisibility}
+              warehouseColumns={warehouseColumns}
+              warehouseColumnVisibility={warehouseColumnVisibility}
+              setWarehouseColumnVisibility={setWarehouseColumnVisibility}
+              ruleScope={ruleScope}
+              setRuleScope={setRuleScope}
+              activeRules={activeRules}
+              setRulesByScope={setRulesByScope}
+              saveRules={saveRules}
+              rulesSaving={rulesSaving}
+              rulesLoading={rulesLoading}
+              rulesError={rulesError}
+              rulesNotice={rulesNotice}
+            />
           }
           toolbarEnd={
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1">
-                <span className="block text-xs font-medium text-muted-foreground">
-                  {t("articleForecast.from")}
-                </span>
-                <Input
-                  type="date"
-                  className="h-8 w-[140px] text-xs"
-                  value={fromYmd}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setRange((prev) => ({ ...prev, fromYmd: v }));
-                    setDateManuallySet(true);
-                  }}
-                />
-              </div>
-              <div className="space-y-1">
-                <span className="block text-xs font-medium text-muted-foreground">
-                  {t("articleForecast.to")}
-                </span>
-                <Input
-                  type="date"
-                  className="h-8 w-[140px] text-xs"
-                  value={toYmd}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setRange((prev) => ({ ...prev, toYmd: v }));
-                  }}
-                />
-              </div>
-            </div>
+            <ArticleForecastDateRangePicker
+              fromYmd={fromYmd}
+              toYmd={toYmd}
+              onFromChange={(v) => {
+                setRange((prev) => ({ ...prev, fromYmd: v }));
+                setDateManuallySet(true);
+              }}
+              onToChange={(v) => setRange((prev) => ({ ...prev, toYmd: v }))}
+            />
           }
         />
       </div>
