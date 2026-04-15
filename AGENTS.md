@@ -23,7 +23,7 @@ Referenz-Implementierungen: [analytics/marketplaces/page.tsx](src/app/(dashboard
 - **Secrets**: ausschließlich `readIntegrationSecret()` / `readIntegrationSecretsBatch()` aus `@/shared/lib/integrationSecrets`. Niemals direkt auf `integration_secrets`-Tabelle.
 - **Cache**: Server via `integrationDataCache.ts`, Browser via `dashboardClientCache.ts`. Nie Tabelle/localStorage direkt.
 - **Rollen-Check**: `isOwnerFromSources()` aus `@/shared/lib/roles` (DB + app_metadata + user_metadata).
-- **Supabase Connection-Pool = 10** — max. 3 parallele Calls im selben Request-Scope.
+- **Supabase Connection-Pool = 60 (Pro-Plan)** — frühere Pool-Krise gelöst, trotzdem bewusst bleiben: Concurrency-3-Drossel + Aggregator-Routen weiterhin empfohlen.
 - **i18n**: Keine harten Strings. `t("key")` aus `useTranslation()`. Alle drei Locales (`de`/`en`/`zh`) pflegen.
 - **Error-Format API**: `NextResponse.json({ error: string }, { status })`.
 - **Zod-Validierung**: `src/shared/lib/apiValidation.ts` (`parseRequestBody`, `parseSearchParams`, `parseFormFields`).
@@ -52,8 +52,8 @@ npm run typecheck && npx eslint src/ --max-warnings 0 && npm run build && npm te
 Nach jedem Schritt committen, nicht batchen. Aktuell: 29/29 Tests grün, 0 Warnings, Build erfolgreich.
 
 ## Bekannte Workarounds
-- Xentral `?includeSales=1` dauert bis 115 s → nicht synchron auf UX-Pfaden.
-- Analytics-Page feuert 9 parallele Calls → Concurrency-3-Drossel aktiv; Server-Aggregator `/api/analytics/marketplace-overview` existiert als Alternative.
+- Xentral `?includeSales=1` dauert bis 115 s → nicht synchron auf UX-Pfaden (aktuelle #1-Performance-Baustelle).
+- Analytics-Page feuert 9 parallele Calls → mit Supabase-Pro (Pool 60) kein Pool-Problem mehr; Concurrency-3-Drossel + Server-Aggregator `/api/analytics/marketplace-overview` bleiben aus Effizienzgründen empfohlen.
 - `integration_data_cache` ohne RLS — keine User-Daten dort speichern.
 - `.next/` wächst auf mehrere GB — regelmäßig `rm -rf .next`.
 

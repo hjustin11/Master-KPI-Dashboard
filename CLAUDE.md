@@ -64,8 +64,8 @@ npm run typecheck && npx eslint src/ --max-warnings 0 && npm run build && npm te
 - Nach jedem Refactor-Schritt committen, nicht batchen
 
 ## Bekannte Probleme
-- **Supabase Connection-Pool = 10** → keine 9-fach-Parallelität, max 3; Aggregator `/api/analytics/marketplace-overview` existiert
-- **Xentral `?includeSales=1`** bis 115 s → nie auf UX-Pfaden
+- **Supabase Connection-Pool = 60 (Pro)** → frühere 9-parallele-Calls-Krise gelöst; Aggregator `/api/analytics/marketplace-overview` + Concurrency-3-Drossel bleiben aus Effizienzgründen empfohlen
+- **Xentral `?includeSales=1`** bis 115 s → nie auf UX-Pfaden (aktuelle #1-Baustelle)
 - **`.next/`** wächst → gelegentlich `rm -rf .next`
 
 ## Offene Schulden (Kurzfassung, vollständig in PROJECT_REVIEW.md §15)

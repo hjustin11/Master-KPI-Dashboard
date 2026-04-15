@@ -19,7 +19,7 @@ _Review-Stand: 2026-04-15 (Post-Refactor) · Verfasser: Architektur-Audit · Bas
 - **Gelöstes Problem:** Eliminiert das Umherschalten zwischen 9+ Seller-Portalen. KPIs (Umsatz, Retouren, Profitabilität, Bestand), Produktdaten, Bestellungen in einer Oberfläche. LLM-gestützte Content-Audits (Anthropic Claude + OpenAI-Fallback) für Amazon-Listings.
 - **Zielgruppe:** Internes Team von AstroPet/Petrhein — Owner/Admin/Manager/Analyst/Viewer. Mehrsprachig DE/EN/ZH, auf DACH-Betrieb optimiert.
 - **Vision:** _"Ein Dashboard, in dem jeder Business-Mitarbeiter seine Arbeit findet, ohne Tools wechseln zu müssen."_
-- **Reifegrad:** **Production-Ready mit signifikant verbesserter Wartbarkeit**. Der monolithische Komponenten-Stil ist als Hauptschuld **geschlossen**. Offene Baustellen liegen jetzt überwiegend bei Security-Hardening (Rate-Limiting, Env-Validator), Observability (Sentry/Logging) und Test-Coverage.
+- **Reifegrad:** **Production-Ready mit signifikant verbesserter Wartbarkeit und stabiler Infrastruktur**. Der monolithische Komponenten-Stil ist als Hauptschuld **geschlossen**; der frühere DB-Pool-Engpass (10) ist durch **Supabase-Pro-Upgrade (Pool 60)** infrastrukturell beseitigt. Offene Baustellen liegen überwiegend bei Security-Hardening (Rate-Limiting, Env-Validator), Observability (Sentry/Logging) und Test-Coverage.
 - **Entwicklungsaufwand bisher:** **394 TS/TSX-Dateien**, **67 606 LOC** in `src/`, **77 API-Routen**, **22 Migrations**, **~50 Shared-Komponenten** + 25 shadcn-Primitives. Grob: **700–1 000 Entwicklerstunden** (4–6 Personen-Monate) für die sichtbare Funktionalität. Wachstum seit letztem Review: +9 Dateien / +0 LOC (netto durch Refactor, Page-LOC wurden zu Hook/Component-LOC umverteilt).
 
 ### Vergleich zum Vor-Review
@@ -73,7 +73,8 @@ _Review-Stand: 2026-04-15 (Post-Refactor) · Verfasser: Architektur-Audit · Bas
 ### Datenbank
 - **PostgreSQL 17.6** (Supabase-hosted)
 - **22 Migrations** (`20260328` … `20260501`), konsequent datiert
-- **Connection Pool:** nach wie vor **10** — realer Engpass bei Parallel-Load
+- **Supabase-Plan:** **Pro** (Upgrade seit letztem Review)
+- **Connection Pool:** **60** (Pro-Plan; vormals 10 unter Free) — Parallel-Load der 9 Marktplatz-Calls damit nicht mehr Root-Cause; trotzdem bewusst halten
 - **RLS:** aktiviert auf allen User-Daten-Tabellen (Profiles, Promo-Deals, Drafts, Layouts, Tutorial-Progress, Access-Config); bewusst aus auf Cache/Override-Tabellen (dokumentiert).
 
 ### DevOps / Infrastruktur
@@ -470,7 +471,7 @@ graph TD
 | **NEU: `rateLimit.ts`** | Noch punktuell | **Mittel → Hoch** (wenn adoptiert) | ↑ |
 
 ### Kritische Pfade
-**Pfad 1 — Dashboard-Analytics-Load:** Browser → Middleware → Supabase-Auth → Config → 9 parallele Sales-Calls → Supabase-Pool (10!) → Charts. **Status:** Concurrency-3-Drossel aktiv; Server-Aggregator `marketplace-overview` vorhanden, noch nicht als einziger Weg.
+**Pfad 1 — Dashboard-Analytics-Load:** Browser → Middleware → Supabase-Auth → Config → 9 parallele Sales-Calls → Supabase-Pool (60, Pro) → Charts. **Status:** Pool-Engpass gelöst; Concurrency-3-Drossel + Server-Aggregator `marketplace-overview` bleiben aus Effizienzgründen empfohlen.
 
 **Pfad 2 — Cron-Warmup:** Vercel-Cron → `/api/integration-cache/warm` → iteriert Marktplätze.
 
@@ -596,7 +597,7 @@ graph TD
 ### DB-Query
 - N+1 in Fees: **geschlossen** via Batch-Read.
 - Fehlende Indizes: keine auffälligen Lücken.
-- Connection-Pool = 10: **weiterhin zu klein**.
+- Connection-Pool = **60 (Pro-Plan)**: Der frühere Engpass bei 9 parallelen Marktplatz-Calls ist **entschärft**. Trotzdem keine Verschwendung — Aggregator-Pfad bleibt empfohlen, um DB-Last zu minimieren.
 
 ### Bild-Optimierung
 - `next/image` nur teilweise — Lint-Warning `@next/next/no-img-element` weiterhin aktiv.
@@ -606,8 +607,8 @@ graph TD
 - **NEU:** Zwar Hooks extrahiert, aber `useMemo`/`React.memo` noch nicht systematisch. `useBackgroundSyncedResource`-Extraktion würde auch Performance normalisieren.
 
 ### Bottlenecks (identifiziert)
-1. **Supabase-Pool = 10** vs. 9 parallele Marktplatz-Loader → entschärft, nicht gelöst.
-2. `/api/xentral/articles?includeSales=1` = bis 115 s — blockiert Next-Dev-Worker.
+1. ~~Supabase-Pool = 10 vs. 9 parallele Marktplatz-Loader~~ → **gelöst durch Pro-Plan-Upgrade (Pool = 60)**. Aggregator-Pfad bleibt als architektonische Verbesserung empfohlen.
+2. `/api/xentral/articles?includeSales=1` = bis 115 s — blockiert Next-Dev-Worker. **Neue #1-Priorität.**
 3. **Große Lib-Dateien:** `flexMarketplaceApiClient.ts` (1 018), `ottoApiClient.ts` (952), `amazonProductsSpApiCatalog.ts` (937), `xentralSkuSalesWindowAggregation.ts` (861), `xentralArticlesCompute.ts` (851).
 4. Kein SSR der Marktplatz-Analytics.
 
@@ -776,7 +777,7 @@ Legende: **GESCHLOSSEN** (seit letztem Review gelöst) · **OFFEN** (weiterhin) 
 
 | # | Status | Schuld | Betroffene Dateien | Schweregrad | Aufwand | Lösung |
 |---|---|---|---|---|---|---|
-| 1 | OFFEN (entschärft) | Supabase-Pool=10, 9 parallele Calls | `analytics/marketplaces`, `/api/{mp}/sales` | Kritisch | Tage | Aggregator `marketplace-overview` existiert, nicht durchgängig verwendet |
+| 1 | **GESCHLOSSEN** | Supabase-Pool=10, 9 parallele Calls | `analytics/marketplaces`, `/api/{mp}/sales` | Kritisch | — | **Pro-Plan-Upgrade → Pool=60**. Concurrency-3-Drossel + Aggregator `marketplace-overview` bleiben als Best-Practice-Empfehlung, Krise aber vorbei |
 | 2 | OFFEN (teilweise) | Rate-Limiting | `rateLimit.ts` vorhanden, kaum verdrahtet | Kritisch | Tag | Lib überall einbauen (Login/Invitations/Feedback/Address-Suggest) |
 | 3 | **GESCHLOSSEN** | Monolithische Pages > 1 000 Z. | `analytics/marketplaces/page.tsx`, `xentral/orders/page.tsx`, `article-forecast/page.tsx`, `AppSidebar.tsx` | Hoch | — | **4 Pages zerlegt, 9 062 → 1 698 LOC** |
 | 4 | OFFEN | Xentral-Sync-Secret Fallback | `/api/xentral/delivery-sales-cache/sync` | Hoch | Stunden | Env-Validator fail-closed |
@@ -802,10 +803,10 @@ Legende: **GESCHLOSSEN** (seit letztem Review gelöst) · **OFFEN** (weiterhin) 
 | 24 | **NEU** | `console.log` (19×) als Dev-Überbleibsel | 25 Dateien | Mittel | Tag | Structured Logger / Cleanup |
 
 **Zusammenfassung:**
-- **Geschlossen seit letztem Review:** 2 (Schuld #3 Monolith-Pages, #12 Security-Headers)
+- **Geschlossen seit letztem Review:** 3 (Schuld #1 Supabase-Pool via Pro-Upgrade, #3 Monolith-Pages, #12 Security-Headers)
 - **Teilweise geschlossen:** 2 (#2 Rate-Limit-Lib da, #5 Zod-Helper da)
 - **Neu aufgetaucht:** 4 (#21 Amazon-Editor + Lib-Monolithen, #22 Loader-Duplikation, #23 `any`-Anstieg, #24 console.log)
-- **Gesamtsaldo:** Qualität **verbessert**, aber neue Refactor-Kandidaten sichtbar.
+- **Gesamtsaldo:** Qualität **deutlich verbessert** — der kritischste Produktionsvorfall-Auslöser (DB-Pool) ist infrastrukturell gelöst.
 
 ---
 
@@ -827,7 +828,7 @@ _"Ein Betriebssystem für Multi-Marketplace-Commerce: Ein Dashboard, viele APIs,
 | Security-Headers | ✅ da | ✅ + CSP-Monitoring |
 | Observability | Vercel-Logs, kein Sentry | Sentry + Structured Logging |
 | Lib-Monolithen | 6 Dateien > 800 Z. | Alle < 500 Z. |
-| Connection-Pool | 10 | 25–50 (Pro) oder Aggregator |
+| Connection-Pool | **60 (Pro, erledigt)** | Aggregator zusätzlich für DB-Effizienz |
 
 ### Top-10 Verbesserungen (priorisiert nach Impact)
 
@@ -835,7 +836,7 @@ _"Ein Betriebssystem für Multi-Marketplace-Commerce: Ein Dashboard, viele APIs,
 2. **Zod-Adoption flächendeckend** via `apiValidation.ts` in allen `POST`/`PUT`/`PATCH`-Routen.
 3. **`useBackgroundSyncedResource<T>`** als gemeinsamer Hook für AF/MP/XO-Loader — eliminiert ~500 LOC Duplikation.
 4. **Rate-Limiter flächendeckend einbauen** (Upstash/In-Memory): Login, Invitations/Lookup, Feedback, Address-Suggest.
-5. **Server-Side Aggregator** `marketplace-overview` als **einziger** Pfad (ersetzt 9-parallele-Calls).
+5. **Server-Side Aggregator** `marketplace-overview` als **einziger** Pfad (ersetzt 9-parallele-Calls; nicht mehr zur Pool-Rettung, sondern für Bundle-/DB-Effizienz).
 6. **Nächste Refactor-Runde:** `AmazonProductEditor.tsx`, `flexMarketplaceApiClient.ts`, `ottoApiClient.ts`, `xentralOrdersPayload.ts`.
 7. **Testing-Foundation:** Vitest-Unit-Tests für `article-forecast-utils`, `sidebar/nav-utils`, `useArticleForecastComputed`; Playwright-Smoke für Login + Analytics-Dashboard-Load.
 8. **Startup-Env-Validator** (Zod) + Sentry-Integration.
@@ -894,8 +895,8 @@ graph LR
 - Testing-Foundation (Vitest + Playwright-Smokes)
 
 **Phase C (2 Wochen):** Infra + Daten
-- Aggregator `marketplace-overview` als einziger Pfad
-- Supabase-Pool-Upgrade
+- Aggregator `marketplace-overview` als einziger Pfad (Effizienz, nicht mehr Pool-Rettung)
+- ~~Supabase-Pool-Upgrade~~ **erledigt (Pro-Plan)**
 - Xentral-File-Cache → Tabelle
 - Marktplatz-Client-Wrapper Config-Registry
 
@@ -955,7 +956,7 @@ Internes Business-Dashboard mit Analytics (Profit/Retouren), Produkt-Editoren (i
 - **Auth in API-Routen**: `createServerSupabase()` aus `@/shared/lib/supabase/server`. Service-Role nur `createAdminClient()` aus `@/shared/lib/supabase/admin`. Nie im Client.
 - **Secrets**: Nur via `readIntegrationSecret(key)` / `readIntegrationSecretsBatch(keys)` aus `@/shared/lib/integrationSecrets`.
 - **Cache**: `integration_data_cache` (server) via `integrationDataCache.ts`; `dashboardClientCache.ts` (browser-localStorage). Direktes Schreiben umgehen.
-- **DB-Pool = 10**: Keine 9-fach parallelen Calls im selben Request. Max 3 parallel, besser server-side bündeln.
+- **DB-Pool = 60 (Supabase Pro)**: Die 9-parallele-Calls-Krise ist **gelöst**. Trotzdem nicht verschwenderisch werden — Concurrency-3-Drossel + Aggregator bleiben Best-Practice für Effizienz und Bundle-Size.
 - **Rollen-Check**: `isOwnerFromSources()` aus `@/shared/lib/roles` (DB + app_metadata + user_metadata).
 - **i18n**: Niemals harte Strings. `t("key")` aus `useTranslation()`. Alle drei Locales (de/en/zh).
 - **Styling**: shadcn/ui + Tailwind. Primitives aus `src/components/ui/`, Eigene aus `src/shared/components/`.
@@ -1004,13 +1005,13 @@ Internes Business-Dashboard mit Analytics (Profit/Retouren), Produkt-Editoren (i
 7. Access-Guard: `DashboardRouteAccessGuard`, falls nicht alle Rollen sehen sollen.
 
 ### Bekannte Probleme / Workarounds:
-- Xentral `?includeSales=1` dauert bis 115 s → nicht synchron auf UX-Pfaden.
-- Analytics-Page feuert 9 parallele Calls → Concurrency-3-Drossel aktiv; Aggregator `marketplace-overview` existiert.
+- Xentral `?includeSales=1` dauert bis 115 s → nicht synchron auf UX-Pfaden. **Aktuelle #1-Performance-Baustelle.**
+- Analytics-Page feuert 9 parallele Calls → seit Pro-Plan kein Pool-Problem mehr; Concurrency-3-Drossel + Aggregator `marketplace-overview` bleiben aus Effizienzgründen empfohlen.
 - `integration_data_cache` ohne RLS — keine User-Daten dort speichern.
 - Dev-Cache `.next/` wächst stark — gelegentlich `rm -rf .next`.
 
 ### Technische Constraints:
-- Supabase Connection-Pool = 10 (Free-Plan).
+- **Supabase Connection-Pool = 60 (Pro-Plan)** — großzügig, aber nicht unbegrenzt.
 - Xentral-Delivery-Sales-Cache schreibt in lokale JSON — keine Parallelisierung ohne Lock.
 - Amazon SP-API rate-limited — `amazonSpApiGetWithQuotaRetry()`.
 - Claude-API teuer — nur Content-Audit.
@@ -1031,9 +1032,9 @@ Internes Business-Dashboard mit Analytics (Profit/Retouren), Produkt-Editoren (i
 
 - **Gescannte Dateien:** 394 TS/TSX in `src/`, 22 Migrations, alle Config-Files, alle Docs, vollständiger Git-Log.
 - **Identifizierte Features:** 18+ dokumentiert (5 mit neu bewerteten Qualitätsnoten).
-- **Identifizierte Schulden:** 24 (2 geschlossen, 2 teilweise, 4 neu, 16 bleiben).
-- **Haupt-Erfolge seit Vor-Review:** Monolith-Pages zerlegt (9 062 → 1 698 LOC, −81 %); 8 neue Hooks; Security-Headers; `rateLimit.ts` + `apiValidation.ts` als Fundament.
-- **Haupt-Risiko (bleibend):** 10-Connection Supabase-Pool bei parallelen Marktplatz-Calls.
+- **Identifizierte Schulden:** 24 (3 geschlossen, 2 teilweise, 4 neu, 15 bleiben).
+- **Haupt-Erfolge seit Vor-Review:** Monolith-Pages zerlegt (9 062 → 1 698 LOC, −81 %); 8 neue Hooks; Security-Headers; `rateLimit.ts` + `apiValidation.ts` als Fundament; **Supabase-Pro-Upgrade (Pool 10 → 60)**.
+- **Haupt-Risiko (bleibend):** `/api/xentral/articles?includeSales=1` blockiert bis 115 s; fehlende Rate-Limit-Adoption.
 - **Haupt-Stärke:** Modernes Stack, konsequente Typ-Sicherheit, dichte Doku-Basis, reife Refactor-Disziplin (alle Gates grün durch 39 Commits).
 
 _Review-Ende._
