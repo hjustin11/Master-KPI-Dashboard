@@ -9,6 +9,8 @@ _Review-Stand: 2026-04-15 (Post-Refactor) · Verfasser: Architektur-Audit · Bas
 > - `analytics/article-forecast/page.tsx` **1 568 → 325** Zeilen (−79 %)
 > - `shared/components/layout/AppSidebar.tsx` **1 534 → 181** Zeilen (−88 %)
 > **Gesamteinsparung: 9 062 → 1 698 Zeilen (−81 %)** in den Haupt-Page-Dateien bei 1:1 Verhaltens-Parität. Dabei entstanden **31 neue Sub-Komponenten** (5 075 LOC) und **8 neue Hooks** (1 520 LOC). Alle Qualitäts-Gates (typecheck, ESLint 0 warnings, 29/29 Tests, prod-build) durchgängig grün über 39 Commits.
+>
+> **Zusätzlich (abends 2026-04-15):** Remote-Schema-Drift geschlossen — 10 fehlende Supabase-Migrationen appliziert, alle 22 Tracker-Einträge repariert, Parent-Workspace `Master-Dashboard/supabase/` unlinked. `/api/marketplaces/promotion-deals` liefert jetzt 200 statt 500.
 
 ---
 
@@ -19,7 +21,7 @@ _Review-Stand: 2026-04-15 (Post-Refactor) · Verfasser: Architektur-Audit · Bas
 - **Gelöstes Problem:** Eliminiert das Umherschalten zwischen 9+ Seller-Portalen. KPIs (Umsatz, Retouren, Profitabilität, Bestand), Produktdaten, Bestellungen in einer Oberfläche. LLM-gestützte Content-Audits (Anthropic Claude + OpenAI-Fallback) für Amazon-Listings.
 - **Zielgruppe:** Internes Team von AstroPet/Petrhein — Owner/Admin/Manager/Analyst/Viewer. Mehrsprachig DE/EN/ZH, auf DACH-Betrieb optimiert.
 - **Vision:** _"Ein Dashboard, in dem jeder Business-Mitarbeiter seine Arbeit findet, ohne Tools wechseln zu müssen."_
-- **Reifegrad:** **Production-Ready mit signifikant verbesserter Wartbarkeit und stabiler Infrastruktur**. Der monolithische Komponenten-Stil ist als Hauptschuld **geschlossen**; der frühere DB-Pool-Engpass (10) ist durch **Supabase-Pro-Upgrade (Pool 60)** infrastrukturell beseitigt. Offene Baustellen liegen überwiegend bei Security-Hardening (Rate-Limiting, Env-Validator), Observability (Sentry/Logging) und Test-Coverage.
+- **Reifegrad:** **Production-Ready mit signifikant verbesserter Wartbarkeit und stabiler Infrastruktur**. Der monolithische Komponenten-Stil ist als Hauptschuld **geschlossen**; der frühere DB-Pool-Engpass (10) ist durch **Supabase-Pro-Upgrade (Pool 60)** infrastrukturell beseitigt; der **Remote-Schema-Drift** ist geschlossen (22/22 Migrations applied). Offene Baustellen liegen überwiegend bei Security-Hardening (Rate-Limiting, Env-Validator), Observability (Sentry/Logging) und Test-Coverage.
 - **Entwicklungsaufwand bisher:** **394 TS/TSX-Dateien**, **67 606 LOC** in `src/`, **77 API-Routen**, **22 Migrations**, **~50 Shared-Komponenten** + 25 shadcn-Primitives. Grob: **700–1 000 Entwicklerstunden** (4–6 Personen-Monate) für die sichtbare Funktionalität. Wachstum seit letztem Review: +9 Dateien / +0 LOC (netto durch Refactor, Page-LOC wurden zu Hook/Component-LOC umverteilt).
 
 ### Vergleich zum Vor-Review
@@ -72,10 +74,11 @@ _Review-Stand: 2026-04-15 (Post-Refactor) · Verfasser: Architektur-Audit · Bas
 
 ### Datenbank
 - **PostgreSQL 17.6** (Supabase-hosted)
-- **22 Migrations** (`20260328` … `20260501`), konsequent datiert
+- **22 Migrations** (`20260328` … `20260501`), konsequent datiert; **alle 22 auf Remote appliziert (2026-04-15 Sync)**, Tracker `supabase_migrations.schema_migrations` synchron
 - **Supabase-Plan:** **Pro** (Upgrade seit letztem Review)
 - **Connection Pool:** **60** (Pro-Plan; vormals 10 unter Free) — Parallel-Load der 9 Marktplatz-Calls damit nicht mehr Root-Cause; trotzdem bewusst halten
 - **RLS:** aktiviert auf allen User-Daten-Tabellen (Profiles, Promo-Deals, Drafts, Layouts, Tutorial-Progress, Access-Config); bewusst aus auf Cache/Override-Tabellen (dokumentiert).
+- **Workspace-Hinweis:** Nur der Workspace `master-dashboard/supabase/` ist an Remote gelinkt. Der frühere Parent-Workspace `Master-Dashboard/supabase/` (enthält nur Edge-Functions-Ordner, kein `migrations/`) wurde am 2026-04-15 entlinked, um `db push`-Mismatch-Fehler zu vermeiden.
 
 ### DevOps / Infrastruktur
 | Komponente | Wert |
@@ -321,7 +324,7 @@ erDiagram
 - `tutorial_scene_nav_highlight` — Szenen-spezifische Nav-Highlights.
 
 ### Migrationshistorie
-22 Migrations, `20260328120000_dashboard_access_config.sql` bis `20260501120000_amazon_product_drafts.sql`. Konsequent datiert, inkrementell.
+22 Migrations, `20260328120000_dashboard_access_config.sql` bis `20260501120000_amazon_product_drafts.sql`. Konsequent datiert, inkrementell. **Remote-Status (2026-04-15):** alle 22 Migrationen appliziert (verified via `supabase migration list --linked` + REST-Probe auf 13 Tabellen + Spaltenprüfung für 3 ALTER-TABLE-Migrationen). Neu durch Session: 10 Tabellen (`shopify_sync`, `marketplace_promotion_deals`, `otto_sync`, `kaufland_sync`, `fressnapf_sync`, `xentral_product_tag_defs`, `xentral_product_sku_tags`, `mms_sync`, `zooplus_sync`, `tiktok_sync`), 7 ALTER-Spalten und 1 Storage-Bucket (`feedback-attachments`, 5 MB).
 
 ### Datenvalidierung — Status mit Delta
 | Schicht | Status | Δ |
@@ -801,12 +804,14 @@ Legende: **GESCHLOSSEN** (seit letztem Review gelöst) · **OFFEN** (weiterhin) 
 | 22 | **NEU** | 3 Loader-Hooks duplizieren Background-Sync-Muster | `useArticleForecastLoader`, `useMarketplaceSalesLoader`, `useXentralOrdersLoader` | Niedrig | Tag | Gemeinsamer `useBackgroundSyncedResource<T>` |
 | 23 | **NEU** | `any` auf 14 gestiegen (von 2) | 6 Dateien, v. a. Marktplatz-API-Types | Mittel | Tag | Type-Definitionen festziehen |
 | 24 | **NEU** | `console.log` (19×) als Dev-Überbleibsel | 25 Dateien | Mittel | Tag | Structured Logger / Cleanup |
+| 25 | **GESCHLOSSEN** | Remote-Schema-Drift: `marketplace_promotion_deals` + 9 weitere Migrationen fehlten auf Supabase-Remote → 500 auf `/api/marketplaces/promotion-deals` | alle Migrations-Files bis `20260405120000` | Kritisch | — | 10 fehlende Migrationen via `supabase db query --linked --file` appliziert, alle 22 Tracker-Einträge via `supabase migration repair --status applied` markiert. REST-Probe bestätigt 10 Tabellen + 7 Spalten + 1 Storage-Bucket vorhanden. |
+| 26 | **GESCHLOSSEN** | Doppelt gelinkter Supabase-Workspace — Parent `Master-Dashboard/supabase/` (leeres `migrations/`, nur Edge-Functions-Ordner) erzeugte `db push --include-all`-Mismatch-Fehler | `Master-Dashboard/supabase/.temp/project-ref` | Niedrig | — | `supabase unlink` im Parent-Workspace. `Master-Dashboard/supabase/functions/{hello-world,master-dashboard}` unberührt gelassen. |
 
 **Zusammenfassung:**
-- **Geschlossen seit letztem Review:** 3 (Schuld #1 Supabase-Pool via Pro-Upgrade, #3 Monolith-Pages, #12 Security-Headers)
+- **Geschlossen seit letztem Review:** 5 (#1 Supabase-Pool via Pro-Upgrade, #3 Monolith-Pages, #12 Security-Headers, #25 Remote-Drift, #26 Workspace-Doppel-Link)
 - **Teilweise geschlossen:** 2 (#2 Rate-Limit-Lib da, #5 Zod-Helper da)
 - **Neu aufgetaucht:** 4 (#21 Amazon-Editor + Lib-Monolithen, #22 Loader-Duplikation, #23 `any`-Anstieg, #24 console.log)
-- **Gesamtsaldo:** Qualität **deutlich verbessert** — der kritischste Produktionsvorfall-Auslöser (DB-Pool) ist infrastrukturell gelöst.
+- **Gesamtsaldo:** Qualität **deutlich verbessert** — der kritischste Produktionsvorfall-Auslöser (DB-Pool) ist infrastrukturell gelöst und der letzte latente 500-Fehler aus Remote-Drift ist behoben.
 
 ---
 
@@ -1009,6 +1014,7 @@ Internes Business-Dashboard mit Analytics (Profit/Retouren), Produkt-Editoren (i
 - Analytics-Page feuert 9 parallele Calls → seit Pro-Plan kein Pool-Problem mehr; Concurrency-3-Drossel + Aggregator `marketplace-overview` bleiben aus Effizienzgründen empfohlen.
 - `integration_data_cache` ohne RLS — keine User-Daten dort speichern.
 - Dev-Cache `.next/` wächst stark — gelegentlich `rm -rf .next`.
+- **Supabase-Workspace:** Immer aus `master-dashboard/` pushen (`supabase db push --linked` / `migration list --linked`). Parent-Workspace `Master-Dashboard/supabase/` ist seit 2026-04-15 unlinked und hat kein `migrations/`.
 
 ### Technische Constraints:
 - **Supabase Connection-Pool = 60 (Pro-Plan)** — großzügig, aber nicht unbegrenzt.
@@ -1032,8 +1038,8 @@ Internes Business-Dashboard mit Analytics (Profit/Retouren), Produkt-Editoren (i
 
 - **Gescannte Dateien:** 394 TS/TSX in `src/`, 22 Migrations, alle Config-Files, alle Docs, vollständiger Git-Log.
 - **Identifizierte Features:** 18+ dokumentiert (5 mit neu bewerteten Qualitätsnoten).
-- **Identifizierte Schulden:** 24 (3 geschlossen, 2 teilweise, 4 neu, 15 bleiben).
-- **Haupt-Erfolge seit Vor-Review:** Monolith-Pages zerlegt (9 062 → 1 698 LOC, −81 %); 8 neue Hooks; Security-Headers; `rateLimit.ts` + `apiValidation.ts` als Fundament; **Supabase-Pro-Upgrade (Pool 10 → 60)**.
+- **Identifizierte Schulden:** 26 (5 geschlossen, 2 teilweise, 4 neu, 15 bleiben).
+- **Haupt-Erfolge seit Vor-Review:** Monolith-Pages zerlegt (9 062 → 1 698 LOC, −81 %); 8 neue Hooks; Security-Headers; `rateLimit.ts` + `apiValidation.ts` als Fundament; **Supabase-Pro-Upgrade (Pool 10 → 60)**; **Remote-Schema-Drift geschlossen — 10 fehlende Migrations appliziert, 22/22 Tracker-Einträge repariert**; **Workspace-Doppel-Link entfernt**.
 - **Haupt-Risiko (bleibend):** `/api/xentral/articles?includeSales=1` blockiert bis 115 s; fehlende Rate-Limit-Adoption.
 - **Haupt-Stärke:** Modernes Stack, konsequente Typ-Sicherheit, dichte Doku-Basis, reife Refactor-Disziplin (alle Gates grün durch 39 Commits).
 
