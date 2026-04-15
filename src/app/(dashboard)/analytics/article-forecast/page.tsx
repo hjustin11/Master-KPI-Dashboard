@@ -9,25 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, ChevronDown, Loader2, Settings2, Store, Warehouse } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { DataTable } from "@/shared/components/DataTable";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
@@ -57,6 +40,9 @@ import { usePromotionDeals } from "../marketplaces/usePromotionDeals";
 import { ArticleForecastHeader } from "./components/ArticleForecastHeader";
 import { ArticleForecastAlerts } from "./components/ArticleForecastAlerts";
 import { ArticleForecastMetaBanner } from "./components/ArticleForecastMetaBanner";
+import { MarketplaceColumnPicker } from "./components/MarketplaceColumnPicker";
+import { WarehouseColumnPicker } from "./components/WarehouseColumnPicker";
+import { ArticleForecastRulesPopover } from "./components/ArticleForecastRulesPopover";
 import {
   ARTICLE_FORECAST_CACHE_KEY,
   ARTICLE_FORECAST_RULE_SCOPE_KEY,
@@ -973,312 +959,27 @@ export default function AnalyticsArticleForecastPage() {
                   {hasLoadedOnce ? t("articleForecast.refreshing") : t("articleForecast.loading")}
                 </span>
               ) : null}
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  nativeButton
-                  className={cn(
-                    "inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-xs",
-                    "hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                  )}
-                  aria-label={t("articleForecast.marketplacesMenuAria")}
-                >
-                  <Store className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-                  <span>{t("articleForecast.marketplacesMenu")}</span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="max-h-72 min-w-[14rem] overflow-y-auto">
-                  {projectColumns.length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      {t("articleForecast.marketplacesEmpty")}
-                    </div>
-                  ) : (
-                    <>
-                      {projectColumns.map((proj) => {
-                        const label = sentenceCaseColumnLabel(proj);
-                        const checked = marketplaceColumnVisibility[proj] !== false;
-                        return (
-                          <DropdownMenuCheckboxItem
-                            key={proj}
-                            checked={checked}
-                            onCheckedChange={(next) => {
-                              setMarketplaceColumnVisibility((prev) => ({
-                                ...prev,
-                                [proj]: next === true,
-                              }));
-                            }}
-                          >
-                            <span className="min-w-0 truncate" title={label}>
-                              {label}
-                            </span>
-                          </DropdownMenuCheckboxItem>
-                        );
-                      })}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setMarketplaceColumnVisibility((prev) => {
-                            const next = { ...prev };
-                            for (const p of projectColumns) next[p] = true;
-                            return next;
-                          });
-                        }}
-                      >
-                        {t("articleForecast.marketplacesShowAll")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setMarketplaceColumnVisibility((prev) => {
-                            const next = { ...prev };
-                            for (const p of projectColumns) next[p] = false;
-                            return next;
-                          });
-                        }}
-                      >
-                        {t("articleForecast.marketplacesHideAll")}
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  nativeButton
-                  className={cn(
-                    "inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-xs",
-                    "hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                  )}
-                  aria-label={t("articleForecast.warehousesMenuAria")}
-                >
-                  <Warehouse className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-                  <span>{t("articleForecast.warehousesMenu")}</span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="max-h-72 min-w-[14rem] overflow-y-auto">
-                  {warehouseColumns.length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      {t("articleForecast.warehousesEmpty")}
-                    </div>
-                  ) : (
-                    <>
-                      {warehouseColumns.map((loc) => {
-                        const label = sentenceCaseColumnLabel(loc);
-                        const checked = warehouseColumnVisibility[loc] !== false;
-                        return (
-                          <DropdownMenuCheckboxItem
-                            key={loc}
-                            checked={checked}
-                            onCheckedChange={(next) => {
-                              setWarehouseColumnVisibility((prev) => ({
-                                ...prev,
-                                [loc]: next === true,
-                              }));
-                            }}
-                          >
-                            <span className="min-w-0 truncate" title={label}>
-                              {label}
-                            </span>
-                          </DropdownMenuCheckboxItem>
-                        );
-                      })}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setWarehouseColumnVisibility((prev) => {
-                            const next = { ...prev };
-                            for (const w of warehouseColumns) next[w] = true;
-                            return next;
-                          });
-                        }}
-                      >
-                        {t("articleForecast.warehousesShowAll")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setWarehouseColumnVisibility((prev) => {
-                            const next = { ...prev };
-                            for (const w of warehouseColumns) next[w] = false;
-                            return next;
-                          });
-                        }}
-                      >
-                        {t("articleForecast.warehousesHideAll")}
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Popover>
-                <PopoverTrigger
-                  render={
-                    <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
-                      <Settings2 className="h-3.5 w-3.5" aria-hidden />
-                      {t("articleForecast.rulesMenu")}
-                    </Button>
-                  }
-                />
-                <PopoverContent align="start" className="w-[22rem]">
-                  <PopoverHeader>
-                    <PopoverTitle>{t("articleForecast.rulesMenu")}</PopoverTitle>
-                    <PopoverDescription>{t("articleForecast.rulesDescription")}</PopoverDescription>
-                  </PopoverHeader>
-
-                  <div className="mt-1 flex items-center gap-1">
-                    <Button
-                      type="button"
-                      variant={ruleScope === "temporary" ? "default" : "outline"}
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => setRuleScope("temporary")}
-                    >
-                      {t("articleForecast.scopeTemporary")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={ruleScope === "fixed" ? "default" : "outline"}
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => setRuleScope("fixed")}
-                    >
-                      {t("articleForecast.scopeFixed")}
-                    </Button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">
-                        {t("articleForecast.ruleProjectionDays")}
-                      </span>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={366}
-                        className="h-8 text-xs"
-                        value={String(activeRules.projectionDays)}
-                        onChange={(e) => {
-                          const value = Number(e.target.value);
-                          setRulesByScope((prev) => ({
-                            ...prev,
-                            [ruleScope]: {
-                              ...prev[ruleScope],
-                              projectionDays: Number.isFinite(value) ? value : 1,
-                            },
-                          }));
-                        }}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">
-                        {t("articleForecast.ruleSalesWindowDays")}
-                      </span>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={366}
-                        className="h-8 text-xs"
-                        value={String(activeRules.salesWindowDays)}
-                        onChange={(e) => {
-                          const value = Number(e.target.value);
-                          setRulesByScope((prev) => ({
-                            ...prev,
-                            [ruleScope]: {
-                              ...prev[ruleScope],
-                              salesWindowDays: Number.isFinite(value) ? value : 1,
-                            },
-                          }));
-                        }}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">
-                        {t("articleForecast.ruleLowStock")}
-                      </span>
-                      <Input
-                        type="number"
-                        className="h-8 text-xs"
-                        value={String(activeRules.lowStockThreshold)}
-                        onChange={(e) => {
-                          const value = Number(e.target.value);
-                          setRulesByScope((prev) => ({
-                            ...prev,
-                            [ruleScope]: {
-                              ...prev[ruleScope],
-                              lowStockThreshold: Number.isFinite(value) ? value : 0,
-                            },
-                          }));
-                        }}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">
-                        {t("articleForecast.ruleCriticalStock")}
-                      </span>
-                      <Input
-                        type="number"
-                        className="h-8 text-xs"
-                        value={String(activeRules.criticalStockThreshold)}
-                        onChange={(e) => {
-                          const value = Number(e.target.value);
-                          setRulesByScope((prev) => ({
-                            ...prev,
-                            [ruleScope]: {
-                              ...prev[ruleScope],
-                              criticalStockThreshold: Number.isFinite(value) ? value : 0,
-                            },
-                          }));
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant={activeRules.includeInboundProcurement ? "default" : "outline"}
-                    size="sm"
-                    className="h-8 w-full text-xs"
-                    onClick={() =>
-                      setRulesByScope((prev) => ({
-                        ...prev,
-                        [ruleScope]: {
-                          ...prev[ruleScope],
-                          includeInboundProcurement: !prev[ruleScope].includeInboundProcurement,
-                        },
-                      }))
-                    }
-                  >
-                    {activeRules.includeInboundProcurement
-                      ? t("articleForecast.ruleInboundOn")
-                      : t("articleForecast.ruleInboundOff")}
-                  </Button>
-
-                  <div className="flex items-center justify-between gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 text-xs"
-                      disabled={rulesSaving || rulesLoading}
-                      onClick={() => void saveRules(ruleScope, activeRules)}
-                    >
-                      {rulesSaving ? t("articleForecast.rulesSaving") : t("articleForecast.rulesSave")}
-                    </Button>
-                    {rulesLoading ? (
-                      <span className="text-[11px] text-muted-foreground">
-                        {t("articleForecast.rulesLoading")}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  {rulesError ? (
-                    <div className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] text-red-700">
-                      {rulesError}
-                    </div>
-                  ) : null}
-                  {rulesNotice ? (
-                    <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-800">
-                      {rulesNotice}
-                    </div>
-                  ) : null}
-                </PopoverContent>
-              </Popover>
+              <MarketplaceColumnPicker
+                projectColumns={projectColumns}
+                visibility={marketplaceColumnVisibility}
+                setVisibility={setMarketplaceColumnVisibility}
+              />
+              <WarehouseColumnPicker
+                warehouseColumns={warehouseColumns}
+                visibility={warehouseColumnVisibility}
+                setVisibility={setWarehouseColumnVisibility}
+              />
+              <ArticleForecastRulesPopover
+                ruleScope={ruleScope}
+                setRuleScope={setRuleScope}
+                activeRules={activeRules}
+                setRulesByScope={setRulesByScope}
+                saveRules={saveRules}
+                rulesSaving={rulesSaving}
+                rulesLoading={rulesLoading}
+                rulesError={rulesError}
+                rulesNotice={rulesNotice}
+              />
               <div className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background px-2 py-1 text-[11px] text-muted-foreground">
                 <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
                 <span>{t("articleForecast.legendLow")}</span>
