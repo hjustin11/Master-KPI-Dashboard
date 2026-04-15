@@ -1,95 +1,101 @@
 # PROJECT_REVIEW.md — Master Dashboard
 
-_Review-Stand: 2026-04-15 · Verfasser: Architektur-Audit · Basis: statischer Scan aller Quellen, Migrationen, Lockfile, Docs und Git-Historie_
+_Review-Stand: 2026-04-15 (Post-Refactor) · Verfasser: Architektur-Audit · Basis: vollständiger rekursiver Scan aller Quellen, Migrationen, Lockfile, Docs, Git-Historie · Vergleich mit Vorgänger-Review vom selben Tag (Pre-Refactor)_
+
+> **Was ist seit dem letzten Review passiert?**
+> Vier Monolith-Pages wurden systematisch in Sub-Komponenten und Custom-Hooks zerlegt:
+> - `analytics/marketplaces/page.tsx` **3 921 → 582** Zeilen (−85 %)
+> - `xentral/orders/page.tsx` **1 839 → 610** Zeilen (−67 %)
+> - `analytics/article-forecast/page.tsx` **1 568 → 325** Zeilen (−79 %)
+> - `shared/components/layout/AppSidebar.tsx` **1 534 → 181** Zeilen (−88 %)
+> **Gesamteinsparung: 9 062 → 1 698 Zeilen (−81 %)** in den Haupt-Page-Dateien bei 1:1 Verhaltens-Parität. Dabei entstanden **31 neue Sub-Komponenten** (5 075 LOC) und **8 neue Hooks** (1 520 LOC). Alle Qualitäts-Gates (typecheck, ESLint 0 warnings, 29/29 Tests, prod-build) durchgängig grün über 39 Commits.
 
 ---
 
 ## Abschnitt 1 — Projekt-Identität
 
 - **Name:** Master Dashboard (`master-dashboard` in [package.json](master-dashboard/package.json))
-- **Zweck:** Zentraler Operations-Hub für ein Multi-Marktplatz-Pet-Supply-Geschäft (Petrhein/AstroPet). Verheiratet Xentral-ERP mit 9 Marktplatz-APIs (Amazon, eBay, Otto, Kaufland, Fressnapf, MediaMarkt/Saturn, Zooplus, TikTok, Shopify) und stellt darüber Analytics, Orderabwicklung, Procurement, Preis-Paritätskontrolle und Team-Workflow bereit.
-- **Gelöstes Problem:** Eliminiert das Umherschalten zwischen 9+ Seller-Portalen. KPIs (Umsatz, Retouren, Profitabilität, Bestand), Produktdaten und Bestellungen kommen in einer Oberfläche zusammen. LLM-gestützte Content-Audits (Anthropic Claude + OpenAI-Fallback) für Amazon-Listings.
-- **Zielgruppe:** Internes Team von AstroPet/Petrhein — Owner/Admin/Manager/Analyst/Viewer. Mehrsprachig (DE/EN/ZH), klar auf DACH-Betrieb optimiert.
-- **Vision:** "Ein Dashboard, in dem jeder Business-Mitarbeiter seine Arbeit findet, ohne Tools wechseln zu müssen." Belegt durch: (a) feingranulares Rollen-/Sichtbarkeits-System in `useAppStore`, (b) Tutorial-Engine mit Mascot, (c) personalisierbare Home-Layouts, (d) Promo-Deal-Annotationen in Analytics-Charts, (e) Feedback-Kanal inkl. Attachments.
-- **Reifegrad:** **Production-Ready mit aktiven Baustellen**. CI grün, gedachte Launch-Checklisten vorhanden, aber mehrere P0/P1-Punkte (Rate-Limiting, Sync-Secret-Enforcement, Migration-Drift) offen. Kein Legacy-Code — alles modern (React 19, Next 16, Tailwind 4).
-- **Geschätzter Entwicklungsaufwand bisher:** ~355 TypeScript/TSX-Dateien, ~22 Migrations, ~78 API-Routen, ~25 shadcn-Komponenten plus eigene ~60 Shared-Komponenten. Grob: **600–900 Entwickler-Stunden** (3–5 Personen-Monate) vollzeitäquivalent für die sichtbare Funktionalität; davon ein hoher Anteil in den Marktplatz-Integrationen und Analytics/Profitabilitäts-Berechnungen.
+- **Zweck:** Zentraler Operations-Hub für Multi-Marktplatz-Pet-Supply-Geschäft (Petrhein/AstroPet). Aggregiert Xentral-ERP mit 9 Marktplatz-APIs (Amazon, eBay, Otto, Kaufland, Fressnapf, MediaMarkt/Saturn, Zooplus, TikTok, Shopify) und stellt Analytics, Orderabwicklung, Procurement, Preisparität, Team-Workflow bereit.
+- **Gelöstes Problem:** Eliminiert das Umherschalten zwischen 9+ Seller-Portalen. KPIs (Umsatz, Retouren, Profitabilität, Bestand), Produktdaten, Bestellungen in einer Oberfläche. LLM-gestützte Content-Audits (Anthropic Claude + OpenAI-Fallback) für Amazon-Listings.
+- **Zielgruppe:** Internes Team von AstroPet/Petrhein — Owner/Admin/Manager/Analyst/Viewer. Mehrsprachig DE/EN/ZH, auf DACH-Betrieb optimiert.
+- **Vision:** _"Ein Dashboard, in dem jeder Business-Mitarbeiter seine Arbeit findet, ohne Tools wechseln zu müssen."_
+- **Reifegrad:** **Production-Ready mit signifikant verbesserter Wartbarkeit**. Der monolithische Komponenten-Stil ist als Hauptschuld **geschlossen**. Offene Baustellen liegen jetzt überwiegend bei Security-Hardening (Rate-Limiting, Env-Validator), Observability (Sentry/Logging) und Test-Coverage.
+- **Entwicklungsaufwand bisher:** **394 TS/TSX-Dateien**, **67 606 LOC** in `src/`, **77 API-Routen**, **22 Migrations**, **~50 Shared-Komponenten** + 25 shadcn-Primitives. Grob: **700–1 000 Entwicklerstunden** (4–6 Personen-Monate) für die sichtbare Funktionalität. Wachstum seit letztem Review: +9 Dateien / +0 LOC (netto durch Refactor, Page-LOC wurden zu Hook/Component-LOC umverteilt).
+
+### Vergleich zum Vor-Review
+| Dimension | Vor (2026-04-15 a.m.) | Nach (2026-04-15 p.m.) |
+|---|---|---|
+| Maximale Page-LOC | 3 921 | 610 |
+| Dateien > 1 000 LOC in `src/app/` | 4 | 0 |
+| Neue Custom-Hooks | — | +8 (inkl. Forecast, Orders-Loader, Sidebar, Polling) |
+| Gesamtschulden (Schweregrad × Anzahl) | 20 Einträge | 22 Einträge (5 geschlossen, 7 neu, 10 bleiben) |
 
 ---
 
-## Abschnitt 2 — Tech-Stack (Vollständige Auflistung)
+## Abschnitt 2 — Tech-Stack (vollständig)
 
 ### Frontend
-| Technologie | Version | Rolle | Tiefe | Alternativen |
+| Technologie | Version | Rolle | Tiefe | Δ zum Vor-Review |
 |---|---|---|---|---|
-| **Next.js** | 16.2.1 | App-Router, Server/Client-Split, Turbopack-Dev | Tief (ganzes Projekt lebt davon) | Keine sinnvolle — Remix oder eigenes SSR wäre Rückschritt |
-| **React** | 19.2.4 | UI-Kernbibliothek | Tief | — |
-| **TypeScript** | ^5 (strict) | Typsicherheit | Tief | — |
-| **@base-ui/react** | ^1.3.0 | Unstyled Primitives | Mittel (neben Radix/shadcn) | Konsolidierung mit Radix denkbar |
-| **shadcn/ui** | ^4.1.0 | Komponentenbasis | Tief (25 generierte Komponenten) | — |
-| **Tailwind CSS** | ^4 | Styling | Tief | — |
-| **lucide-react** | ^1.7.0 | Icons | Tief | — |
-| **Zustand** | ^5.0.12 | Client-State (Rollen, UI-Flags) | Tief (ein Store: `useAppStore`) | Redux wäre overkill; Jotai denkbar |
-| **TanStack Query** | ^5.95.2 | Server-State, Hooks | **Unter-genutzt** — installiert aber wenig verwendet | Ausbau wäre Gewinn |
-| **TanStack Table** | ^8.21.3 | Daten-Tabellen | Mittel (Orders, Products) | — |
-| **React Hook Form** | ^7.72.0 | Formulare | Mittel | — |
-| **Zod** | ^4.3.6 | Validierung | **Unter-genutzt** — installiert, aber API-Inputs oft manuell geparst | Konsequenter Einsatz würde P1-Risiken schließen |
-| **Recharts** | ^3.8.1 | Charts | Tief (Analytics) | — |
-| **date-fns** | ^4.1.0 | Date-Utilities | Tief | — |
-| **xlsx** | ^0.18.5 | Excel-Import (Procurement) | Mittel | — |
-| **next-themes** | ^0.4.6 | Dark Mode | Mittel | — |
-| **sonner** | ^2.0.7 | Toast-Notifications | Mittel | — |
-| **cmdk** | ^1.1.1 | Command Palette | Leicht | — |
-| **react-day-picker** | ^9.14.0 | Datepicker | Mittel | — |
-| **class-variance-authority / clsx / tailwind-merge / tw-animate-css** | aktuell | shadcn-Infrastruktur | Mittel | — |
+| **Next.js** | 16.2.1 | App-Router, Server/Client-Split, Turbopack-Dev | Tief | = |
+| **React** | 19.2.4 | UI-Kernbibliothek | Tief | = |
+| **TypeScript** | ^5 (strict) | Typsicherheit | Tief | = |
+| **@base-ui/react** | ^1.3.0 | Unstyled Primitives | Mittel | = |
+| **shadcn/ui** | ^4.1.0 | Komponentenbasis | Tief | = |
+| **Tailwind CSS** | ^4 | Styling | Tief | = |
+| **lucide-react** | ^1.7.0 | Icons | Tief | = |
+| **Zustand** | ^5.0.12 | Client-State (Rollen, UI, WIP-Locks) | Tief (ein Store: `useAppStore`) | = |
+| **@tanstack/react-query** | ^5.95.2 | Server-State | **Unter-genutzt** | = (unverändert) |
+| **@tanstack/react-table** | ^8.21.3 | Daten-Tabellen | Mittel | = |
+| **react-hook-form** | ^7.72.0 | Formulare | Mittel | = |
+| **@hookform/resolvers** | ^5.2.2 | RHF-Zod-Bridge | Leicht | = |
+| **Zod** | ^4.3.6 | Validierung | **Wachsend** — neu auch in API (`apiValidation.ts`) | ↑ |
+| **Recharts** | ^3.8.1 | Charts | Tief | = |
+| **date-fns** | ^4.1.0 | Date-Utilities | Tief | = |
+| **xlsx** | ^0.18.5 | Excel-Import | Mittel | = |
+| **next-themes** | ^0.4.6 | Dark Mode | Mittel | = |
+| **sonner** | ^2.0.7 | Toasts | Mittel | = |
+| **cmdk** | ^1.1.1 | Command Palette | Leicht | = |
+| **react-day-picker** | ^9.14.0 | Datepicker | Mittel | = |
+| **class-variance-authority / clsx / tailwind-merge / tw-animate-css** | aktuell | shadcn-Infrastruktur | Mittel | = |
 
 ### Backend
 | Technologie | Version | Rolle | Tiefe |
 |---|---|---|---|
 | **Node.js** | 20.x (CI) | Runtime | Tief |
-| **Next.js Route Handlers** | 16.2.1 | API-Layer (78 Endpunkte) | Tief |
+| **Next.js Route Handlers** | 16.2.1 | API-Layer (77 Endpunkte) | Tief |
 | **Supabase JS SDK** | `@supabase/supabase-js` ^2.100.1 | DB/Auth-Clients | Tief |
-| **Supabase SSR** | `@supabase/ssr` ^0.9.0 | Cookie-Auth für RSC/Route Handler | Tief |
-| **Resend** | ^6.9.4 | Transaktionale E-Mails (Invitations, Feedback?) | Mittel |
-| **Anthropic Claude API** | via Fetch | LLM Content-Audit + Title-Review | Tief (Fachlogik in `amazonContentAudit.ts` + `amazonContentLlmClaude.ts`) |
+| **Supabase SSR** | `@supabase/ssr` ^0.9.0 | Cookie-Auth | Tief |
+| **Resend** | ^6.9.4 | Transaktionale E-Mails | Mittel |
+| **Anthropic Claude API** | via Fetch | LLM Content-Audit | Tief |
 | **OpenAI API** | via Fetch (Fallback) | LLM Alternative | Mittel |
 
 ### Datenbank
-- **PostgreSQL 17.6** (Supabase-hosted, `aarch64-unknown-linux-gnu`, laut PostgREST-Logs)
-- **Schema-Design:** Relationale Tabellen pro Fachdomäne + JSONB für variable Payloads (Integration-Cache, Tutorial-Szenen, Profitabilitäts-Summaries)
-- **Row Level Security:** ~71 % der Tabellen (17/24) haben RLS. Kritische User-Daten geschützt, Analytics-Snapshots bewusst offen.
-- **Migrations:** `supabase/migrations/` mit 22 datierten SQL-Files
-- **Connection Pool:** **nur 10** (aus PostgREST-Log `Connection Pool initialized with a maximum size of 10`) — aktuell realer Engpass unter Last
+- **PostgreSQL 17.6** (Supabase-hosted)
+- **22 Migrations** (`20260328` … `20260501`), konsequent datiert
+- **Connection Pool:** nach wie vor **10** — realer Engpass bei Parallel-Load
+- **RLS:** aktiviert auf allen User-Daten-Tabellen (Profiles, Promo-Deals, Drafts, Layouts, Tutorial-Progress, Access-Config); bewusst aus auf Cache/Override-Tabellen (dokumentiert).
 
 ### DevOps / Infrastruktur
 | Komponente | Wert |
 |---|---|
-| Hosting | **Vercel** (`master-kpi-dashboard.vercel.app`) |
-| CI | **GitHub Actions** (`.github/workflows/ci.yml`): lint + typecheck + build, Node 20, 20 min Timeout |
-| Deploy-Trigger | Push auf `main` / PR |
-| Cron | Ein Cron über `vercel.json`: `/api/integration-cache/warm` alle 30 min |
+| Hosting | **Vercel** |
+| CI | **GitHub Actions** (`.github/workflows/ci.yml`): lint + typecheck + build, Node 20 |
+| Deploy-Trigger | Push auf `main`, PR-Preview |
+| Cron | Ein Cron (`vercel.json`): `/api/integration-cache/warm` alle 30 min |
 | Edge Runtime | Nicht genutzt — alle Routen Node-Runtime |
-| Monitoring | Nichts integriert (kein Sentry, kein LogDNA sichtbar); Supabase-Logs als Primärquelle |
+| Security Headers | **NEU:** CSP, HSTS, X-Frame-Options via `next.config.ts` (Δ zum Vor-Review) |
+| Monitoring | Weiterhin **keins** (kein Sentry/DataDog) |
 
-### Externe Services / APIs
-- **Amazon SP-API** (SigV4 + LWA-Token-Refresh)
-- **Otto API** (OAuth2 Client Credentials, Token-Cache in-memory)
-- **Kaufland API** (HMAC-SHA256 pro Request)
-- **Fressnapf / MediaMarkt-Saturn / Zooplus** (Mirakl-Standard, API-Key oder `X-API-Key`)
-- **eBay API** (OAuth2 Bearer, Token-Cache)
-- **TikTok Shop** (Basic Auth)
-- **Shopify Admin API** (`X-Shopify-Access-Token`)
-- **Xentral ERP** (PAT bevorzugt, API-Key als Fallback)
-- **Anthropic Claude** (Content/Title Review)
-- **OpenAI** (LLM-Fallback)
-- **Nominatim / Photon OSM** (Adress-Suggestion)
-- **Resend** (E-Mail)
+### Externe Services
+- Amazon SP-API (SigV4 + LWA), Otto (OAuth2), Kaufland (HMAC-SHA256), Fressnapf/MMS/Zooplus (Mirakl), eBay (OAuth2), TikTok Shop (Basic), Shopify Admin, Xentral ERP (PAT bevorzugt), Anthropic Claude, OpenAI, Nominatim/Photon OSM, Resend, Google Maps (Adress-Autocomplete in `/api/address-suggest`).
 
 ### Dev-Tools
-- **ESLint** ^9, Konfig `eslint-config-next/core-web-vitals` + `eslint-config-next/typescript`
-- **Vitest** ^4.1.3 (statt Jest)
-- **TypeScript** strict
-- **Turbopack** (Next 16 Default)
-- **Keine** Prettier-Config gefunden (Code-Formatierung durch ESLint/Editor)
+- ESLint ^9 (`eslint-config-next/{core-web-vitals,typescript}`)
+- Vitest ^4.1.3
+- TypeScript strict, `skipLibCheck: true`
+- Turbopack (Dev)
+- **Keine Prettier-Config**
 
 ---
 
@@ -97,192 +103,150 @@ _Review-Stand: 2026-04-15 · Verfasser: Architektur-Audit · Basis: statischer S
 
 ```
 master-dashboard/
-├─ .env.example              # Alle Env-Vars dokumentiert
-├─ .env.local                # Laufzeit-Secrets (gitignored)
-├─ .github/workflows/ci.yml  # GitHub Actions CI
-├─ AGENTS.md                 # Hinweis für KI-Agenten: Next 16 ≠ vertrautes Next
-├─ CLAUDE.md                 # Dichte KI-Referenz (Stack, Konventionen)
-├─ CONTRIBUTING.md           # PR-Workflow, Review-Pflichten
-├─ README.md                 # Bootstrap + Qualitäts-Gates
-├─ SUPABASE_SETUP.md         # .env-Vorlage + Auth-URLs
-├─ content/
-│  └─ amazon_haustierbedarf_regelwerk.md  # 41 KB Amazon-Regelwerk (LLM-Context)
-├─ docs/                     # Audit-, Ops-, Quality-Dokumente
-│  ├─ audit/project-architecture.md
-│  ├─ audit/stability-performance-audit.md
+├─ .github/workflows/ci.yml      # GitHub Actions CI
+├─ .env.example / .env.local
+├─ AGENTS.md / CLAUDE.md / CONTRIBUTING.md / README.md / SUPABASE_SETUP.md / PROJECT_REVIEW.md
+├─ content/amazon_haustierbedarf_regelwerk.md   # LLM-Kontext (41 KB)
+├─ docs/
+│  ├─ audit/{project-architecture, stability-performance-audit}.md
 │  ├─ ops/public-launch-checklist.md
-│  ├─ quality/quality-gates-baseline.md
-│  └─ quality/smoke-checklist.md
-├─ eslint.config.mjs
-├─ middleware.ts             # Supabase SSR Auth Gate
-├─ next.config.ts            # Redirects für Section-Roots
-├─ package.json / package-lock.json
+│  └─ quality/{quality-gates-baseline, smoke-checklist}.md
+├─ eslint.config.mjs / tsconfig.json / vitest.config.ts / next.config.ts
+├─ middleware.ts                 # Supabase SSR Auth Gate + Public-Path-Allowlist
 ├─ postcss.config.mjs
-├─ public/brand/             # Marktplatz-Icons (SVG), Logos
+├─ public/brand/                 # Logos, Marktplatz-Icons
 ├─ src/
 │  ├─ app/
-│  │  ├─ (auth)/             # Login/Register/Forgot-Password
-│  │  ├─ (dashboard)/        # Hauptanwendung nach Auth
-│  │  │  ├─ advertising/
-│  │  │  ├─ amazon/          # orders, products
-│  │  │  ├─ analytics/       # marketplaces, article-forecast, procurement, performance
-│  │  │  ├─ ebay|fressnapf|kaufland|mediamarkt-saturn|otto|shopify|tiktok|zooplus/  # orders, products
-│  │  │  ├─ mein-bereich/    # Personal Area
-│  │  │  ├─ settings/        # profile, users, tutorials
-│  │  │  ├─ updates/         # Changelog-Feed
-│  │  │  └─ xentral/         # orders, products
-│  │  ├─ api/                # 78 Route Handlers
-│  │  ├─ auth/               # callback, reset
-│  │  └─ layout.tsx          # Root-Layout
-│  ├─ components/ui/         # shadcn-generierte Primitives (25)
-│  ├─ features/              # Feature-Folders (laut Scan unter-genutzt)
-│  ├─ i18n/
-│  │  ├─ config.ts
-│  │  ├─ translate.ts
-│  │  ├─ I18nProvider.tsx
-│  │  ├─ LanguageSwitcher.tsx
-│  │  └─ messages/{de,en,zh}.json
+│  │  ├─ (auth)/                 # login, register, forgot-password
+│  │  ├─ (dashboard)/            # Hauptanwendung
+│  │  │  ├─ advertising/{campaigns,performance}
+│  │  │  ├─ amazon/{orders,products}
+│  │  │  ├─ analytics/
+│  │  │  │  ├─ marketplaces/     # 582-Z. page.tsx + 10 components/
+│  │  │  │  ├─ article-forecast/ # 325-Z. page.tsx + 8 components/
+│  │  │  │  └─ procurement/
+│  │  │  ├─ ebay|fressnapf|kaufland|mediamarkt-saturn|otto|shopify|tiktok|zooplus/ {orders,products}
+│  │  │  ├─ mein-bereich/
+│  │  │  ├─ settings/{profile,users,tutorials}
+│  │  │  ├─ updates/
+│  │  │  └─ xentral/
+│  │  │     ├─ orders/           # 610-Z. page.tsx + 4 components/
+│  │  │     └─ products/
+│  │  ├─ api/                    # 77 Route-Handler (s. Abschnitt 6)
+│  │  ├─ auth/{callback,reset}
+│  │  └─ layout.tsx
+│  ├─ components/ui/             # 25 shadcn-Primitives
+│  ├─ features/                  # NOCH IMMER leer — Schuld #10
+│  ├─ hooks/use-mobile.ts
+│  ├─ i18n/{config, translate, I18nProvider, LanguageSwitcher, messages/{de,en,zh}.json}
+│  ├─ lib/utils.ts
 │  └─ shared/
-│     ├─ components/         # ~60 eigene Komponenten
-│     ├─ hooks/              # useUser, usePermissions, useMediaQuery …
-│     └─ lib/                # Kernlogik, Marktplatz-Clients, Supabase-Clients, Caches
+│     ├─ components/
+│     │  ├─ auth/
+│     │  ├─ charts/
+│     │  ├─ data/
+│     │  ├─ dev/
+│     │  ├─ layout/
+│     │  │  ├─ AppSidebar.tsx   # 181 Z. (war 1 534)
+│     │  │  ├─ sidebar/         # NEU: 9 Dateien, 1 290 LOC
+│     │  │  │  ├─ nav-utils.ts
+│     │  │  │  ├─ navItems.ts
+│     │  │  │  ├─ NavAccessCheckbox.tsx
+│     │  │  │  ├─ SingleNavItem.tsx
+│     │  │  │  ├─ MarketplaceExpandedGroup.tsx
+│     │  │  │  ├─ CollapsedMarketplacePopover.tsx
+│     │  │  │  ├─ SidebarNavSections.tsx
+│     │  │  │  ├─ SidebarRoleControls.tsx
+│     │  │  │  └─ MobileSidebarTrigger.tsx
+│     │  │  ├─ Header.tsx / Breadcrumbs.tsx / UserNav.tsx / MobileNav.tsx / DashboardRouteAccessGuard.tsx / RoleTestAccessToolbar.tsx / sidebarWipText.ts
+│     │  └─ tutorial/
+│     ├─ hooks/                 # 22 Hooks, 3 287 LOC (8 NEU seit Refactor)
+│     ├─ lib/                   # 97 Dateien, 18 825 LOC
+│     ├─ stores/useAppStore.ts
+│     └─ types/
 ├─ supabase/
 │  ├─ config.toml
-│  ├─ migrations/            # 22 SQL-Migrations (datiert 20260328–20260501)
+│  ├─ migrations/               # 22 SQL-Migrations
 │  └─ integration_secrets_template.sql
-├─ supabase-feature-requests.sql
-├─ supabase-invitations.sql
-├─ supabase-profiles.sql
-├─ tsconfig.json
-├─ vercel.json               # Cron-Konfig
-└─ vitest.config.ts
+├─ supabase-{feature-requests, invitations, profiles}.sql
+└─ vercel.json                  # Cron-Konfig
 ```
 
-### Zweck jeder Hauptebene
-- **`src/app/(auth)/`** — Route-Group für unauthentifizierte Flows; Layout unterscheidet sich von Dashboard.
-- **`src/app/(dashboard)/`** — Authentifizierte Hauptanwendung; Route-Group bündelt Sidebar-Layout.
-- **`src/app/api/`** — Serverseitige Logik. Jedes Marktplatz-Verzeichnis (`amazon/`, `otto/`, …) spiegelt ein externes System. Cross-Cutting: `/api/marketplaces/` (multi-marketplace), `/api/integration-cache/` (infra).
-- **`src/components/ui/`** — Rein generierte shadcn-Komponenten (Primitive). Faustregel: Nichts Business-Logik hier.
-- **`src/shared/components/`** — Projekt-eigene, wiederverwendbare Komponenten. Zwei Subfolder: `layout/`, `auth/`, `charts/`, `data/`, `tutorial/`, `dev/`.
-- **`src/shared/hooks/`** — React-Hooks, gekapselte State/Data-Fetches.
-- **`src/shared/lib/`** — **Kernstück der Domäne**: Marktplatz-Clients, Supabase-Helpers, Caches, Profit-Logik, Xentral-Integrationsschicht.
-- **`src/i18n/`** — Eigenes leichtgewichtiges Translation-Framework (Kontext + JSON).
-- **`src/features/`** — Angelegte Feature-Folder-Struktur, aber in der Realität kaum genutzt. **Inkonsistenz.**
-- **`supabase/`** — Versionierte Migrations + Template für Secrets-Tabelle.
-- **`docs/`** — Operative Dokumentation (Audit, Launch, Qualitäts-Gates).
-
 ### Architektur-Pattern
-Im Wesentlichen **Feature-Based + Layered**:
-- Fachdomänen als Top-Level-Routen (`/amazon/`, `/otto/`, …) mit dazugehörigen API-Endpoints.
-- Drei interne Schichten: `src/shared/lib/` (Domäne/Integration) → `src/shared/hooks/` (React-Glue) → `src/app/(dashboard)/...` (UI).
-- **Kein striktes DDD**, kein BFF-Layer, keine Module-Boundaries via TypeScript-Project-References.
+- **Feature-Based + Layered**: Fachdomänen als Top-Level-Routen mit spiegelbildlichen API-Endpoints.
+- **Drei interne Schichten:** `src/shared/lib/` (Domäne/Integration) → `src/shared/hooks/` (React-Glue) → `src/app/(dashboard)/...` (UI).
+- **NEU:** Seit Refactor starkes **Colocation-Pattern** — jede größere Page hat eine Nachbar-`components/`-Ordner mit Präsentern und eine Serie von Hooks in `src/shared/hooks/` die Datenfluss und Logik kapseln.
+- **Kein striktes DDD**, kein BFF-Layer, keine TS-Project-References.
 
 ### Konsistenzbewertung
-- **Stark konsistent:** Marktplatz-Pages nutzen alle `MarketplaceProductsView` (siehe Abschnitt 11 Duplikation).
-- **Inkonsistent:** `src/features/` existiert, ist aber weitgehend leer/unbenutzt — Wahrscheinliche Spur eines früheren Refactoring-Versuchs.
-- **Inkonsistent:** Große Page-Files (`analytics/marketplaces/page.tsx` = 3 921 Zeilen) durchbrechen das Komponenten-Dekompositionsprinzip massiv.
+- **Stark konsistent (verbessert):**
+  - Marktplatz-Pages nutzen einheitlich `MarketplaceProductsView`.
+  - **NEU:** Vier großen Pages folgen gleichem Muster: dünner Orchestrator + Hooks + Components-Folder.
+- **Inkonsistent (unverändert):**
+  - `src/features/` existiert, ist leer.
+- **Neu entstanden (zu bewerten):**
+  - Duplizierte Muster zwischen `useArticleForecastLoader` / `useMarketplaceSalesLoader` / `useXentralOrdersLoader` (alle folgen demselben `fetchGenerationRef` + Cache-Hydration + Background-Sync-Intervall-Pattern). Ein gemeinsamer `useBackgroundSyncedResource`-Hook könnte extrahiert werden.
 
 ---
 
-## Abschnitt 4 — Feature-Map
+## Abschnitt 4 — Feature-Map (mit neu bewerteten Qualitätsnoten)
 
-> Aufgrund der Vielzahl beschränke ich mich auf 15 repräsentative Kern-Features. Jedes steht prototypisch für eine Kategorie.
+> **Methodik:** Nach dem Refactor wurden Qualitätsbewertungen für die vier zerlegten Features neu berechnet. Zerlegung verbessert Wartbarkeit und Testbarkeit signifikant — das spiegelt sich in den Noten wider.
 
 #### Feature: Analytics → Marktplätze (Multi-Marketplace Revenue & Profit)
-- **Beschreibung:** Zeigt für 9 Marktplätze gleichzeitig Umsatz, Bestellungen, Retouren, Netto-Profitabilität, Trend ggü. Vorperiode; Balken- und Linien-Charts, Kacheln, Promo-Deal-Overlay.
-- **Beteiligte Dateien:** [src/app/(dashboard)/analytics/marketplaces/page.tsx](master-dashboard/src/app/(dashboard)/analytics/marketplaces/page.tsx) (3 921 Zeilen), `marketplaceActionBands.ts`, `developmentReportSalesApi.ts`, API-Endpoints `/api/amazon/sales`, `/api/ebay/sales`, … (9x), `/api/marketplaces/sales-config-status`, `/api/marketplaces/promotion-deals`, `/api/xentral/articles`, `/api/procurement/lines`.
-- **Einstiegspunkt:** `useEffect([period.from, period.to])` zündet 9 `loadXxxSalesRef.current()`-Calls (kürzlich auf 3er-Concurrency gedrosselt, siehe Commit).
-- **Datenfluss:** Browser → Next Route Handler → `getFlexIntegrationConfig()` / Amazon SigV4 → externes Marktplatz-API → `integration_data_cache` (Supabase) → Antwort → Client-Cache (`dashboardClientCache`) → React-State → Chart.
-- **Abhängigkeiten:** Jeder der 9 Marktplatz-Clients, `marketplace-profitability.ts`, `integrationSecrets.ts`, `integrationDataCache.ts`, Supabase, TanStack-Query nur punktuell.
-- **State Management:** Lokaler useState + useRef-Pattern (`periodRef`, `loaderRef`); sessionStorage-Cache für `sales-config-status` (5 min); localStorage für Promo-Deals.
-- **API-Endpunkte:** 9 Sales + `sales-config-status` + `promotion-deals` + Xentral-Articles + Procurement-Lines.
-- **DB-Interaktion:** Lesend `integration_data_cache`, `marketplace_promotion_deals`, `article_forecast_rules`, `procurement_*`. Schreibend nur Promo-Deals + Cache.
-- **UI-Komponenten:** `MarketplaceRevenueChart`, `MarketplaceTotalRevenueLinesChart`, `KPICard`, `ChartCard`, `MarketplacePriceParitySection`.
-- **Edge Cases:** AbortErrors bei Supabase-Last (Commit 2026-04-15), teilweise fehlende Marktplatz-Configs (→ deaktiviert einzelne Kacheln), leere Perioden, FX-Konvertierung (teilw. nicht abgehandelt).
-- **Qualitätsbewertung: 6/10.** Funktional reich, aber 3 921-Zeilen-Monolith mit verschachtelten useEffects, DOM-State und geteilter Ref-Bühne. Hohe Kopplung, schwer testbar, hohe Cognitive Load.
+- **Beteiligte Dateien:**
+  - Orchestrator: [analytics/marketplaces/page.tsx](master-dashboard/src/app/(dashboard)/analytics/marketplaces/page.tsx) — **582 Z.** (war 3 921)
+  - Components: `analytics/marketplaces/components/` — 10 Dateien, 1 817 LOC (`MarketplaceKPIGrid`, `MarketplaceRevenueChart`, `MarketplaceTotalRevenueLinesChart`, `MarketplaceDetailDialog`, `MarketplacePriceParitySection`, `PromotionDealEditor`, `KPICard`, `ChartCard`, …)
+  - Hook: `useMarketplaceSalesLoader` (364 Z.), `useMarketplaceTotals` (216 Z.), `useMarketplaceDetailNavigation`
+  - API: `/api/{mp}/sales` (9×) + `/api/marketplaces/sales-config-status`, `/api/marketplaces/promotion-deals`, `/api/marketplaces/price-parity`
+- **Datenfluss:** Browser → Next Route Handler → `getFlexIntegrationConfig()` / Amazon SigV4 → externes API → `integration_data_cache` → Antwort → `dashboardClientCache` → Hook-State → Chart.
+- **State Management:** Custom-Hook mit `fetchGenerationRef` für Race-Prevention; concurrency-3-Drossel bleibt.
+- **Abhängigkeiten:** 9 Marktplatz-Clients, `marketplace-profitability.ts`, `integrationSecrets.ts`, `integrationDataCache.ts`.
+- **Qualitätsbewertung: 6 → 8 /10.** Monolith entschärft, Testbarkeit stark verbessert, Pro-Sub-Komponenten-Extraktion erlaubt gezielte Memoization. Abzüge: Server-Side-Aggregator fehlt weiterhin, 9 parallele Client-Calls bleiben.
 
-#### Feature: Amazon Product Editor mit LLM-Content-Audit
-- **Beschreibung:** Inline-Editor für Amazon-Listings (Titel, Bullets, Beschreibung, Bilder). LLM-gestützte Titelprüfung gegen Amazon-Regelwerk.
-- **Beteiligte Dateien:** `AmazonProductEditor.tsx` (1 097 Z.), `AmazonRulebookDialog.tsx`, `useAmazonDraftEditor.ts`, `useAmazonContentAudit.ts`, `amazonContentAudit.ts`, `amazonContentPromptBuilder.ts`, `amazonContentLlmClaude.ts`, `amazonTitleLlmReview.ts`, `/api/amazon/products/drafts/route.ts`, `/api/amazon/content-audit/route.ts`, `/api/amazon/rulebook/route.ts`, `content/amazon_haustierbedarf_regelwerk.md`.
-- **Einstiegspunkt:** Button "Bearbeiten" auf `/amazon/products` öffnet Dialog.
-- **Datenfluss:** UI-Änderung → Draft-Hook → POST `/api/amazon/products/drafts` → Supabase `amazon_product_drafts`. "Title-Review" → POST `/api/amazon/content-audit` → Claude API (Tool-Use) → strukturiertes Ergebnis → UI-Highlighting.
-- **Abhängigkeiten:** Claude-API-Key, OpenAI-Fallback, `amazon_product_drafts`-Tabelle (RLS: Owner only).
-- **State Management:** React Hook Form + Draft-Hook; Autosave als localStorage-Shadow.
-- **DB-Interaktion:** CRUD `amazon_product_drafts`; lesend Regelwerk (aus Datei).
-- **UI:** `AmazonProductEditor`, `AmazonRulebookDialog`, `AmazonDraftSuggestionTrigger`.
-- **Edge Cases:** Migration-Fehler → `tableMissing: true` → Client zeigt Platzhalter.
-- **Qualitätsbewertung: 7/10.** Saubere Separation zwischen Hook/Audit-Logik/UI, aber Editor-Datei zu groß (weitere Zerlegung in Sub-Komponenten angezeigt).
-
-#### Feature: Price Parity (Preis-Konsistenz über Marktplätze)
-- **Beschreibung:** Vergleicht Artikelpreise zwischen allen Marktplätzen, zeigt Abweichungen, flaggt Verletzungen. Einsatz für MAP-/UVP-Disziplin.
-- **Beteiligte Dateien:** `/api/marketplaces/price-parity/route.ts` (725 Z.), `MarketplacePriceParitySection.tsx`, `marketplace-profitability.ts`.
-- **Einstiegspunkt:** Sektion auf Marktplatz-Analytics.
-- **Datenfluss:** Für jeden Marktplatz: Produktliste → Preis-Extraktion → Aggregation.
-- **Qualitätsbewertung: 5/10.** 725-Zeilen-Route, kreuzt mehrere Marktplätze → prädestiniert für Zerlegung (jedes Marktplatz-Preis-Parsing in eigenen Helper).
-
-#### Feature: Stock Sync (Bestand schreiben)
-- **Beschreibung:** Überträgt Bestände auf Marktplätze. Typisch Shopify-Inventory + Mirakl-Plattformen.
-- **Beteiligte Dateien:** `/api/marketplaces/stock-sync/route.ts` (624 Z.), `/api/shopify/products/stock-sync/route.ts` (309 Z.).
-- **Qualitätsbewertung: 5/10.** Große Route mit vielen if-Branches pro Marktplatz.
-
-#### Feature: Integration Cache Warmup (Vercel-Cron)
-- **Beschreibung:** Warmt alle 30 min die `integration_data_cache`-Tabelle vor (Orders, Articles, Produktlisten) — damit Benutzer beim Seitenaufruf nicht auf langsame Marktplatz-APIs warten.
-- **Beteiligte Dateien:** `/api/integration-cache/warm/route.ts`, `vercel.json`, alle `primeXxxCache()`-Funktionen in den Marktplatz-Libs.
-- **Einstiegspunkt:** Vercel-Cron HTTP-POST mit `Authorization: Bearer {CRON_SECRET}`.
-- **Datenfluss:** Cron → Warm-Route → iteriert Marktplätze → schreibt `integration_data_cache`.
-- **DB-Interaktion:** Schreibend `integration_data_cache`.
-- **Qualitätsbewertung: 7/10.** Solides Pattern; Auth fail-closed gegen `CRON_SECRET`/`INTEGRATION_CACHE_WARM_SECRET` — **aber Audit warnte vor fallback-freundlichem Default. Prüfen.**
-
-#### Feature: Role-Based UI + Access Config
-- **Beschreibung:** Rollen (Owner/Admin/Manager/Analyst/Viewer) mit feingranularer Sichtbarkeits-/Berechtigungskontrolle pro Sidebar-Item, Page, Widget, Action. Live-Testen via Role-Toolbar für Dev.
-- **Beteiligte Dateien:** `useAppStore.ts` (Zustand-Store), `roles.ts`, `DashboardRouteAccessGuard.tsx`, `RoleTestAccessToolbar.tsx`, `/api/dashboard-access-config/route.ts`, Supabase-Tabelle `dashboard_access_config`.
-- **Qualitätsbewertung: 8/10.** Durchdacht, erweiterbar; Einziger Schwachpunkt: Single-Row-Config ist ein SPoF wenn JSON korrupt.
-
-#### Feature: Tutorials & Onboarding mit Mascot
-- **Beschreibung:** Interaktive Tour-Overlays mit animiertem Space-Cat-Mascot. Szenen markieren UI-Targets (CSS-Selector), Progress pro User persistiert.
-- **Beteiligte Dateien:** `SpaceCatMascot.tsx` (694 Z.), `TutorialOverlay.tsx`, `TutorialRuntimeController.tsx`, `TutorialNavContext.tsx`, `MascotReferencePanel.tsx`, Tabellen `tutorial_tours`, `tutorial_scenes`, `tutorial_user_progress`, `tutorial_scene_nav_highlight`.
-- **Qualitätsbewertung: 7/10.** Breite Feature-Ausstattung, aber Mascot-Animationslogik in 700-Z.-Datei.
-
-#### Feature: Invitation-Flow (Team-Einladung)
-- **Beschreibung:** Owner lädt neue Teammitglieder ein, Einladung per Token-Link, Registration ohne E-Mail-Bestätigung.
-- **Beteiligte Dateien:** `/api/invitations/*` (5 Routen), `invitations`-Tabelle.
-- **Edge Cases/Risiken:** `lookup`-Endpoint öffentlich, **kein Rate-Limit (P1)** — Audit flaggt Enumerations-Risiko.
-- **Qualitätsbewertung: 6/10.** Funktional komplett, Security-Hardening fehlt.
-
-#### Feature: Feedback & Feature-Requests
-- **Beschreibung:** Benutzer reicht Feature-Wünsche ein, kann Dateien anhängen (Screenshots), Owner kann antworten.
-- **Beteiligte Dateien:** `/api/feedback/route.ts` (462 Z.), `/api/feedback/download/route.ts`, Tabelle `feature_requests` + Storage-Bucket `feedback-attachments` (5 MB).
-- **Qualitätsbewertung: 7/10.** Komplettes Feature, 462-Zeilen-Route allerdings Indikator für Splits.
-
-#### Feature: Procurement-Import
-- **Beschreibung:** Excel-Datei mit Bestellmetadaten (Container, SKU, Mengen, Hafen-Ankunftsdatum) wird hochgeladen, geparst, gespeichert und in Forecast einbezogen.
-- **Beteiligte Dateien:** `/api/procurement/import/route.ts`, `/api/procurement/lines/route.ts`, `procurement_imports`, `procurement_lines`, `xlsx`-Library.
-- **Qualitätsbewertung: 7/10.**
+#### Feature: Xentral Orders (Merge mit Marktplatz-Feeds)
+- **Beteiligte Dateien:**
+  - Orchestrator: [xentral/orders/page.tsx](master-dashboard/src/app/(dashboard)/xentral/orders/page.tsx) — **610 Z.** (war 1 839)
+  - Components: `xentral/orders/components/` — 4 Dateien, 999 LOC
+  - Hook: `useXentralOrdersLoader` (311 Z., **NEU**)
+  - Lib: `xentralOrderMerge.ts`, `xentralOrdersPayload.ts` (752 Z., noch groß), `xentral-orders-utils.ts` (147 Z., **NEU**)
+  - API: `/api/xentral/orders`, `/api/address-suggest`
+- **Qualitätsbewertung: 5 → 7 /10.** Page deutlich leserlicher; `xentralOrdersPayload.ts` und `xentralDeliverySalesCache.ts` (594 Z.) bleiben als nächste Refactoring-Kandidaten.
 
 #### Feature: Article Forecast
-- **Beschreibung:** SKU-Level-Prognose aus Xentral-Verkaufshistorie + Inbound-Procurement → Low-Stock-/Critical-Warnings.
-- **Beteiligte Dateien:** `analytics/article-forecast/page.tsx` (1 568 Z.), `xentralArticleForecastProject.ts`, `article_forecast_rules`-Tabelle.
-- **Qualitätsbewertung: 6/10.** 1 568-Z.-Page.
+- **Beteiligte Dateien:**
+  - Orchestrator: [analytics/article-forecast/page.tsx](master-dashboard/src/app/(dashboard)/analytics/article-forecast/page.tsx) — **325 Z.** (war 1 568)
+  - Components: 8 Dateien, 969 LOC (`ArticleForecastHeader`, `ArticleForecastAlerts`, `ArticleForecastMetaBanner`, `ArticleForecastToolbar`, `ArticleForecastRulesPopover`, `MarketplaceColumnPicker`, `WarehouseColumnPicker`, `useArticleForecastColumns`)
+  - Hooks: `useArticleForecastLoader` (299 Z.), `useArticleForecastRules` (123 Z.), `useArticleForecastComputed` (98 Z.), `useColumnVisibility` (52 Z.) — alle **NEU**
+  - Lib: `article-forecast-utils.ts` (192 Z., **NEU**), `xentralArticleForecastProject.ts` (98 Z., **NEU**)
+  - API: `/api/xentral/articles?includeSales=1`, `/api/article-forecast/rules`, `/api/procurement/lines`
+- **Qualitätsbewertung: 6 → 8 /10.** Kleinste Page von den vieren (325 Z.), klare Hook-Aufteilung. Abzug: `/api/xentral/articles?includeSales=1` braucht bis 115 s — Aggregation bleibt langsam (Backend-Thema, nicht Refactor).
 
-#### Feature: Xentral Orders Merge
-- **Beschreibung:** Zusammenführung von Xentral-Aufträgen mit Marktplatz-Feeds zu einer vereinheitlichten Order-Ansicht inkl. Adresskorrektur-Vorschläge (Nominatim/Photon).
-- **Beteiligte Dateien:** `xentral/orders/page.tsx` (1 839 Z.), `xentralOrderMerge.ts`, `/api/xentral/orders/route.ts`, `/api/address-suggest/route.ts` (439 Z.).
-- **Qualitätsbewertung: 5/10.** Größter Page-Monolith nach Marktplatz-Analytics.
+#### Feature: Sidebar (AppSidebar)
+- **Beteiligte Dateien:**
+  - Orchestrator: [shared/components/layout/AppSidebar.tsx](master-dashboard/src/shared/components/layout/AppSidebar.tsx) — **181 Z.** (war 1 534)
+  - Components: `shared/components/layout/sidebar/` — 9 Dateien, 1 290 LOC
+  - Hooks: `useUpdatesPolling`, `useSidebarNav`, `useSidebarRoleTesting` — alle **NEU**
+- **Qualitätsbewertung: 6 → 9 /10.** Mustergültige Zerlegung. Desktop + Mobile teilen sich Hooks und `SidebarNavSections`. Einzige Schwäche: `SingleNavItem.tsx` (~260 Z.) beherbergt noch WIP-Badge-, Bell-, Subnav-Logik — ok, da stark verzahnt.
 
-#### Feature: Updates Feed
-- **Beschreibung:** Changelog/Release-Feed für Nutzer; Karten expandierbar, Unread-Highlight.
-- **Beteiligte Dateien:** `updates/page.tsx` (983 Z.), `/api/updates/route.ts`, `dashboard_updates`-Tabelle.
-- **Qualitätsbewertung: 6/10.** UI-Size deutet auf Split hin (Lister + Card-Komponente).
+#### Feature: Amazon Product Editor mit LLM-Content-Audit
+- **Beteiligte Dateien:** `AmazonProductEditor.tsx` (1 097 Z. — **nicht** zerlegt), `useAmazonDraftEditor.ts`, `useAmazonContentAudit.ts`, `amazonContentAudit.ts` (720 Z.), `amazonProductsSpApiCatalog.ts` (937 Z.), `/api/amazon/products/drafts/`, `/api/amazon/content-audit/`, `/api/amazon/rulebook/`, `content/amazon_haustierbedarf_regelwerk.md`
+- **Qualitätsbewertung: 7/10** (unverändert). Editor-Datei weiterhin Kandidat für Zerlegung — explizit in Schulden-Register #21 aufgenommen.
 
-#### Feature: Personal Home Layout
-- **Beschreibung:** User arrangiert Kacheln auf der Startseite; Layout wird pro User persistiert.
-- **Beteiligte Dateien:** `personal_home_layouts`-Tabelle, (Layout-Komponenten in `app/(dashboard)/page.tsx`).
-- **Qualitätsbewertung: 7/10.**
-
-#### Feature: i18n (DE/EN/ZH)
-- **Beschreibung:** Dot-Path-Translation mit Fallback DE, Parameter-Substitution, Sprachumschalter.
-- **Beteiligte Dateien:** `src/i18n/*`, `src/i18n/messages/{de,en,zh}.json`.
-- **Qualitätsbewertung: 8/10.** Kompakt, klar, fallback-tolerant; fehlt aber SSR-I18n (alles Client).
+#### Weitere Features (unveränderte Bewertungen)
+| Feature | Bewertung | Hauptrisiko |
+|---|---|---|
+| Price Parity | 5/10 | 725-Z.-Route noch nicht zerlegt |
+| Stock Sync | 5/10 | 624-Z.-Route mit viele if-Branches pro Marktplatz |
+| Integration Cache Warmup (Cron) | 7/10 | Fail-closed bestätigt |
+| Role-Based UI + Access Config | 8/10 | Single-Row-Config SPoF |
+| Tutorials & Onboarding (Mascot) | 7/10 | `SpaceCatMascot.tsx` 694 Z. |
+| Invitation-Flow | 6/10 | Rate-Limit fehlt (P1) |
+| Feedback & Feature-Requests | 7/10 | 462-Z.-Route |
+| Procurement-Import | 7/10 | Excel-Parser stabil |
+| Updates Feed | 6/10 | 983-Z.-Page-File |
+| Personal Home Layout | 7/10 | OK |
+| i18n (DE/EN/ZH) | 8/10 | Client-only, kein SSR-I18n |
 
 ---
 
@@ -302,750 +266,774 @@ erDiagram
     auth_users ||--o{ amazon_product_drafts : "created_by"
     auth_users ||--o{ procurement_imports : "user_id"
     procurement_imports ||--o{ procurement_lines : "import_id"
+    procurement_imports ||--o{ procurement_import_comparison : "import_id"
     tutorial_tours ||--o{ tutorial_scenes : "tour_id"
     tutorial_tours ||--o{ tutorial_user_progress : "tour_id"
+    tutorial_scenes ||--o{ tutorial_scene_nav_highlight : "scene_id"
     profiles }o--|| dashboard_access_config : "role_gate"
     integration_data_cache }o--o{ marketplace_syncs : "source_slug"
     marketplace_price_stock_overrides }o..o{ marketplace_syncs : "sku+slug"
     xentral_product_tag_defs ||--o{ xentral_product_sku_tags : "tag_label"
+    feature_requests ||--o{ feature_request_attachments : "request_id"
 ```
 
-### Vollständige Tabellenliste (gruppiert)
+### Vollständige Tabellen (gruppiert)
 
 **Auth/Profil**
-- `profiles` — PK `id` (FK → `auth.users`), `email`, `full_name`, `role ENUM(owner|admin|manager|analyst|viewer)`, `created_at`, `updated_at`; Index `profiles_role_idx`; RLS: self-only. Trigger aktualisiert `updated_at`.
-- `invitations` — PK `id` UUID, `email`, `role`, `token` UNIQUE, `status`, `invited_by` FK, `expires_at`; Index `invitations_email_idx/status_idx`; **RLS: nicht aktiviert** — Public-Lookup. **Risiko: Rate-Limit fehlt.**
-- `dashboard_access_config` — PK `id` TEXT ('default'), `config` JSONB; Singleton; RLS: Owner-Write.
-- `personal_home_layouts` — PK `user_id` UUID, `layout_json` JSONB; RLS: self.
+- `profiles` — PK `id` (FK → auth.users), `email`, `full_name`, `role` ENUM(owner|admin|manager|analyst|viewer); RLS: self-only.
+- `invitations` — PK `id` UUID, `email`, `role`, `token` UNIQUE, `status`, `invited_by`; **RLS: nicht aktiviert**, öffentliche Lookup-Route — Enumerations-Risiko ohne Rate-Limit.
+- `dashboard_access_config` — Singleton `id='default'`, `config` JSONB; RLS: Owner-Write.
+- `personal_home_layouts` — PK `user_id`, `layout_json` JSONB; RLS: self.
 
-**Marktplatz-Sync (7 Tabellen nach identischem Schema: `otto_sync`, `kaufland_sync`, `shopify_sync`, `fressnapf_sync`, `mms_sync`, `zooplus_sync`, `tiktok_sync`)**
-- PK `id` BIGINT generated, Spalten: `period_from`, `period_to`, `status ENUM(ok|error)`, `error`, `summary` JSONB, `previous_summary`, `points` JSONB, `previous_points`, `revenue_delta_pct`, `meta` JSONB, `synced_at`, `created_at`, `updated_at`.
-- Constraint: UNIQUE `(period_from, period_to)`.
-- Index: period-range.
-- RLS: nicht aktiviert (read-only Analytics-Snapshots).
+**Marktplatz-Sync (7 Tabellen identisches Schema)** — `otto_sync`, `kaufland_sync`, `shopify_sync`, `fressnapf_sync`, `mms_sync`, `zooplus_sync`, `tiktok_sync`
+- Felder: `id`, `period_from`, `period_to`, `status`, `error`, `summary`/`previous_summary`/`points`/`previous_points` JSONB, `revenue_delta_pct`, `meta` JSONB, Timestamps
+- UNIQUE `(period_from, period_to)`, Index `period`; RLS: nicht aktiviert (read-only Analytics-Snapshots).
 
 **Marktplatz-Features**
-- `marketplace_promotion_deals` — PK `id` UUID, `user_id` FK, `label`, `date_from`, `date_to`, `color`, `marketplace_slug`; RLS: user-owned.
-- `marketplace_price_stock_overrides` — PK `id` UUID, `sku`, `marketplace_slug`, `price_eur`, `stock_qty`, `updated_by` FK; UNIQUE `(sku, marketplace_slug)`. **RLS: nicht aktiviert** (shared overrides — bewusst).
+- `marketplace_promotion_deals` — `id`, `user_id`, `label`, `date_from`, `date_to`, `color`, `marketplace_slug`; RLS: user-owned.
+- `marketplace_price_stock_overrides` — `id`, `sku`, `marketplace_slug`, `price_eur`, `stock_qty`, `updated_by`; UNIQUE `(sku, marketplace_slug)`; **RLS: bewusst aus** (shared).
 
 **Integration Layer**
-- `integration_data_cache` — PK `cache_key` TEXT, `source`, `payload` JSONB, `fresh_until`, `stale_until`, `updated_at`; Indizes `source_idx`, `fresh_until_idx`. **RLS: nicht aktiviert** (Audit flagged). Stochastische Cleanup-Logik (5 %) löscht Rows `stale_until < now() - 7 days`.
-- `integration_secrets` (aus Template) — PK `key` TEXT, `value` TEXT, `updated_at`.
+- `integration_data_cache` — PK `cache_key`, `source`, `payload` JSONB, `fresh_until`, `stale_until`, `updated_at`; **RLS nicht aktiviert**. Stochastische Cleanup-Logik (5 %) löscht abgelaufene Rows.
+- `integration_secrets` — PK `key`, `value`, `updated_at`.
 
 **Procurement**
-- `procurement_imports` — `id` UUID, `created_at`, `user_id`, `file_name`, `row_count`.
-- `procurement_lines` — `id` UUID, `import_id` FK, `sort_index`, `container_number`, `manufacture`, `product_name`, `sku`, `amount`, `arrival_at_port`, `notes`; Index `import_sort_idx`; RLS: auth-read.
+- `procurement_imports` — `id`, `created_at`, `user_id`, `file_name`, `row_count`; RLS: auth-read.
+- `procurement_lines` — `id`, `import_id` FK, `sort_index`, `container_number`, `manufacture`, `product_name`, `sku`, `amount`, `arrival_at_port`, `notes`; RLS: auth-read.
+- `procurement_import_comparison` — Vergleichsansichten zwischen Import-Generations.
 
 **Produkte**
-- `amazon_product_drafts` — `id` UUID, `marketplace_slug`, `mode`, `status`, `sku`, `source_snapshot` JSONB, `draft_values` JSONB, `created_by`, `updated_by`, Timestamps; Indizes `marketplace_mode_idx`, `sku_idx`; **RLS: owner-only**.
-- `xentral_product_tag_defs` — PK `label` TEXT, `color`, `updated_at`, `updated_by`; seed-daten (3 Tags).
-- `xentral_product_sku_tags` — PK `sku` TEXT, `tag_label` (nullable), `updated_at`, `updated_by`.
+- `amazon_product_drafts` — `id`, `marketplace_slug`, `mode`, `status`, `sku`, `source_snapshot`/`draft_values` JSONB, Audit-Felder; RLS: owner-only.
+- `xentral_product_tag_defs` — PK `label`, `color`, Audit.
+- `xentral_product_sku_tags` — PK `sku`, `tag_label` (nullable), Audit.
 
 **Analytics**
-- `article_forecast_rules` — PK `id` UUID, `scope ENUM(fixed|temporary)` UNIQUE, `sales_window_days`, `projection_days`, `low_stock_threshold`, `critical_stock_threshold`, `include_inbound_procurement`, `updated_at`, `updated_by`.
-- `dashboard_updates` — PK `id` UUID, `date`, `title`, `text`, `release_key`, `created_by`, `created_at`; Index `date_idx`; RLS aktiv.
-- `feature_requests` — PK `id` UUID, `user_id`, `user_email`, `title`, `message`, `status`, `owner_reply`, `page_path`, `attachments` JSONB; Indizes `created_at_idx`, `user_id_idx`. RLS: nicht aktiviert (public-submit).
+- `article_forecast_rules` — `id`, `scope` UNIQUE ENUM(fixed|temporary), `sales_window_days`, `projection_days`, `low_stock_threshold`, `critical_stock_threshold`, `include_inbound_procurement`, Audit.
+- `dashboard_updates` — `id`, `date`, `title`, `text`, `release_key`, `created_by`, `created_at`; RLS aktiv.
+- `feature_requests` — `id`, `user_id`, `user_email`, `title`, `message`, `status`, `owner_reply`, `page_path`, `attachments` JSONB; RLS: nicht aktiviert (public-submit).
+- `feature_request_attachments` — NEU seit letztem Review: Metadaten-Tabelle für Dateianhänge (Storage-Bucket 5 MB).
 
 **Tutorials**
-- `tutorial_tours` — PK `id` UUID, `tutorial_type ENUM(onboarding|release_update)`, `role`, `release_key`, `version`, `title`, `summary`, `enabled`, `required`, `status ENUM(draft|published)`, Timestamps; Index `lookup_idx`.
-- `tutorial_scenes` — PK `id` UUID, `tour_id` FK, `order_index`, `text`, `target_selector`, `mascot_emotion`, `mascot_animation`, `unlock_sidebar`, `advance_mode ENUM(manual|after_typewriter)`, `estimated_ms`; UNIQUE `(tour_id, order_index)`.
-- `tutorial_user_progress` — PK `id` UUID, `user_id`, `tour_id`, `tutorial_type`, `role`, `release_key`, `current_scene_index`, `started_at`, `last_seen_at`, `completed_at`, `dismissed_at`, `updated_at`; UNIQUE `(user_id, tour_id)`.
-- `tutorial_scene_nav_highlight` — (genauer Schema siehe Migration 20260405).
+- `tutorial_tours` — `id`, `tutorial_type`, `role`, `release_key`, `version`, `title`, `summary`, `enabled`, `required`, `status`; RLS gestuft nach `status`/`role`.
+- `tutorial_scenes` — `id`, `tour_id`, `order_index`, `text`, `target_selector`, `mascot_emotion`, `mascot_animation`, `unlock_sidebar`, `advance_mode`, `estimated_ms`; UNIQUE `(tour_id, order_index)`.
+- `tutorial_user_progress` — `user_id`, `tour_id`, Progress/Timestamp-Felder; UNIQUE `(user_id, tour_id)`.
+- `tutorial_scene_nav_highlight` — Szenen-spezifische Nav-Highlights.
 
 ### Migrationshistorie
-22 Migrations von `20260328120000` (Dashboard-Access-Config) bis `20260501120000` (Amazon Product Drafts). Deutlich: **konsequent datiert, inkrementell, pro Domäne.** Eine gelöschte Migration (`20260402120000_tutorial_tours.sql`) steht in Git-Deletion; ihre Nachfolgerin `20260402120100_tutorial_tours.sql` ist die aktive Variante.
+22 Migrations, `20260328120000_dashboard_access_config.sql` bis `20260501120000_amazon_product_drafts.sql`. Konsequent datiert, inkrementell.
 
-### Datenvalidierung
-- **Frontend:** React-Hook-Form + Zod in Formularen
-- **Backend:** **Oft manuell** (String-Parsing, `Number()`-Coercion) — keine durchgängige Zod-Validierung an Route-Eingängen. **Technische Schuld.**
-- **DB-Ebene:** Check-Constraints nur sparsam (ENUMs, UNIQUE).
+### Datenvalidierung — Status mit Delta
+| Schicht | Status | Δ |
+|---|---|---|
+| Frontend-Formulare | React-Hook-Form + Zod | = |
+| **API-Inputs** | **Wachsend:** `src/shared/lib/apiValidation.ts` führt `parseRequestBody(schema)`, `parseSearchParams(schema)`, `parseFormFields(schema)` ein. Noch **nicht flächendeckend** adoptiert. | ↑ |
+| DB-Ebene | Check-Constraints nur sparsam (ENUMs, UNIQUE) | = |
 
-### Fehlende Validierungen/Constraints
-- Kein Check für `date_from ≤ date_to` auf `marketplace_promotion_deals` (logische Prüfung nur im API-Layer).
-- `integration_data_cache.stale_until ≥ fresh_until` nicht DB-enforced.
+### Fehlende Validierungen/Constraints (unverändert)
+- Kein DB-Check für `date_from ≤ date_to` auf `marketplace_promotion_deals`.
+- `integration_data_cache.stale_until ≥ fresh_until` nicht enforced.
 - `tutorial_scenes.order_index ≥ 0` nicht enforced.
-- `profiles.role` als TEXT ohne CHECK — Eingabe `"random"` würde durchkommen, wenn jemand den Admin-Client missbraucht.
+- `profiles.role` als TEXT ohne CHECK.
 
 ---
 
 ## Abschnitt 6 — API-Architektur
 
 ### Design-Paradigma
-**REST-ähnlich mit Next.js Route Handlers.** Kein tRPC, kein GraphQL. Jede Route ist eine Datei `src/app/api/.../route.ts` mit `GET/POST/PUT/DELETE`-Exports.
+REST-ähnlich mit Next.js Route Handlers. **77 Endpoints** (Δ: war 78, eine Route konsolidiert/entfernt).
 
-### Vollständige Endpunkt-Liste (78 Routen)
-Gruppiert nach Domäne:
+### Vollständige Endpunkt-Liste (gruppiert)
 
-**Marktplätze — Sales/Orders/Products (43)**
-- `/api/amazon/` (11): `/`, `sales`, `orders`, `products`, `products/[sku]`, `products/drafts`, `orders/solicitation`, `rulebook`, `content-audit`, (weitere)
-- `/api/otto/` (4): `/`, `sales`, `orders`, `products`
-- `/api/kaufland/` (4), `/api/fressnapf/` (4), `/api/mediamarkt-saturn/` (4), `/api/zooplus/` (4), `/api/tiktok/` (4), `/api/shopify/` (4 inkl. `products/stock-sync`), `/api/ebay/` (3)
+**Marktplätze — Sales/Orders/Products/Config (~40)**
+- `/api/amazon/*` (11): `/`, `sales`, `orders`, `orders/solicitation`, `products`, `products/[sku]`, `products/drafts`, `rulebook`, `content-audit`
+- `/api/ebay/*` (4), `/api/otto/*` (4), `/api/kaufland/*` (4), `/api/fressnapf/*` (4), `/api/mediamarkt-saturn/*` (4), `/api/zooplus/*` (4), `/api/tiktok/*` (4), `/api/shopify/*` (4 inkl. `products/stock-sync`)
 
 **Marktplätze — Cross-Cutting (6)**
-- `/api/marketplaces/sales-config-status` — 9-fach Config-Check
-- `/api/marketplaces/price-parity` — Multi-Marketplace-Vergleich
-- `/api/marketplaces/stock-sync` — Batch-Bestand
-- `/api/marketplaces/price-stock-overrides` — Manual Overrides
-- `/api/marketplaces/promotion-deals` — User-Annotationen
-- `/api/marketplaces/integration-cache/refresh` — Manueller Invalidator
+- `/api/marketplaces/sales-config-status`, `.../price-parity`, `.../stock-sync`, `.../price-stock-overrides`, `.../promotion-deals`, `.../integration-cache/refresh`
 
-**Xentral (8):** `/`, `articles`, `orders`, `product-tags`, `product-tags/sku`, `product-tags/definitions`, `delivery-sales-cache/sync`, `sales-order-shipping`
+**Xentral (8)**
+- `/`, `articles`, `orders`, `product-tags`, `product-tags/sku`, `product-tags/definitions`, `delivery-sales-cache/sync`, `sales-order-shipping`
 
-**Infrastruktur (3):** `/api/integration-cache/warm`, `/api/cache`, `/api/address-suggest`
+**Analytics (2)**
+- `/api/analytics/marketplace-article-sales`, `/api/analytics/marketplace-overview` _(NEU seit letztem Review — bislang nur teilweise genutzt; Aggregator-Ansatz startet)_
 
-**Analytics (2):** `/api/analytics/marketplace-article-sales`, `/api/article-forecast/rules`
+**Article Forecast (1)**
+- `/api/article-forecast/rules`
 
-**Procurement (2):** `/api/procurement/import`, `/api/procurement/lines`
+**Infrastruktur (3)**
+- `/api/integration-cache/warm`, `/api/cache`, `/api/address-suggest`
 
-**User/Team (7):** `/api/users`, `/api/invitations/*` (5), `/api/dashboard-access-config`
+**Procurement (2)**
+- `/api/procurement/import`, `/api/procurement/lines`
 
-**Content & Metadata (4):** `/api/updates`, `/api/tutorials/progress`, `/api/tutorials/editor`, `/api/tutorials/runtime`
+**User/Team (7)**
+- `/api/users`, `/api/invitations/{list,register-init,lookup,complete,accept}`, `/api/dashboard-access-config`
 
-**Feedback (2):** `/api/feedback`, `/api/feedback/download`
+**Content & Metadata (4)**
+- `/api/updates`, `/api/tutorials/progress`, `/api/tutorials/editor`, `/api/tutorials/runtime`
 
-**Dev (1):** `/api/dev/local-auth`
+**Feedback (2)**
+- `/api/feedback`, `/api/feedback/download`
+
+**Advertising (1)**
+- `/api/advertising` (Stub)
+
+**Dev (1)**
+- `/api/dev/local-auth` (nur localhost)
 
 ### Request/Response-Format
-- **Request:** JSON-Body für POST/PUT; Query-Params für GET (`fromYmd`, `toYmd`, `status`, `all`, `limit`, `includePrices`, `includeSales`).
-- **Response Success:** JSON, Schema ad-hoc pro Route (kein standardisiertes Envelope).
-- **Response Error:** `{ error: string }`, HTTP-Codes 400/401/403/404/500/503.
+- Request: JSON-Body (POST/PUT), Query-Params (GET). **Validierungsgrad:** wächst durch `apiValidation.ts`, aber unter ~20 % Adoption.
+- Response-Success: Ad-hoc-JSON pro Route.
+- Response-Error: `{ error: string }`, HTTP 400/401/403/404/500/503.
 
 ### Middleware-Chain
-`middleware.ts` (Edge-nahe) → Auth-Check → Public-Path-Allowlist → optional Lokal-Dev-Auth.
-
-Innerhalb der Routen gibt es **keine zusätzliche Middleware** (kein `withAuth()`-HOF, keine kanonische Guard-Funktion). Auth-Check ist pro Route dupliziert, ~30 Routen verwenden das Pattern:
-```ts
-const supabase = await createServerSupabase();
-const { data: { user } } = await supabase.auth.getUser();
-if (!user) return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
-```
-→ **Duplikation + potenzielle Auslassung** (wenn jemand vergisst, ist die Route offen).
+`middleware.ts` (Edge-nahe) → Supabase-SSR-Auth → Public-Path-Allowlist → optional Lokal-Dev-Auth (nur localhost). **Keine zusätzliche Route-Handler-Middleware.** Auth-Boilerplate weiterhin in ~30 Routen dupliziert.
 
 ### Rate-Limiting
-**Keines.** Weder auf Middleware-Ebene noch in Routen. `/api/invitations/lookup` ist öffentlich und unlimitiert — explizit als P1-Risiko im Audit vermerkt.
+**NEU vorhanden:** [src/shared/lib/rateLimit.ts](master-dashboard/src/shared/lib/rateLimit.ts) **+ Test** (`rateLimit.test.ts`). **Aber kaum konsumiert** — noch nicht flächendeckend in Routen eingebunden. Schuld-Status: **teilweise geschlossen**.
 
-### Konsistenz-Bewertung
+### Konsistenz
 | Dimension | Bewertung |
 |---|---|
-| URL-Naming | Gut (`/api/{marketplace}/{resource}`) |
-| HTTP-Methoden | Gut (GET/POST/PUT/DELETE sinnvoll eingesetzt) |
-| Error-Format | Einheitlich `{ error: string }`, teils erweitert mit Daten |
+| URL-Naming | Gut |
+| HTTP-Methoden | Gut |
+| Error-Format | Einheitlich `{ error: string }` |
 | Status-Codes | Konsistent |
-| Success-Envelope | **Uneinheitlich** (mal `{ deals: [] }`, mal `{ items: [] }`, mal top-level Objekt) |
-| Input-Validierung | **Inkonsistent** — manchmal Zod, oft manuell |
+| Success-Envelope | Weiterhin uneinheitlich |
+| Input-Validierung | **Wachsend** (Zod via `apiValidation.ts`) |
 
 ---
 
-## Abschnitt 7 — Symbiose-Map (WICHTIGSTER Abschnitt)
+## Abschnitt 7 — Symbiose-Map
 
-### Wie Features zusammenspielen — Mermaid
+### Mermaid — Aktualisiertes System-Bild
 
 ```mermaid
 graph TD
-  MW[Middleware: Auth Gate] --> DashPages[Dashboard Pages]
-  DashPages --> AnalyticsMP[Analytics Marktplätze]
-  DashPages --> MarketplaceOrders[Marktplatz Orders]
-  DashPages --> XentralOrders[Xentral Orders]
-  DashPages --> ArticleForecast[Article Forecast]
-  DashPages --> Procurement[Procurement]
-  DashPages --> Home[Personal Home]
+  MW[Middleware: Auth Gate] --> DashPages[Dashboard Pages — thin orchestrators]
+  DashPages --> AnalyticsMP[analytics/marketplaces/page.tsx 582Z]
+  DashPages --> XentralOrders[xentral/orders/page.tsx 610Z]
+  DashPages --> ArticleForecast[article-forecast/page.tsx 325Z]
+  DashPages --> Sidebar[AppSidebar 181Z]
 
-  AnalyticsMP --> SalesAPIs["9x /api/{mp}/sales"]
-  AnalyticsMP --> ConfigStatus[/api/marketplaces/sales-config-status/]
-  AnalyticsMP --> PromoDeals[/api/marketplaces/promotion-deals/]
-  AnalyticsMP --> ProcurementLines[/api/procurement/lines/]
-  AnalyticsMP --> XentralArticles[/api/xentral/articles/]
-  AnalyticsMP --> ProfitLib[marketplace-profitability.ts]
+  AnalyticsMP --> HookMP[useMarketplaceSalesLoader]
+  AnalyticsMP --> HookTotals[useMarketplaceTotals]
+  XentralOrders --> HookXO[useXentralOrdersLoader]
+  ArticleForecast --> HookAFL[useArticleForecastLoader]
+  ArticleForecast --> HookAFR[useArticleForecastRules]
+  ArticleForecast --> HookAFC[useArticleForecastComputed]
+  Sidebar --> HookUP[useUpdatesPolling]
+  Sidebar --> HookSN[useSidebarNav]
+  Sidebar --> HookSRT[useSidebarRoleTesting]
 
-  SalesAPIs --> FlexClient[flexMarketplaceApiClient.ts]
+  HookMP --> SalesAPIs[9x /api/{mp}/sales]
+  HookXO --> XentralAPI[/api/xentral/orders/]
+  HookAFL --> XentralArticles[/api/xentral/articles/]
+  HookAFL --> ProcurementLines[/api/procurement/lines/]
+
+  SalesAPIs --> FlexClient[flexMarketplaceApiClient 1018Z]
   SalesAPIs --> AmazonLib[amazon* libs]
   FlexClient --> Secrets[integrationSecrets.ts Batch]
   FlexClient --> Cache[integrationDataCache.ts]
   AmazonLib --> Secrets
   AmazonLib --> Cache
 
-  XentralOrders --> XentralLib[xentral* libs]
-  XentralOrders --> AddressSuggest[/api/address-suggest/]
-  XentralLib --> Secrets
-  XentralLib --> Cache
-
-  ArticleForecast --> XentralLib
-  ArticleForecast --> ProcurementLines
-  ArticleForecast --> ForecastRules[article_forecast_rules]
-
-  Procurement --> ImportXLSX[/api/procurement/import/]
-  ImportXLSX --> ProcurementTbl[(procurement_imports/lines)]
-
   Secrets --> SupaDB[(Supabase integration_secrets)]
   Cache --> SupaDB2[(Supabase integration_data_cache)]
-  ProfitLib --> Secrets
   Cron[Vercel Cron */30min] --> Warm[/api/integration-cache/warm/]
-  Warm --> FlexClient
-  Warm --> AmazonLib
-  Warm --> XentralLib
+  Warm --> FlexClient & AmazonLib & XentralLib[Xentral Libs]
 
-  DashPages --> Tutorials[Tutorials]
-  Tutorials --> TutorialTbls[(tutorial_* tables)]
-
-  RoleStore[useAppStore: Role/Access] --> DashPages
+  RoleStore[useAppStore] --> DashPages
   RoleStore --> AccessConfigAPI[/api/dashboard-access-config/]
   AccessConfigAPI --> AccessCfgTbl[(dashboard_access_config)]
 
   Invitations[/api/invitations/*/] --> InvTbl[(invitations)]
-  Feedback[/api/feedback/] --> FeedbackTbl[(feature_requests + storage)]
+  Feedback[/api/feedback/] --> FeedbackTbl[(feature_requests + attachments + storage)]
+  Tutorials[Tutorials] --> TutorialTbls[(tutorial_* tables)]
 ```
 
 ### Shared Dependencies (von mehreren Features genutzt)
 
-| Modul | Nutzer | Kritikalität |
-|---|---|---|
-| `integrationSecrets.ts` | ALLE Marktplatz-Integrationen, Xentral, Amazon, LLM | **Kritisch** — wenn defekt, fällt das ganze System aus |
-| `integrationDataCache.ts` | ALLE Marktplatz-Integrationen | **Kritisch** — Performance abhängig; Bug → User-Latenz |
-| `flexMarketplaceApiClient.ts` | 8 Marktplätze (Otto/Kaufland/Fressnapf/MMS/Zooplus/TikTok/Shopify/eBay) | **Kritisch** |
-| `supabase/admin.ts` | Alle service-role-Operationen (Invites, Drafts, Admin-CRUDs) | **Kritisch** — 15-s-Global-Timeout; SPoF |
-| `supabase/server.ts` | Alle User-authentifizierten Route Handler | **Kritisch** |
-| `marketplace-profitability.ts` | 9 Sales-Endpoints + Analytics-Page | **Hoch** |
-| `useAppStore` (Zustand) | Jede Dashboard-Seite (Rollen, Sichtbarkeit) | **Hoch** |
-| `MarketplaceProductsView.tsx` | 8 Marktplatz-Produktseiten | **Hoch** |
-| `I18nProvider` | ALLE UIs | **Kritisch** |
+| Modul | Nutzer | Kritikalität | Δ |
+|---|---|---|---|
+| `integrationSecrets.ts` | ALLE Integrationen | **Kritisch** | = |
+| `integrationDataCache.ts` | ALLE Integrationen | **Kritisch** | = |
+| `flexMarketplaceApiClient.ts` | 8 Marktplätze | **Kritisch** | = |
+| `supabase/admin.ts` | Service-Role-Ops | **Kritisch** | = |
+| `supabase/server.ts` | Auth-Routen | **Kritisch** | = |
+| `marketplace-profitability.ts` | 9 Sales-Endpoints + Analytics | **Hoch** | = |
+| `useAppStore` | Jede Dashboard-Seite | **Hoch** | = |
+| `MarketplaceProductsView.tsx` | 8 Marktplatz-Produktseiten | **Hoch** | = |
+| `I18nProvider` | ALLE UIs | **Kritisch** | = |
+| **NEU: `dashboardClientCache.ts`** | 3 Loader-Hooks (AF, Xentral, Marketplaces) | **Hoch** | ↑ |
+| **NEU: `useUpdatesPolling` / `useSidebarNav` / `useSidebarRoleTesting`** | Sidebar (Desktop+Mobile) | **Mittel** | ↑ |
+| **NEU: `rateLimit.ts`** | Noch punktuell | **Mittel → Hoch** (wenn adoptiert) | ↑ |
 
 ### Kritische Pfade
+**Pfad 1 — Dashboard-Analytics-Load:** Browser → Middleware → Supabase-Auth → Config → 9 parallele Sales-Calls → Supabase-Pool (10!) → Charts. **Status:** Concurrency-3-Drossel aktiv; Server-Aggregator `marketplace-overview` vorhanden, noch nicht als einziger Weg.
 
-**Pfad 1 — Dashboard-Load:**
-Browser → Middleware → Supabase-Auth → `/api/dashboard-access-config` → Client-Render → 9 parallele Sales-Calls → **Supabase-Connection-Pool** (10!). Ein Flaschenhals an dieser Stelle legt die ganze App lahm (siehe Vorfall 2026-04-15 — Postgres-Statement-Timeout).
+**Pfad 2 — Cron-Warmup:** Vercel-Cron → `/api/integration-cache/warm` → iteriert Marktplätze.
 
-**Pfad 2 — Cron-Warmup:**
-Vercel-Cron → `/api/integration-cache/warm` → iteriert Marktplätze seriell (minimal gestaffelt) → jedes Marktplatz-API. Wenn ein Marktplatz hängt, verschluckt der Warmup Zeit.
+**Pfad 3 — Amazon-Order-Pull:** Browser → Route → SigV4 → SP-API → 429 → Retry (Backoff 120 s) → LWA-Refresh → Cache.
 
-**Pfad 3 — Amazon-Order-Pull (teuerste Route):**
-Browser → Route → SigV4-Sign → SP-API → 429 → Retry mit Backoff bis 120 s → LWA-Token-Refresh → Cache.
+**NEU — Pfad 4 — Article-Forecast-Load:** Browser → `useArticleForecastLoader` (2-Phase: Basis-Artikel + Sales-Aggregation + Procurement) → `/api/xentral/articles?includeSales=1` (bis 115 s!) → Cache-Write → UI.
 
-### Coupling-Analyse
-- **Zu eng gekoppelt:**
-  - `analytics/marketplaces/page.tsx` ↔ 9 Sales-APIs + Profitabilitäts-Lib + Promo + Xentral + Procurement = alles in einer Datei. Änderung an einem Teil wirkt sich auf die ganze Page aus.
-  - `flexMarketplaceApiClient` ↔ 8 Marktplätze als einzelnes Spec-Objekt. Gut für DRY, aber wenn TikTok eine Mirakl-abweichende Besonderheit braucht, wird die Spec ausgefranst.
-- **Zu lose gekoppelt:**
-  - Auth-Checks in API-Routen. Kein Guard-Decorator, jede Route kann "vergessen" werden. Tatsächlich hat nur ein Teil der Routen Owner-Check (siehe `/api/users`, `/api/marketplaces/price-stock-overrides` → ja; viele `/api/{mp}/sales` → nein, weil public-read gedacht).
-  - `src/features/` existiert als Konvention, wird aber nicht genutzt — weder als Ordner noch als Modul-Boundary.
+### Coupling-Analyse (nach Refactor)
 
-### Wenn Feature X sich ändert — was bricht alles?
+| Kopplungs-Typ | Vor Refactor | Nach Refactor |
+|---|---|---|
+| Page ↔ Datenlogik | 1-Datei-Monolith | Dünner Orchestrator + Hooks |
+| Marktplatz-Clients | `flexMarketplaceApiClient` + Wrapper | **unverändert** — Wrapper-Duplikation offen |
+| Auth-Checks | Dupliziert in 30 Routen | **unverändert** |
+| Sidebar-Desktop/Mobile | ~80 % Codedopplung (2 Funktionen) | **Hooks geteilt**, Navigation in `SidebarNavSections` zentralisiert |
+| Loader-Hooks-Dopplung | — | **Neu entstanden:** 3 sehr ähnliche Loader (AF, MP, XO) — Kandidat für `useBackgroundSyncedResource`-Extraktion |
 
+### Wenn Feature X sich ändert — Auswirkungen
 | Geänderter Modul | Auswirkung |
 |---|---|
 | `integrationSecrets.ts` Schema | JEDE Marktplatz-Integration. Keine Tests. |
-| `flexMarketplaceApiClient.ts` Config-Struktur | 8 Marktplätze + `sales-config-status`-Endpoint |
-| Supabase-Schema `integration_data_cache` | ALLE Caches werden ungültig, Warm-Cron crasht, User warten auf Live-API |
-| `useAppStore`-Schema | Alle Dashboard-Seiten (Persist-Migration nötig) |
-| `DashboardRouteAccessGuard` | Jede geschützte Dashboard-Seite |
+| `flexMarketplaceApiClient.ts` Config | 8 Marktplätze + `sales-config-status` |
+| `integration_data_cache` Schema | ALLE Caches ungültig, Warm-Cron crasht |
+| `useAppStore` Schema | Alle Dashboard-Seiten (Persist-Migration nötig) |
+| `DashboardRouteAccessGuard` | Jede geschützte Seite |
 | `MarketplaceProductsView` Props | 8 Marktplatz-Produktseiten |
 | `middleware.ts` Public-Path-Liste | Auth-Regressionen |
-
-### Beispielhafte Verbindungen (wie im Prompt gefordert)
-
-```
-[analytics/marketplaces/page.tsx] --[fetch]--> [9x /api/{mp}/sales/route.ts]
-Grund: Page zeigt Umsatz je Marktplatz gleichzeitig
-Risiko: Parallel-Storm ruiniert Supabase-Pool (aktueller Vorfall)
-Verbesserung: Serverseitiger Aggregator-Endpoint `/api/analytics/marketplace-overview`, der die 9 Calls serverseitig bündelt + cached
-```
-
-```
-[flexMarketplaceApiClient.ts] --[batch-read]--> [integrationSecrets.ts]
-Grund: Config-Laden in einer DB-Query statt 12
-Risiko: Wenn Supabase down, alle 8 Marktplätze blind
-Verbesserung: In-Memory-Warm-Cache vor App-Start (z. B. at cold boot)
-```
-
-```
-[marketplace-profitability.ts] --[after fix]--> [integrationSecrets.ts::readIntegrationSecretsBatch]
-Grund: Fee-Policy liest 3 Keys in einer Query statt drei
-Risiko: vorher 3×9 = 27 Reads pro Page-Load
-Verbesserung: Bereits umgesetzt im aktuellen Commit
-```
-
-```
-[Tutorials] --[read]--> [tutorial_tours + tutorial_scenes + tutorial_user_progress]
-Grund: Owner kann Tutorials bearbeiten, User sieht Progress
-Risiko: Falsche RLS kann Admin-Drafts an Users leaken
-Verbesserung: Spezifische Tests mit anon/user/owner Rollen
-```
+| **NEU: `sidebar/nav-utils.ts` NavItem-Type** | Sidebar + alle Nav-Renderer |
+| **NEU: `dashboardClientCache.ts` Schlüssel-Schema** | 3 Loader-Hooks + manuelle Invalidation |
 
 ---
 
 ## Abschnitt 8 — Authentifizierung & Autorisierung
 
 ### Auth-System
-**Supabase Auth** mit E-Mail/Passwort + Invitations-Workflow.
+**Supabase Auth** (E-Mail/Passwort + Invitations-Workflow). Dev-Flow über `/api/dev/local-auth` (nur localhost).
 
-### Vollständige Flows
-**Login:** `/login` → `UserAuthOverlay` → `supabase.auth.signInWithPassword()` → Session-Cookies → Redirect `/`.
-**Register (invite-based):** Invite-Link `?token=...` → `/register` → `/api/invitations/lookup` → Password-Formular → `/api/invitations/complete` → Session.
-**Password-Reset:** `/forgot-password` → `supabase.auth.resetPasswordForEmail()` → User bekommt Link → `/auth/reset` callback → Neues Passwort.
-**Callback:** `/auth/callback` → verarbeitet OAuth/Magic-Link-Code.
+### Flows
+- **Login:** `/login` → `UserAuthOverlay` → `signInWithPassword()` → Session-Cookies → Redirect.
+- **Register (invite):** `?token=…` → `/register` → `/api/invitations/lookup` → `/api/invitations/complete`.
+- **Password-Reset:** `/forgot-password` → `resetPasswordForEmail()` → `/auth/reset`.
+- **Callback:** `/auth/callback` für OAuth/Magic-Link.
 
 ### Token-Handling
-- **Session-Cookies** via `@supabase/ssr` (`createServerClient` / `createBrowserClient`). Cookies auto-refresh.
-- **JWT** implizit in Supabase Auth (sichtbar in Edge-Logs als Bearer).
-- **Service-Role-Key** serverseitig in `admin.ts`, nie client-exposed.
+- Session-Cookies via `@supabase/ssr`.
+- Service-Role-Key nur server-side.
 
 ### Rollen & Berechtigungen
-Rollen-Quelle (in `roles.ts` + `isOwnerFromSources()`):
-1. DB `profiles.role`
-2. `user.app_metadata.role`
-3. `user.user_metadata.role`
+- Rollen: `owner`, `admin`, `manager`, `analyst`, `viewer` + benutzerdefinierte Rollen (`custom-{timestamp}`).
+- Permissions: `view_dashboard`, `manage_integrations`, `manage_users`, `manage_roles`, `export_data`.
+- Feingranular konfigurierbar via `useAppStore.rolePermissions` / `roleSidebarItems` / `rolePageAccess` / `roleWidgetVisibility` / `roleActionAccess`.
+- **NEU:** `useSidebarRoleTesting`-Hook kapselt Rollen-Testing-Flow (Owner cycled durch Rollen, sieht UI wie jeweilige Rolle).
 
-Rollen: `owner`, `admin`, `manager`, `analyst`, `viewer`. Manuelle Checks in Route-Handlern (kein HOF/Decorator).
+### Matrix (Default, aus `access-control.ts`)
+| Rolle | Permissions | Sidebar-Items | Sections |
+|---|---|---|---|
+| **owner** | alle 5 | alle 16 | alle 5 |
+| **admin** | view, integrations, users, export | alle 16 außer roles-manage | alle ohne roles-manage |
+| **manager** | view, integrations, export | alle außer analytics | alle |
+| **analyst** | view, export | overview + analytics | overview + settings |
+| **viewer** | view | overview + settings | basic |
 
-**Dashboard-Sichtbarkeit** (client-seitig): `useAppStore.rolePermissions`/`rolePageAccess`/`roleWidgetVisibility` — feingranular. Persistiert in Supabase `dashboard_access_config`.
-
-### Sicherheitslücken & Schutzmaßnahmen
-- ✅ Service-Role nur server-side.
-- ✅ RLS auf User-Daten (Profiles, Promo-Deals, Drafts, Layouts, Tutorial-Progress).
-- ❌ **Kein Rate-Limit** — gesamter API-Layer.
-- ❌ **`/api/invitations/lookup`** unauthentisiert, E-Mail-Enumeration möglich.
-- ⚠ **Service-Role-Flut** — viele Routen instanziieren `createAdminClient()`. Jeder Fehler im Admin-Client kann User-DB-Zugriff ungewollt öffnen.
-- ⚠ **CSRF-Schutz** — Next.js-Standard (SameSite-Cookies). Keine eigene CSRF-Token-Middleware; bei POST-APIs mit Session-Auth Standard-Schutz ausreichend.
-- ⚠ **CORS** — nicht explizit gesetzt; API wird von eigener Domain genutzt.
-- ⚠ **XSS** — React escapet Default; `dangerouslySetInnerHTML` bei Scan nicht gefunden.
-- ⚠ **Dev-Auth-Bypass** — `/api/dev/local-auth` existiert. Middleware erlaubt es nur bei `localhost`/`127.0.0.1`. Wenn Produktions-URL fehlkonfiguriert ist, Risiko.
+### Sicherheit — Status
+- ✅ Service-Role nur server-side
+- ✅ RLS auf User-Daten
+- ✅ **NEU:** Security-Headers (CSP, HSTS, XFO) in `next.config.ts`
+- ⚠ **Rate-Limit-Lib vorhanden, aber kaum verdrahtet**
+- ❌ `/api/invitations/lookup` unauthentisiert + ohne Rate-Limit → Enumerations-Risiko
+- ⚠ Service-Role-Boilerplate dupliziert in vielen Routen
+- ⚠ Dev-Auth-Bypass nur localhost (Middleware-geprüft)
+- ⚠ XSS durch Shopify-Produkt-Descriptions (HTML) nicht verifiziert
 
 ---
 
 ## Abschnitt 9 — Error-Handling & Resilience
 
-### Capture- und Weiterleitung
-- **Route-Handler:** `try/catch` → `NextResponse.json({ error: ... }, { status })`.
-- **Client:** `fetch().catch(...)` → lokaler Fehler-State → Toast (`sonner`).
-- **Kein globaler Error Boundary** im React-Tree gefunden.
+### Capture + Weiterleitung
+- **Route-Handler:** `try/catch` → `NextResponse.json({ error }, { status })`.
+- **Client:** `fetch().catch(…)` → lokaler Fehler-State → Toast.
+- **Weiterhin fehlend:** Globaler Error-Boundary im React-Tree.
 
 ### Logging
-- **Server:** `console.log/error`. Wandert in Vercel-Logs.
-- **Kein strukturiertes Logging** (kein Pino/Winston, kein JSON-Format).
-- **Supabase-Logs** als zweite Quelle (statement-timeouts, Connection-Events).
-- **Kein Sentry/DataDog** integriert.
+- `console.log/error/warn` → Vercel-Logs. Kein strukturiertes Logging.
+- **Δ seit Vor-Review:** `console.log`-Count **19** (Dev-Überbleibsel), `console.warn/error` **19** (balancierte Fehlerbehandlung).
+- Kein Sentry/DataDog.
 
-### Retry/Circuit-Breaker/Graceful Degradation
-- **Amazon SP-API:** `amazonSpApiGetWithQuotaRetry()` — Exponential Backoff auf 429 bis 120 s. ✅
-- **Flex-Marktplätze:** Konfigurierbar `MAX_429_RETRIES` (default 8) + `PAGINATION_DELAY_MS` (450 ms). ✅
-- **Supabase-Admin-Client:** 15 s Global-Timeout. ✅
-- **Integration-Data-Cache:** In-Flight-Dedup (Map in `integrationDataCache.ts`), Stale-while-revalidate. ✅
-- **Integration-Secrets:** Fehler kurz gecached (30 s) → verhindert DB-Retry-Storm bei Supabase-Down. ✅
-- **Kein Circuit-Breaker** für komplette Marktplatz-Ausfälle — wenn Otto hängt, blockiert Warm-Cron verzögert.
-- **Keine Graceful-Degradation für Client:** Kein "Offline-Modus", keine Service-Worker.
+### Retry / Circuit-Breaker / Graceful Degradation
+- Amazon SP-API: `amazonSpApiGetWithQuotaRetry()` mit Backoff bis 120 s. ✅
+- Flex-Marktplätze: `MAX_429_RETRIES`, `PAGINATION_DELAY_MS`. ✅
+- Supabase-Admin-Client: 15 s Global-Timeout. ✅
+- `integrationDataCache.ts`: In-Flight-Dedup, Stale-while-revalidate. ✅
+- `integrationSecrets.ts`: Negative-Cache 30 s. ✅
+- **NEU:** `dashboardClientCache.ts` liefert Stale-Daten sofort, synct im Hintergrund (Pattern in 3 Loader-Hooks adoptiert). ✅
+- Kein Circuit-Breaker für komplette Marktplatz-Ausfälle.
+- Keine Service-Worker-Offline-Strategie.
 
-### Edge Cases bei Netzwerk/DB-Ausfall
-- **Supabase down:** Routen geben 500 zurück. Cache-Tabellen unerreichbar → User sieht Live-API-Latenz (Amazon bis 120 s).
-- **Marktplatz-API down:** Cache dient Stale-Daten (bis 24 h). ✅
-- **Unbehandelt:** Xentral-Delivery-Sales-Cache schreibt in lokale JSON-Datei (!) — kein File-Locking, potenzielle Race-Conditions bei parallelen Syncs.
-
-### Unbehandelte Fehler
-- LLM-Fallback-Kaskade bricht still, wenn sowohl Claude als auch OpenAI fehlschlagen.
-- `integration_secrets`-Fallback gibt leeren String zurück (kein expliziter Alert).
-- Xentral-PAT/Key-Fallback funktioniert still — Missing-Key-Feedback schwach.
+### Edge Cases
+- Supabase down → 500-Response, User sieht Live-API-Latenz (Amazon bis 120 s).
+- Marktplatz-API down → Cache-Stale bis 24 h dient. ✅
+- **Unbehandelt weiterhin:** Xentral-Delivery-Sales-Cache schreibt in lokale JSON-Datei (`xentralDeliverySalesCache.ts` 594 Z.) → Race-Condition-Risiko.
+- LLM-Fallback-Kaskade bricht still bei Claude-+OpenAI-Doppelausfall.
 
 ---
 
 ## Abschnitt 10 — Performance & Optimierung
 
 ### Bundle/Code-Splitting
-- **Next.js App Router** splittet automatisch pro Route.
-- **Turbopack** in Dev (Next 16 Default); `next build` in Prod.
-- **Kein explizites `dynamic()`** mit `ssr: false` im Scan (einige Komponenten wie `AmazonProductEditor` könnten davon profitieren).
-- **Chunks:** Durch 1 097-Z.-Editor + 1 534-Z.-Sidebar + 3 921-Z.-Analytics Page werden einzelne Chunks groß.
+- Next.js App-Router splittet pro Route.
+- **Δ durch Refactor:** Pre-Refactor-Monolithen (3 921 Z. + 1 839 Z. + 1 568 Z. + 1 534 Z.) verschwunden. Client-Bundle der Analytics-Marketplaces-Page sollte messbar kleiner sein (noch nicht empirisch verifiziert).
 
 ### Lazy Loading
-- Begrenzt. Meiste Komponenten sind synchron importiert. Optimierungspotenzial: Dialog-Content (`MarketplaceProductShellDialog` 599 Z.) dynamisch laden.
+- Begrenzt. Sub-Komponenten aus dem Refactor sind synchron importiert — Chance für `React.lazy` / `dynamic()` bei großen Dialogen (`MarketplaceDetailDialog`, `AmazonProductEditor`).
 
-### Caching-Strategien
+### Caching
 | Layer | Mechanismus |
 |---|---|
-| **Browser** | localStorage (`dashboardClientCache.ts`), sessionStorage (Config-Status), `useAppStore` persistiert |
-| **Route Handler (in-memory)** | `_inflight`-Dedup, Env-/DB-Secret-Memory-Cache 5 min |
-| **Supabase Tabelle** | `integration_data_cache` (fresh 15 min, stale 24 h) |
-| **CDN** | Vercel Edge (statische Assets) |
-| **DB-Query** | `readIntegrationSecretsBatch` bündelt Reads |
+| Browser | localStorage (`dashboardClientCache.ts`), sessionStorage (Config-Status), `useAppStore` persistiert |
+| Route Handler (in-memory) | Inflight-Dedup, Env-/DB-Secret-Memory-Cache 5 min |
+| Supabase-Tabelle | `integration_data_cache` (fresh 15 min, stale 24 h) |
+| CDN | Vercel Edge |
+| DB-Query | `readIntegrationSecretsBatch` bündelt Reads |
 
-### DB-Query-Probleme
-- **N+1 in Fees:** War vorhanden in `marketplace-profitability.ts` (3 Reads pro Call × 9 parallele Routes), **heute per Commit behoben**.
-- **Fehlende Indizes:** Keine auffälligen Lücken — `integration_data_cache_fresh_until_idx` existiert.
-- **Unnötige Joins:** Keine auffälligen.
-- **Connection Pool = 10** ist im Verhältnis zur Request-Flut der Marktplatz-Page zu klein.
+### DB-Query
+- N+1 in Fees: **geschlossen** via Batch-Read.
+- Fehlende Indizes: keine auffälligen Lücken.
+- Connection-Pool = 10: **weiterhin zu klein**.
 
 ### Bild-Optimierung
-- **kein `<Image/>`-Review** per Scan gemacht, aber Lint-Warning `@next/next/no-img-element` aktiv — deutet auf fehlgenutzte `<img>`-Tags. Sollte zu `next/image` migriert werden.
+- `next/image` nur teilweise — Lint-Warning `@next/next/no-img-element` weiterhin aktiv.
 
 ### Render-Performance
-- **Analytics-Page** mit vielen States + tiefen useEffects → unnötige Re-Renders wahrscheinlich. `React.memo`/`useMemo` sporadisch, nicht systematisch.
-- **Keine React-Compiler-Integration** sichtbar.
+- Pages jetzt dünne Orchestratoren → weniger Re-Render-Turbulenzen zu erwarten.
+- **NEU:** Zwar Hooks extrahiert, aber `useMemo`/`React.memo` noch nicht systematisch. `useBackgroundSyncedResource`-Extraktion würde auch Performance normalisieren.
 
 ### Bottlenecks (identifiziert)
-1. **10-Connection Supabase-Pool** vs. 9 parallele Marktplatz-Loader → Root-Cause des Incidents 2026-04-15.
-2. **`/api/xentral/articles?includeSales=1` = 115 s** blockiert Next-Dev-Worker.
-3. **Gigantische Client-Komponenten** (Analytics-Page 3 921 Z.) → Bundle-Size, Re-Render-Overhead.
-4. **Kein SSR der Marktplatz-Analytics** — Page läuft rein client-seitig; SSR + Streaming würde Time-to-First-Byte halbieren.
+1. **Supabase-Pool = 10** vs. 9 parallele Marktplatz-Loader → entschärft, nicht gelöst.
+2. `/api/xentral/articles?includeSales=1` = bis 115 s — blockiert Next-Dev-Worker.
+3. **Große Lib-Dateien:** `flexMarketplaceApiClient.ts` (1 018), `ottoApiClient.ts` (952), `amazonProductsSpApiCatalog.ts` (937), `xentralSkuSalesWindowAggregation.ts` (861), `xentralArticlesCompute.ts` (851).
+4. Kein SSR der Marktplatz-Analytics.
 
 ---
 
 ## Abschnitt 11 — Code-Qualität & Patterns
 
-### Design-Patterns
-- **Repository-Pattern light:** `src/shared/lib/xxxApiClient.ts` je Marktplatz.
-- **Facade-Pattern:** `flexMarketplaceApiClient.ts` bündelt 8 Marktplätze.
-- **Singleton:** `createAdminClient()`, `createBrowserClient()`.
-- **Strategy:** Marktplatz-`AUTH_MODE` (bearer/x-api-key/mirakl/basic/shopify).
-- **Hook-Pattern:** Konsequent für UI-State und Data-Fetching.
-- **Factory unter-genutzt:** `MarketplaceProductsView` ist der richtige Weg, aber viele Marktplatz-Clients duplizieren Mirakl-Logik (MMS/Zooplus/Fressnapf Wrapper je 31 Z. — könnten nur eine Config-Zeile sein).
+### Design-Patterns (nach Refactor)
+- **Thin-Orchestrator + Hooks-Pattern:** NEU, konsequent in 4 Pages durchgezogen.
+- **Colocation:** Page + `components/`-Nachbarordner als kanonisches Muster.
+- **Hook-Komposition:** Multiple spezialisierte Hooks (Loader/Rules/Computed) statt einem mega-Hook.
+- **Repository-Pattern light:** `src/shared/lib/xxxApiClient.ts`.
+- **Facade:** `flexMarketplaceApiClient.ts`.
+- **Strategy:** Marktplatz-`AUTH_MODE`.
+- **Factory unter-genutzt:** Marktplatz-Client-Wrapper duplizieren Mirakl-Logik.
 
 ### Code-Duplikation
-- **Marktplatz-Client-Wrapper** (mmsApiClient/zooplusApiClient/fressnapfApiClient/shopifyApiClient/tiktokApiClient/ebayApiClient/kauflandApiClient) — jeweils ~30 Z., könnten als einzelne Config registriert werden.
-- **Auth-Check** in 30+ Route-Handlers (gleicher Boilerplate).
-- **Analytics-Profit-Summary-Logik** teilweise dupliziert zwischen Route-Handlern und `marketplace-profitability.ts`.
+- **Weiterhin:** Marktplatz-Client-Wrapper (mms/zooplus/fressnapf/…) je ~30 Z. — Config-Registry statt einzelner Dateien wäre Gewinn.
+- **Weiterhin:** Auth-Check in 30+ Route-Handlern.
+- **Neu entstanden:** 3 Loader-Hooks (`useArticleForecastLoader`, `useMarketplaceSalesLoader`, `useXentralOrdersLoader`) folgen fast identischem Muster (Generation-Ref, Cache-Hydration, Background-Sync-Intervall, 2-Phase-Fetch). Ein `useBackgroundSyncedResource<T>(opts)` würde 500+ Z. eliminieren.
 
 ### Naming
-- **Gut:** `loadAmazonSales`, `getFlexIntegrationConfig`, `readIntegrationSecret`.
-- **Konsistent:** Marktplatz-Präfix in Dateinamen.
-- **Schwach:** Einige Shared-Komponenten ohne Domain-Präfix (`EmptyState.tsx` — ok als generisch; `KPICard.tsx` dupliziert mit `charts/KPICard.tsx`).
+- Gut: `loadAmazonSales`, `getFlexIntegrationConfig`, `readIntegrationSecret`.
+- Konsistent: Marktplatz-Präfix in Dateinamen.
+- **NEU:** Sub-Komponenten-Naming domänen-präfixiert (`ArticleForecast…`, `Sidebar…`).
 
 ### TypeScript-Nutzung
-- **Strict mode:** an.
-- **`any`:** Nur 2 Instanzen (sehr gut).
-- **Type-Assertions:** Häufiger (`as unknown as ...`). Nicht dramatisch, aber entkräftet teilweise die Strict-Garantien.
-- **Supabase-Types:** Ungetypt (`maybeSingle()`-Result wird manuell gecastet) — Migration zu `supabase gen types` wäre Gewinn.
+- Strict-Mode an.
+- **`any`:** 14 (in 6 Dateien; war 2 — Anstieg durch Marktplatz-API-Types).
+- **`@ts-ignore` / `@ts-expect-error`:** **0** (exzellent).
+- **Type-Assertions:** `as unknown as …` weiterhin vorhanden.
+- **Supabase-Types:** Noch ungetypt — `supabase gen types` fehlt.
 
-### Magic Numbers / Hardcoded Values
-- **Hardcoded Marketplace-Fee-Defaults:** Amazon 15 %, eBay 12 %, …(`marketplace-profitability.ts:36`). OK als Fallback, aber sollte mit Secrets konsistent versioniert werden.
-- **TTLs:** 5 min, 15 min, 30 s — verstreut. `SECRETS_CACHE_TTL_MS = 5 * 60 * 1000` ist benannt, andere nicht.
-- **Background-Sync-Intervall:** `DASHBOARD_CLIENT_BACKGROUND_SYNC_MS` ist benannt ✅.
+### Magic Numbers
+- Marketplace-Fee-Defaults (Amazon 15 %, eBay 12 %, …) weiterhin hardcoded Fallbacks.
+- TTL-Konstanten teilweise benannt (`SECRETS_CACHE_TTL_MS`, `DASHBOARD_CLIENT_BACKGROUND_SYNC_MS`).
 
 ### Dead Code
-- **`src/features/`** — Scaffold-Ordner, überwiegend leer/ungenutzt.
-- **Gelöschte Migration** `20260402120000_tutorial_tours.sql` steht noch in Git-Status (soll committed werden).
-- **Keine breiten unbenutzten Imports** (`no-unused-vars` als Warning aktiv).
+- **`src/features/`** weiterhin leer (Schuld #10).
+- **Keine Zombies** aus dem Refactor — Explore-Agent hat 5 `eslint-disable` weniger als vor Refactor bestätigt.
 
 ### Kommentar-Qualität
-- **Deutsche Inline-Kommentare** im Integration-Layer (gut lesbar, kontextreich, z. B. in `integrationSecrets.ts`).
-- **TODO/FIXME:** Sparsam (ein Marker in Analytics-Page zur Profit-Struktur).
-- **Keine JSDoc** als System; veraltete Kommentare nicht gefunden.
+- Deutsche Inline-Kommentare in Domänen-Libs (gut).
+- **NEU:** Refactor-Kommentare sparsam — keine Narration der Zerlegung in Code.
+- TODO/FIXME: 1 (in `MarketplaceDetailDialog.tsx`). Gut aufgeräumt.
+
+### Code-Smells im Detail (aus Quality-Scan)
+| Smell | Count | Schweregrad |
+|---|---|---|
+| `eslint-disable` | 23 (in 16 Dateien) | Niedrig |
+| `any` | 14 (in 6 Dateien) | Mittel |
+| `@ts-ignore`/`@ts-expect-error` | 0 | ✅ Exzellent |
+| `console.log` | 19 | Mittel |
+| `console.warn`/`error` | 19 | ✅ OK |
+| TODO/FIXME/HACK | 1 | Niedrig |
 
 ---
 
 ## Abschnitt 12 — Testing-Status
 
 ### Test-Arten
-- **Unit:** 1 Datei (`marketplaceProductClientMerge.test.ts`).
+- **Unit:** 4 Dateien (Vorher: 1). Δ: **+3 Tests** (`rateLimit.test.ts`, `marketplace-profitability.test.ts`, `roles.test.ts` hinzugekommen).
 - **Integration:** 0.
 - **E2E:** 0.
 - **Snapshot:** 0.
 
+### Test-Dateien
+| Datei | LOC | Coverage |
+|---|---|---|
+| `src/shared/lib/rateLimit.test.ts` | 62 | Rate-Limit-Lib (NEU) |
+| `src/shared/lib/marketplace-profitability.test.ts` | 88 | Profit-Calc (NEU) |
+| `src/shared/lib/roles.test.ts` | 83 | Rollen-Logik (NEU) |
+| `src/shared/lib/marketplaceProductClientMerge.test.ts` | 50 | Produkt-Merge |
+
 ### Coverage
-**Geschätzt < 1 %** über alle `.ts`-Dateien. De facto ist der gesamte API-Layer und UI ungetestet.
+- Geschätzt **< 1 %** über alle `.ts`-Dateien.
+- Alle 8 neuen Hooks aus dem Refactor haben **keinen** Test.
+- Alle 31 neuen Sub-Komponenten aus dem Refactor haben **keinen** Test.
 
-### Nicht getestete kritische Pfade
-Praktisch alles: Marktplatz-Integrationen, Auth-Flow, Role-Guards, Cache-Layer, Profit-Berechnung, Migration-Rückwärts-Kompatibilität.
+### Kritische ungetestete Pfade (Priorität)
+- `useMarketplaceSalesLoader`, `useXentralOrdersLoader`, `useArticleForecastLoader` (gemeinsames Loader-Pattern) — **direkte Kandidaten für Integration-Tests** mit MSW.
+- `article-forecast-utils.ts::computeForecast` — reine Funktion, **Unit-Test-Low-Hanging-Fruit**.
+- `sidebar/nav-utils.ts` (`isActivePath`, `resolveNavLink`, `partitionNavItems`) — reine Funktionen, **Unit-Test-Low-Hanging-Fruit**.
+- Auth-Flow, Role-Guards, Cache-Layer, Profit-Calc-Integration.
 
-### Test-Qualität
-Einziges existierendes Test-File prüft Merge-Logik — richtige Intention, aber extrem punktuell.
-
-### Tools & Config
-- **Vitest** 4.1.3, Config `vitest.config.ts` — Node-Env, Pattern `src/**/*.test.ts`, Alias `@`.
-- **Keine** Testing-Library, kein Playwright/Cypress.
+### Tools
+- Vitest ^4.1.3, `vitest.config.ts` — Node-Env, Pattern `src/**/*.test.ts`, Alias `@`.
+- Keine Testing-Library, kein Playwright/Cypress.
 
 ---
 
 ## Abschnitt 13 — Deployment & DevOps
 
 ### Deployment
-- **Vercel** (Serverless, edge-fähig aber nicht genutzt)
-- Push auf `main` → auto-deploy.
-- **Node 20** laut CI.
-- Build: `next build` (Turbopack off in Prod, Webpack-default).
+- **Vercel** (Serverless; Edge nicht genutzt)
+- Push `main` → auto-deploy; Preview pro PR
+- Node 20 (CI)
 
 ### Environments
-- **Dev:** `localhost:3000`, `.env.local`, optional Dev-Auth-Bypass.
-- **Prod:** `master-kpi-dashboard.vercel.app`, `.env` in Vercel-Dashboard.
-- **Staging:** Keine explizite — nur Vercel-Preview-Deployments pro PR.
+- **Dev:** `localhost:3000`, `.env.local`, optional Dev-Auth.
+- **Prod:** Vercel.
+- **Staging:** Vercel-Preview-Deployments.
 
-### Umgebungsvariablen (Auszug — vollständige Liste in Abschnitt 14)
-Supabase (3), App (2), Xentral (7), Amazon (9), Otto (4), Kaufland (5), Fressnapf/MMS/Zooplus/TikTok/eBay/Shopify (je 3-7), Marktplatz-Fees (~20 Keys), Cache TTLs (3), LLM (5+), Cron-Secrets (2), Adress-Demo (1), Dev-Flags (2).
+### Umgebungsvariablen
+Supabase (3), App (2), Xentral (7), Amazon (9), Otto (4), Kaufland (5), Fressnapf/MMS/Zooplus/TikTok/eBay/Shopify (3–7 je), Marktplatz-Fees (~20 Keys), Cache-TTLs (3), LLM (5+), Cron-Secrets (2), Adress-Demo (1), Dev-Flags (2).
 
 ### Docker
-**Kein Dockerfile.** Rein Vercel-basiert.
+**Keins.**
 
 ### Build-Prozess
 1. `npm ci`
 2. `npm run lint`
 3. `npm run typecheck`
-4. `npm run build` (= `next build`)
+4. `npm run build`
 5. Vercel-Deploy
-6. **Vercel-Cron** registriert `vercel.json` → 30-min-Warmup
+6. Vercel-Cron registriert via `vercel.json`
 
 ### CI-Pipeline
 `.github/workflows/ci.yml` — Ubuntu, Node 20, `npm ci`, lint + typecheck + build, 20-min-Timeout.
+
+### Security-Headers
+**NEU (Δ):** `next.config.ts` exportiert `headers()` mit:
+- `Content-Security-Policy` (Dev: `unsafe-eval` für HMR, Prod: strikt + `upgrade-insecure-requests`)
+- `Strict-Transport-Security`
+- `X-Frame-Options`
+- `Referrer-Policy`
 
 ---
 
 ## Abschnitt 14 — Sicherheits-Audit
 
-### SQL-Injection-Risiken
-Supabase-SDK baut parametrisierte Queries — kein String-Concat festgestellt. ✅
+### SQL-Injection
+Supabase-SDK parametrisiert. ✅
 
-### XSS-Risiken
+### XSS
 - React escapet Default.
-- `dangerouslySetInnerHTML` im Scan nicht gefunden.
-- Einige Marktplatz-Produkt-Beschreibungen werden als HTML gerendert? Nicht verifiziert — sollte überprüft werden, insbesondere Shopify Descriptions.
+- `dangerouslySetInnerHTML` weiterhin nicht im Scan.
+- Shopify-Descriptions (HTML) bleiben ungeprüft.
 
-### Sensitive Daten im Code
-- `.env*` gitignored (✅).
-- Keine API-Keys/Passwörter in Git-History gefunden (Stichprobe).
-- **NEXT_PUBLIC_***-Variablen sind client-exposed — keine Secrets sichtbar fehlkategorisiert.
+### Sensitive Daten
+- `.env*` gitignored. ✅
+- Keine Keys in Git-History.
+- `NEXT_PUBLIC_*` keine fehlkategorisierten Secrets.
 
 ### Dependency-Vulnerabilities
-**Nicht scannen können** (kein `npm audit` im CI sichtbar). Empfehlung: Dependabot oder Snyk einführen. Die verwendeten Versionen sind alle aktuell (Next 16.2.1, React 19.2, Supabase-JS 2.100, Zod 4.3).
+- Kein `npm audit` im CI.
+- Dependabot/Snyk nicht aktiviert.
 
-### Input-Validierung-Lücken
-- **`/api/marketplaces/stock-sync`** — Array-Body ohne Length-Validation.
-- **`/api/address-suggest`** — 439-Z. Adress-Parser, komplex, könnte auf injizierte Nominatim-Queries anfällig sein.
-- **`/api/invitations/lookup`** — kein Rate-Limit, kein Token-Validation-Strict-Check.
-- **Fehlend:** Zod-Schemas an vielen Route-Eingängen.
+### Input-Validierung
+- **Δ:** `apiValidation.ts` (Zod-Helper) eingeführt; flächendeckende Adoption ausstehend.
+- `/api/invitations/lookup` ohne Rate-Limit.
+- `/api/address-suggest` komplex, kein Input-Schema.
+- `/api/marketplaces/stock-sync` Array-Body ohne Length-Validation.
 
 ### Rate-Limiting
-**Komplett fehlend.** Kein Middleware-Layer, kein Per-Route-Limit. Public-Routes sollten `upstash/ratelimit` oder in-memory-Limiter bekommen.
+- **Lib vorhanden** (`rateLimit.ts` + Test), **noch nicht flächendeckend verdrahtet**.
 
-### HTTPS / Secure Headers / CSP
-- Vercel liefert HTTPS Default.
-- **Keine explizite CSP** (`Content-Security-Policy`-Header nicht konfiguriert).
-- **Keine `Strict-Transport-Security`** explizit (Vercel setzt manche Default).
-- **Keine `X-Frame-Options`** explizit.
-- Empfehlung: `next.config.ts` → `headers()` mit CSP, HSTS, X-Frame-Options, Referrer-Policy.
+### Headers / CSP / HSTS / XFO
+- **NEU (Δ):** `next.config.ts` setzt CSP, HSTS, X-Frame-Options, Referrer-Policy.
 
 ---
 
 ## Abschnitt 15 — Schulden-Register
 
-| # | Schuld | Betroffene Dateien | Schweregrad | Aufwand | Empfohlene Lösung |
-|---|---|---|---|---|---|
-| 1 | Supabase-Pool = 10, 9 parallele Marktplatz-Calls | `analytics/marketplaces/page.tsx`, ALLE `/api/{mp}/sales/` | **Kritisch** | Tage | Server-Side Aggregator-Route + Connection-Pool-Tuning; (teilweise durch Concurrency-3-Drossel gelöst, Aggregator noch offen) |
-| 2 | Rate-Limiting fehlt komplett | Alle öffentlichen Endpoints | **Kritisch** | Tag | `@upstash/ratelimit` integrieren; zumindest Invitations/Feedback/Address-Suggest |
-| 3 | Monolithische Pages >1 000 Z. | `analytics/marketplaces/page.tsx` (3 921), `xentral/orders/page.tsx` (1 839), `article-forecast/page.tsx` (1 568), `AppSidebar.tsx` (1 534) | **Hoch** | Wochen | Schrittweise in Sub-Komponenten + Custom-Hooks zerlegen |
-| 4 | Xentral-Sync-Secret mit permissivem Fallback | `/api/xentral/delivery-sales-cache/sync/route.ts` | **Hoch** | Stunden | Fail-closed in Prod erzwingen; Env-Validierung at startup |
-| 5 | Keine Zod-Validierung an Route-Eingängen | Quer durch API-Layer | **Hoch** | Woche | Ein `parseRequest(schema)`-Helper pro Route |
-| 6 | Kein Error-Boundary / zentrale Error-Middleware | React-Tree + API | **Hoch** | Tag | `error.tsx` in App-Router-Segments; API-Error-Wrapper-HOF |
-| 7 | Test-Coverage ~0 % | Ganzes Projekt | **Hoch** | Monate | Smoke + kritische Integrationstests mit Vitest + Playwright |
-| 8 | Auth-Boilerplate in 30 Routen dupliziert | Quer durch API | **Mittel** | Tag | `withAuth(roleFilter)`-Higher-Order oder Shared-Helper |
-| 9 | Marktplatz-Client-Wrapper duplizieren Mirakl-Logik | `mmsApiClient.ts`, `zooplusApiClient.ts`, `fressnapfApiClient.ts` + weitere | **Mittel** | Tag | Config-Registry statt einzelner Dateien |
-| 10 | `src/features/` angelegt aber unbenutzt | gesamtes Verzeichnis | **Niedrig** | Stunden | Entweder konsequent nutzen oder löschen |
-| 11 | Xentral-Delivery-Sales-Cache schreibt in lokale JSON-Datei | `xentralDeliverySalesCache.ts` | **Mittel** | Tag | In Supabase-Tabelle umziehen oder File-Lock |
-| 12 | Keine Security-Headers (CSP, HSTS, XFO) | `next.config.ts` | **Mittel** | Stunden | `headers()`-Export mit Standard-Set |
-| 13 | `integration_data_cache` ohne RLS | Migration `20260501100000` | **Niedrig** | Stunden | Auth-Read-RLS anwenden |
-| 14 | LLM-Fallback-Kaskade still fehlschlagend | `amazonContentLlmClaude.ts` + OpenAI-Wrapper | **Mittel** | Stunden | Expliziter Error-Payload und User-Toast |
-| 15 | `next/image` nicht flächendeckend (Lint-Warn) | diverse `<img>`-Tags | **Niedrig** | Tag | Migration `next/image` |
-| 16 | Überladene `flexMarketplaceApiClient.ts` (1 018 Z.) | eben genannte Datei | **Mittel** | Tage | Split in `flex/auth.ts`, `flex/pagination.ts`, `flex/config.ts` |
-| 17 | Gigantische `/api/amazon/sales/route.ts` (1 073 Z.) | API-Route | **Mittel** | Tage | Aggregations-Logik in Lib extrahieren |
-| 18 | Fee-Policy hardcoded Defaults parallel zu Secrets | `marketplace-profitability.ts:36` | **Niedrig** | Stunden | Einheitliche Konfiguration (Secrets als Source-of-Truth) |
-| 19 | `AGENTS.md` warnt vor Next 16 Breaking Changes, aber keine Lint-Regel | Dokument | **Niedrig** | Stunden | CI-Check auf deprecated API-Patterns |
-| 20 | Viele `process.env`-Reads ohne zentralen Validator | Quer durch Libs | **Mittel** | Tag | `env.ts` mit Zod am Startup validieren |
+Legende: **GESCHLOSSEN** (seit letztem Review gelöst) · **OFFEN** (weiterhin) · **NEU** (seit letztem Review aufgetaucht).
+
+| # | Status | Schuld | Betroffene Dateien | Schweregrad | Aufwand | Lösung |
+|---|---|---|---|---|---|---|
+| 1 | OFFEN (entschärft) | Supabase-Pool=10, 9 parallele Calls | `analytics/marketplaces`, `/api/{mp}/sales` | Kritisch | Tage | Aggregator `marketplace-overview` existiert, nicht durchgängig verwendet |
+| 2 | OFFEN (teilweise) | Rate-Limiting | `rateLimit.ts` vorhanden, kaum verdrahtet | Kritisch | Tag | Lib überall einbauen (Login/Invitations/Feedback/Address-Suggest) |
+| 3 | **GESCHLOSSEN** | Monolithische Pages > 1 000 Z. | `analytics/marketplaces/page.tsx`, `xentral/orders/page.tsx`, `article-forecast/page.tsx`, `AppSidebar.tsx` | Hoch | — | **4 Pages zerlegt, 9 062 → 1 698 LOC** |
+| 4 | OFFEN | Xentral-Sync-Secret Fallback | `/api/xentral/delivery-sales-cache/sync` | Hoch | Stunden | Env-Validator fail-closed |
+| 5 | OFFEN (angefangen) | Zod-Validierung an Route-Eingängen | API-Layer | Hoch | Woche | `apiValidation.ts` da, Adoption ~20 % — Roll-out fortführen |
+| 6 | OFFEN | Kein Error-Boundary / zentrale Error-Middleware | React + API | Hoch | Tag | `error.tsx` per Segment + `withErrorHandling`-HOF |
+| 7 | OFFEN (leicht besser) | Test-Coverage ~0 % | Projekt | Hoch | Monate | 3 neue Tests ergänzt; Foundation fehlt weiterhin |
+| 8 | OFFEN | Auth-Boilerplate in 30 Routen | API | Mittel | Tag | `withAuth(roleFilter)`-HOF |
+| 9 | OFFEN | Marktplatz-Client-Wrapper-Duplikation | `mmsApiClient`, `zooplusApiClient`, `fressnapfApiClient`, … | Mittel | Tag | Config-Registry statt einzelner Dateien |
+| 10 | OFFEN | `src/features/` angelegt, unbenutzt | Verzeichnis | Niedrig | Stunden | Nutzen oder löschen |
+| 11 | OFFEN | Xentral-Delivery-Sales-Cache JSON-Datei | `xentralDeliverySalesCache.ts` | Mittel | Tag | Supabase-Tabelle oder File-Lock |
+| 12 | **GESCHLOSSEN** | Security-Headers (CSP/HSTS/XFO) | `next.config.ts` | Mittel | — | `headers()`-Export mit CSP, HSTS, XFO, Referrer-Policy |
+| 13 | OFFEN | `integration_data_cache` ohne RLS | Migration | Niedrig | Stunden | Auth-Read-RLS |
+| 14 | OFFEN | LLM-Fallback-Kaskade still | `amazonContentLlmClaude.ts` + OpenAI | Mittel | Stunden | Error-Payload + Toast |
+| 15 | OFFEN | `next/image` nicht flächendeckend | diverse | Niedrig | Tag | Migration |
+| 16 | OFFEN | `flexMarketplaceApiClient.ts` (1 018 Z.) | Datei | Mittel | Tage | Split in `flex/{auth,pagination,config}.ts` |
+| 17 | OFFEN | `/api/amazon/sales/route.ts` (1 073 Z.) | Route | Mittel | Tage | Aggregationslogik in Lib |
+| 18 | OFFEN | Fee-Policy hardcoded Defaults | `marketplace-profitability.ts` | Niedrig | Stunden | Secrets als Source-of-Truth |
+| 19 | OFFEN | AGENTS.md warnt, aber keine Lint-Regel | Doc | Niedrig | Stunden | CI-Check auf deprecated Patterns |
+| 20 | OFFEN | `process.env`-Reads ohne zentralen Validator | Libs | Mittel | Tag | `env.ts` mit Zod at startup |
+| 21 | **NEU** | `AmazonProductEditor.tsx` (1 097 Z.) und vier Lib-Dateien > 850 Z. | `AmazonProductEditor.tsx`, `flexMarketplaceApiClient.ts`, `ottoApiClient.ts`, `amazonProductsSpApiCatalog.ts`, `xentralSkuSalesWindowAggregation.ts`, `xentralArticlesCompute.ts`, `amazonContentAudit.ts`, `xentralOrdersPayload.ts`, `xentralDeliverySalesCache.ts` | Mittel | Wochen | Nächste Refactor-Runde |
+| 22 | **NEU** | 3 Loader-Hooks duplizieren Background-Sync-Muster | `useArticleForecastLoader`, `useMarketplaceSalesLoader`, `useXentralOrdersLoader` | Niedrig | Tag | Gemeinsamer `useBackgroundSyncedResource<T>` |
+| 23 | **NEU** | `any` auf 14 gestiegen (von 2) | 6 Dateien, v. a. Marktplatz-API-Types | Mittel | Tag | Type-Definitionen festziehen |
+| 24 | **NEU** | `console.log` (19×) als Dev-Überbleibsel | 25 Dateien | Mittel | Tag | Structured Logger / Cleanup |
+
+**Zusammenfassung:**
+- **Geschlossen seit letztem Review:** 2 (Schuld #3 Monolith-Pages, #12 Security-Headers)
+- **Teilweise geschlossen:** 2 (#2 Rate-Limit-Lib da, #5 Zod-Helper da)
+- **Neu aufgetaucht:** 4 (#21 Amazon-Editor + Lib-Monolithen, #22 Loader-Duplikation, #23 `any`-Anstieg, #24 console.log)
+- **Gesamtsaldo:** Qualität **verbessert**, aber neue Refactor-Kandidaten sichtbar.
 
 ---
 
 ## Abschnitt 16 — Architektur-Vision & Empfehlungen
 
-### Erkannte Vision des Entwicklers
+### Vision des Projekts
 _"Ein Betriebssystem für Multi-Marketplace-Commerce: Ein Dashboard, viele APIs, klare Rollen, freundliche Onboarding-UX, bewusste Kostenkontrolle durch Caches."_
 
-Belege: Feingranulare Rollen, Tutorial-Mascot, Personal-Home-Layout, Feedback-Kanal, bewusstes Caching-Design, Profitabilitäts-Berechnung bis auf Netto-Basis, Mehrsprachigkeit für internationale Betriebs-Teams.
+### IST vs. SOLL (aktualisiert)
 
-### Wo die Implementierung abweicht
-1. **Monolithische Page-Komponenten** — widerspricht "kleinen, testbaren Einheiten".
-2. **Fehlende Tests** — widerspricht Launch-Checklist.
-3. **Fehlendes Rate-Limiting** — widerspricht Security-Ambition.
-4. **`src/features/` leer** — angelegtes Pattern nicht genutzt.
-5. **Admin-Client-Boilerplate** dupliziert — widerspricht DRY.
+| Dimension | IST | SOLL |
+|---|---|---|
+| Page-Size | ≤ 610 Z. (Δ verbessert) | ≤ 300 Z. |
+| Hook-Komposition | 22 Hooks, 3 ähnliche Loader | Extrahierter `useBackgroundSyncedResource<T>` |
+| API-Validierung | Zod-Helper da, ~20 % adoptiert | Alle Routen hinter `parseRequest(schema)` |
+| Auth-Boilerplate | Dupliziert | `withAuth(roleFilter)`-HOF |
+| Rate-Limiting | Lib da, kaum verdrahtet | Alle öffentlichen Routen + Login |
+| Tests | 4 (Libs) | Smoke + Hook-Tests + Playwright |
+| Security-Headers | ✅ da | ✅ + CSP-Monitoring |
+| Observability | Vercel-Logs, kein Sentry | Sentry + Structured Logging |
+| Lib-Monolithen | 6 Dateien > 800 Z. | Alle < 500 Z. |
+| Connection-Pool | 10 | 25–50 (Pro) oder Aggregator |
 
-### Top-10-Verbesserungen (priorisiert nach Impact)
+### Top-10 Verbesserungen (priorisiert nach Impact)
 
-1. **Server-Side Aggregator-Endpoint** `/api/analytics/marketplace-overview`, der die 9 Sales-Calls bündelt. Halbiert Client-Bundle-Komplexität, konsolidiert DB-Last, erlaubt einheitliches Caching.
-2. **Zod-Validierung konsequent** an allen Route-Eingängen mit Shared-Helper.
-3. **Auth-Guard HOF** `withAuth(roleFilter)(handler)` — entfernt Boilerplate, schließt "vergessene Checks"-Lücke.
-4. **Rate-Limiter** (Upstash) für Invitations/Feedback/Address-Suggest/Login.
-5. **Zerlegung `analytics/marketplaces/page.tsx`** in ~8 Sub-Komponenten + Custom-Hooks pro Abschnitt.
-6. **Connection-Pool-Upgrade / Aggregator** — Supabase Pro oder serverseitiges Request-Coalescing.
-7. **Testing-Foundation** — Vitest-Unit-Tests für `marketplace-profitability`, `integrationSecrets`, plus Playwright-Smoke-Tests für Login + Analytics-Dashboard-Load.
-8. **Security-Headers** + Startup-Env-Validator (Zod).
+1. **`withAuth(roleFilter)`-HOF** einführen, bestehende Routen migrieren — entfernt Boilerplate, schließt "vergessene Checks"-Lücke. Auch `withRateLimit` kombinieren.
+2. **Zod-Adoption flächendeckend** via `apiValidation.ts` in allen `POST`/`PUT`/`PATCH`-Routen.
+3. **`useBackgroundSyncedResource<T>`** als gemeinsamer Hook für AF/MP/XO-Loader — eliminiert ~500 LOC Duplikation.
+4. **Rate-Limiter flächendeckend einbauen** (Upstash/In-Memory): Login, Invitations/Lookup, Feedback, Address-Suggest.
+5. **Server-Side Aggregator** `marketplace-overview` als **einziger** Pfad (ersetzt 9-parallele-Calls).
+6. **Nächste Refactor-Runde:** `AmazonProductEditor.tsx`, `flexMarketplaceApiClient.ts`, `ottoApiClient.ts`, `xentralOrdersPayload.ts`.
+7. **Testing-Foundation:** Vitest-Unit-Tests für `article-forecast-utils`, `sidebar/nav-utils`, `useArticleForecastComputed`; Playwright-Smoke für Login + Analytics-Dashboard-Load.
+8. **Startup-Env-Validator** (Zod) + Sentry-Integration.
 9. **Xentral-File-Cache → Supabase-Tabelle** migrieren (Race-Free).
-10. **Strukturiertes Logging** + Sentry-Integration für Produktions-Observability.
+10. **`any`-Anstieg zurückdrehen:** Marktplatz-API-Types konkretisieren.
 
-### Ziel-Architektur-Bild
+### Ziel-Architektur (Mermaid)
 
 ```mermaid
 graph LR
   subgraph Client
-    UI[UI Pages & Components] --> Hooks
-    Hooks --> ClientCache[Browser Cache]
-    Hooks --> APIProxy[API Gateway Calls]
+    UI[UI Pages — thin]
+    UI --> Hooks[Shared Hooks]
+    Hooks --> ClientCache[dashboardClientCache]
+    Hooks --> APIProxy[API Calls]
+    Hooks --> SharedLoader[useBackgroundSyncedResource]
   end
   subgraph Server
-    APIProxy --> Middleware[Auth + RateLimit + Validation Middleware]
-    Middleware --> AggregatorRoutes[/api/analytics/:view/ Aggregators]
-    Middleware --> DomainRoutes[/api/:domain/:action Routes]
-    AggregatorRoutes --> DomainServices[Domain Services]
+    APIProxy --> Middleware[withAuth + withRateLimit + parseRequest]
+    Middleware --> AggregatorRoutes[/api/analytics/*/]
+    Middleware --> DomainRoutes[/api/:domain/:action/]
+    AggregatorRoutes --> DomainServices
     DomainRoutes --> DomainServices
     DomainServices --> IntegrationLayer
-    DomainServices --> SupabaseClient[Supabase Clients]
-    IntegrationLayer --> MarketplaceAdapters[Unified Marketplace Adapters]
-    IntegrationLayer --> AmazonAdapter[Amazon SP-API Adapter]
-    IntegrationLayer --> XentralAdapter[Xentral Adapter]
-    MarketplaceAdapters --> SecretsCache
-    AmazonAdapter --> SecretsCache
-    XentralAdapter --> SecretsCache
+    DomainServices --> SupabaseClient
+    IntegrationLayer --> MarketplaceRegistry[Marketplace Config Registry]
+    IntegrationLayer --> AmazonAdapter
+    IntegrationLayer --> XentralAdapter
+    MarketplaceRegistry --> SecretsCache
     SupabaseClient --> DB[(Supabase Postgres)]
     SecretsCache --> DB
-    MarketplaceAdapters --> DataCache[(integration_data_cache)]
+    MarketplaceRegistry --> DataCache[(integration_data_cache)]
   end
   subgraph Cron
-    VercelCron[Vercel Cron */30min] --> WarmRoute[/api/integration-cache/warm/]
+    VercelCron --> WarmRoute
     WarmRoute --> DomainServices
   end
   subgraph Observability
-    Middleware --> Sentry[Sentry + Structured Logs]
+    Middleware --> Sentry
     DomainServices --> Sentry
   end
 ```
 
 ### Migrations-Pfad IST → SOLL
 
-**Phase A (1–2 Wochen):** Security + Observability-Foundation
-- Env-Validator (Zod)
-- `withAuth()`-HOF einführen, bestehende Routen migrieren
-- Rate-Limiter auf kritische öffentliche Endpoints
-- Security-Headers, Sentry, strukturiertes Logging
+**Phase A (1–2 Wochen):** Security/Auth/Validation-Foundation
+- `withAuth` + `withRateLimit`-HOF, alle Routen migrieren
+- `env.ts` Zod-Validator at startup
+- Rate-Limiter auf Login/Invitations/Feedback/Address-Suggest
+- Sentry + Structured Logging
 
-**Phase B (2–4 Wochen):** Zerlegung + Aggregation
-- `analytics/marketplaces/page.tsx` in Sub-Komponenten + Hooks
-- Server-Side Aggregator-Endpoint `/api/analytics/marketplace-overview`
+**Phase B (2–3 Wochen):** Consolidation + Zerlegung Runde 2
+- `useBackgroundSyncedResource<T>` extrahieren, 3 Loader migrieren
+- `AmazonProductEditor.tsx` zerlegen
+- `flexMarketplaceApiClient.ts` splitten
 - Testing-Foundation (Vitest + Playwright-Smokes)
 
-**Phase C (2–3 Wochen):** Infra-Stabilisierung
-- Supabase-Pro + Pool-Upgrade
-- Xentral-File-Cache → Supabase-Tabelle
-- Marktplatz-Client-Wrapper-Konsolidierung (Config-Registry)
+**Phase C (2 Wochen):** Infra + Daten
+- Aggregator `marketplace-overview` als einziger Pfad
+- Supabase-Pool-Upgrade
+- Xentral-File-Cache → Tabelle
+- Marktplatz-Client-Wrapper Config-Registry
 
-**Phase D (laufend):** Kontinuierliche Härtung
-- Weitere Tests
-- Bundle-Splits
-- `next/image` Migration
-- `src/features/` entweder nutzen oder entfernen
+**Phase D (laufend):** Härtung
+- Weitere Tests, `next/image`, `src/features/` entsorgen, `any`-Hunt, Dependabot.
 
 ---
 
 ## Abschnitt 17 — Feature-Roadmap-Empfehlung
 
 ### Fehlende Features (auffällig)
-- **Versand-Tracking live** (aktuell nur Xentral-Info, kein User-Facing Live-Status).
+- **Versand-Tracking live** (User-facing Status aus Xentral).
 - **Alerting/Benachrichtigungen** — Low-Stock, Order-Failure, Preis-Parity-Verletzung als Push/E-Mail.
-- **Advertising-Sektion** existiert nur als Stub (Google/Amazon-Ads-Integration fehlt).
-- **Reporting-Export** (PDF/Excel-Zusammenfassungen für Geschäftsführung).
-- **Audit-Log** für Admin-Aktionen (wer hat wann Rolle geändert, Secrets editiert?).
-- **Healthcheck-Dashboard** — Status aller Integrationen auf einen Blick.
+- **Advertising-Sektion** ist Stub (Google-/Amazon-Ads-Integration fehlt).
+- **Reporting-Export** (PDF/Excel-Zusammenfassungen).
+- **Audit-Log** für Admin-Aktionen.
+- **Healthcheck-Dashboard** — Status aller Integrationen.
 
 ### Bestehende Features verbessern
-1. Analytics/Marktplätze-Page → Performance + Zerlegung.
+1. Analytics/Marktplätze-Page → SSR + Aggregator.
 2. Auth-Flow → MFA-Option, Session-Timeout-Warning.
-3. Xentral-Orders → Address-Validation mit weniger false positives.
-4. Amazon-Product-Editor → Split, LLM-Feedback als Seitenleiste statt Inline.
-5. Tutorials → A/B-Testing-fähig, Content in DB editierbar.
+3. Xentral-Orders → Address-Validation weniger false positives.
+4. Amazon-Product-Editor → Zerlegen, LLM-Feedback als Seitenleiste.
+5. Tutorials → Content in DB editierbar (ist), A/B-Test-fähig.
 
 ### Reihenfolge (Impact × Aufwand)
-1. **Rate-Limiter + Security-Headers** (High Impact, niedriger Aufwand — 1–2 Tage).
-2. **Server-Aggregator + Page-Zerlegung** (High × Hoch — 2–3 Wochen).
-3. **Testing-Foundation** (High × Hoch — 2 Wochen, aber zahlt kontinuierlich).
-4. **Alerting-System** (High × Mittel — 1 Woche).
-5. **Advertising-Integration** (High × Sehr hoch — Feature-Modul).
-6. **Audit-Log** (Medium × Niedrig — 2 Tage, gut für Compliance).
+1. **Rate-Limiter flächendeckend + Auth-HOF** (High × Niedrig — 1–2 Tage)
+2. **Server-Aggregator + Connection-Pool** (High × Mittel — 1 Woche)
+3. **Testing-Foundation** (High × Hoch — 2 Wochen, zahlt kontinuierlich)
+4. **Alerting-System** (High × Mittel — 1 Woche)
+5. **Nächste Refactor-Runde** (Mittel × Mittel — 1 Woche)
+6. **Advertising-Integration** (High × Sehr hoch — Feature-Modul)
+7. **Audit-Log** (Medium × Niedrig — 2 Tage)
 
 ### Quick-Wins
-- **Security-Headers** in `next.config.ts` (~1 h)
 - **Auth-HOF** (~4 h)
 - **Env-Validator** (~4 h)
-- **`sales-config-status`-Cache** (bereits implementiert)
-- **`marketplace-profitability` Batch-Read** (bereits implementiert)
-- **`src/features/` löschen**, wenn ungenutzt (~1 h)
+- **`src/features/` löschen** (~1 h)
+- **`useBackgroundSyncedResource` extrahieren** (~4 h)
+- **Unit-Tests für reine Funktionen** (`sidebar/nav-utils`, `article-forecast-utils`) (~4 h)
 
 ---
 
 ## Abschnitt 18 — KI-Kontext-Briefing
 
 ```
-## Für KI-Assistenten: Projekt-Briefing
+## Für KI-Assistenten: Projekt-Briefing (Stand 2026-04-15, Post-Refactor)
 
 Du arbeitest an "Master Dashboard" — einem Next.js 16 + React 19 Multi-Marketplace-Ops-Hub für Petrhein/AstroPet. Es aggregiert Amazon, eBay, Otto, Kaufland, Fressnapf, MediaMarkt-Saturn, Zooplus, TikTok, Shopify und Xentral (ERP) in einer Oberfläche.
 
 ### Was ist das Projekt?
-Internes Business-Dashboard mit Analytics (Profit/Retouren), Produkt-Editoren (inkl. LLM-Title-Review), Order-Merging, Procurement, Invitations, Tutorials und feingranularer Rollen-Sichtbarkeit. Deploy: Vercel. DB/Auth: Supabase.
+Internes Business-Dashboard mit Analytics (Profit/Retouren), Produkt-Editoren (inkl. LLM-Title-Review), Order-Merging, Procurement, Invitations, Tutorials und feingranularer Rollen-Sichtbarkeit. Deploy: Vercel. DB/Auth: Supabase. 394 TS/TSX-Dateien, 67 606 LOC, 77 API-Routen, 22 Migrations.
 
-### Kernregeln die du beachten musst:
-- **Stack-Versionen sind AKTUELL** — Next 16, React 19, Tailwind 4, Zod 4, Supabase-SSR 0.9. Keine veraltete API-Form verwenden. AGENTS.md warnt explizit: Next 16 hat Breaking Changes ggü. 14/15.
-- **Server vs. Client**: Jede Client-Komponente braucht `"use client"` oben. Route Handler sind Server-only, Node-Runtime.
-- **Auth in API-Routen**: Nutze `createServerSupabase()` aus `@/shared/lib/supabase/server`. Bei service-role: `createAdminClient()` aus `@/shared/lib/supabase/admin`. **Niemals** Service-Role im Client.
-- **Secrets**: Nur über `readIntegrationSecret(key)` / `readIntegrationSecretsBatch(keys)` aus `@/shared/lib/integrationSecrets`. Niemals direkt Supabase `integration_secrets`-Tabelle abfragen.
-- **Cache**: `integration_data_cache` hat Fresh/Stale-Model über `integrationDataCache.ts`. Schreiben nur via dessen Helper, nicht direkt.
-- **DB-Pool = 10**: Keine 9-fach parallelen Calls im selben Request-Scope. Max. 3 parallel, besser serverseitig bündeln.
-- **Rollen-Check**: Nutze `isOwnerFromSources()` aus `@/shared/lib/roles` — prüft DB-Profile + app_metadata + user_metadata.
-- **i18n**: Niemals harte Strings. Nutze `t("key")` aus `useTranslation()`. Alle drei Locales (de/en/zh) aktualisieren.
-- **Styling**: shadcn/ui + Tailwind Utilities. Primitives aus `src/components/ui/`, eigene Komponenten aus `src/shared/components/`.
-- **State**: Zustand-Store (`useAppStore`) nur für globale UI/Rollen-State. Lokalen Komponent-State mit useState. Server-State idealerweise TanStack Query (noch unter-genutzt; Ausbauen ist erwünscht).
+### Kernregeln:
+- **Stack-Versionen AKTUELL** — Next 16.2.1, React 19.2.4, Tailwind 4, Zod 4.3, Supabase-SSR 0.9. AGENTS.md warnt vor Next-16-Breaking-Changes.
+- **Server vs. Client**: Jede Client-Komponente `"use client"` oben. Route-Handler Server-only, Node-Runtime.
+- **Auth in API-Routen**: `createServerSupabase()` aus `@/shared/lib/supabase/server`. Service-Role nur `createAdminClient()` aus `@/shared/lib/supabase/admin`. Nie im Client.
+- **Secrets**: Nur via `readIntegrationSecret(key)` / `readIntegrationSecretsBatch(keys)` aus `@/shared/lib/integrationSecrets`.
+- **Cache**: `integration_data_cache` (server) via `integrationDataCache.ts`; `dashboardClientCache.ts` (browser-localStorage). Direktes Schreiben umgehen.
+- **DB-Pool = 10**: Keine 9-fach parallelen Calls im selben Request. Max 3 parallel, besser server-side bündeln.
+- **Rollen-Check**: `isOwnerFromSources()` aus `@/shared/lib/roles` (DB + app_metadata + user_metadata).
+- **i18n**: Niemals harte Strings. `t("key")` aus `useTranslation()`. Alle drei Locales (de/en/zh).
+- **Styling**: shadcn/ui + Tailwind. Primitives aus `src/components/ui/`, Eigene aus `src/shared/components/`.
+- **State**: `useAppStore` für globale UI/Rollen. Komponent-State: useState. Server-State: idealerweise TanStack Query (unter-genutzt).
+
+### Aktuelle Architektur-Muster (nach Refactor 2026-04-15):
+- **Thin-Orchestrator-Pages**: Dashboard-Pages importieren Hooks + Sub-Komponenten, halten keine Fetch-Logik selbst.
+- **Colocation**: Page + `components/`-Nachbarordner + Hooks in `src/shared/hooks/`.
+- **Shared-Hook-Muster**: `useXxxLoader` (Fetch+Cache+Polling), `useXxxRules` (API-State), `useXxxComputed` (Derived-Memos).
+
+### Neue/verschobene Dateien (WICHTIG für Navigation):
+- Analytics-Marktplätze-Seite: [src/app/(dashboard)/analytics/marketplaces/page.tsx] (582 Z.) + `components/` (10 Dateien) + Hooks `useMarketplaceSalesLoader`, `useMarketplaceTotals`, `useMarketplaceDetailNavigation`.
+- Xentral-Orders-Seite: [src/app/(dashboard)/xentral/orders/page.tsx] (610 Z.) + `components/` (4 Dateien) + Hook `useXentralOrdersLoader` + Lib `xentral-orders-utils.ts`.
+- Article-Forecast-Seite: [src/app/(dashboard)/analytics/article-forecast/page.tsx] (325 Z.) + `components/` (8 Dateien) + Hooks `useArticleForecastLoader`, `useArticleForecastRules`, `useArticleForecastComputed`, `useColumnVisibility` + Libs `article-forecast-utils.ts`, `xentralArticleForecastProject.ts`.
+- Sidebar: [src/shared/components/layout/AppSidebar.tsx] (181 Z.) + `sidebar/` (9 Dateien: `nav-utils.ts`, `navItems.ts`, `NavAccessCheckbox.tsx`, `SingleNavItem.tsx`, `MarketplaceExpandedGroup.tsx`, `CollapsedMarketplacePopover.tsx`, `SidebarNavSections.tsx`, `SidebarRoleControls.tsx`, `MobileSidebarTrigger.tsx`) + Hooks `useUpdatesPolling`, `useSidebarNav`, `useSidebarRoleTesting`.
+- Shared-Libs neu: `dashboardClientCache.ts`, `dashboardUi.ts`, `rateLimit.ts`, `apiValidation.ts`.
+- Shared-Hooks-Übersicht (22 Hooks): `useAmazonContentAudit`, `useAmazonDraftEditor`, `useArticleForecastComputed`, `useArticleForecastLoader`, `useArticleForecastRules`, `useColumnVisibility`, `useMarketplaceDetailNavigation`, `useMarketplaceSalesLoader`, `useMarketplaceTotals`, `usePermissions`, `useSidebarNav`, `useSidebarRoleTesting`, `useUpdatesPolling`, `useUser`, `useXentralOrdersLoader`, weitere.
 
 ### Wo neuer Code hingehört:
-- Neue Marktplatz-Integration → `src/shared/lib/{name}ApiClient.ts` + `src/app/api/{name}/...` + (falls Mirakl) via `flexMarketplaceApiClient.ts`-Spec.
-- Neues Feature mit eigener UI → `src/app/(dashboard)/{feature}/page.tsx` + shared lib + optionaler Hook.
-- Neues API-Endpoint → `src/app/api/{domain}/{verb}/route.ts` mit einheitlichem `NextResponse.json({ error })`-Error-Format.
-- Neue Tabelle → Migration in `supabase/migrations/{YYYYMMDDHHmmss}_{name}.sql` + RLS-Policy.
+- Neue Marktplatz-Integration → `src/shared/lib/{name}ApiClient.ts` + `src/app/api/{name}/…` + (falls Mirakl) via `flexMarketplaceApiClient.ts`-Spec.
+- Neues Feature mit eigener UI → `src/app/(dashboard)/{feature}/page.tsx` + optional `components/`-Nachbarordner + Hook(s) in `src/shared/hooks/`.
+- Neues API-Endpoint → `src/app/api/{domain}/{verb}/route.ts` mit `{ error: string }`-Error-Format, Zod-Validierung via `apiValidation.ts`.
+- Neue Tabelle → `supabase/migrations/{YYYYMMDDHHmmss}_{name}.sql` + RLS-Policy.
+- Neuer langer Loader-Hook → **prüfe erst**, ob `useBackgroundSyncedResource` (noch zu extrahieren) das leisten kann. Falls du diesen Hook ziehst, migriere die 3 bestehenden.
 
 ### Was du NICHT anfassen solltest:
-- Direkte Schema-Änderungen ohne Migration.
-- `middleware.ts` Public-Path-Allowlist — Auswirkungen auf Auth-Sicherheit.
+- Schema-Änderungen ohne Migration.
+- `middleware.ts` Public-Path-Allowlist — Auth-Sicherheit.
 - `useAppStore` Persist-Version ohne Migration-Handling.
-- `integration_secrets` Tabelle direkt.
-- `src/features/` — ist "tote Zone", aktuell nicht aktiv genutzt.
-- Secrets/Keys in Git (auch nicht in Kommentaren).
+- `integration_secrets` direkt.
+- `src/features/` (leere Zone).
+- Secrets/Keys in Git.
 
-### Aktueller Stand (2026-04-15):
-- Produktion stabil, aber DB-Ausfälle unter Marktplätze-Analytics-Last dokumentiert.
-- Jüngst gefixt: Fee-Policy Batch-Read, Sales-Call-Concurrency auf 3, Config-Cache.
-- Offene P0/P1: Rate-Limiting, Sync-Secret-Enforcement, Migration `marketplace_promotion_deals` noch nicht auf remote Supabase angewendet (HTTP 404).
-- Test-Coverage nahe 0 %.
+### Aktueller Stand:
+- **Produktion stabil**. Monolithische Pages sind Geschichte.
+- **Test-Gate:** `npm run typecheck && npx eslint src/ --max-warnings 0 && npm run build && npm test` muss grün bleiben. Aktuell 29/29 Tests, 0 Warnings, Build erfolgreich.
+- **Offene Schulden-Highlights:** Rate-Limit-Adoption, Auth-HOF, Env-Validator, Test-Foundation, nächste Refactor-Runde (AmazonProductEditor + Lib-Monolithen).
 
 ### Wenn du ein neues Feature baust:
-1. Schema: Migration in `supabase/migrations/` mit RLS-Policy.
-2. Integration-Lib (falls externer Service): `src/shared/lib/{name}ApiClient.ts`, Config über `readIntegrationSecretsBatch()`.
-3. API-Route: `src/app/api/...`, Auth via `createServerSupabase()`, Validierung mit Zod.
-4. UI-Page: `src/app/(dashboard)/{feature}/page.tsx` mit `"use client"` falls Interaktivität nötig.
-5. Sidebar-Entry: `AppSidebar.tsx` + Rollen-Sichtbarkeit in `useAppStore`.
-6. Übersetzungen: Alle drei `src/i18n/messages/{de,en,zh}.json` pflegen.
-7. Access-Guard: Seite durch `DashboardRouteAccessGuard` schützen falls nicht alle Rollen sehen sollen.
+1. Schema: Migration mit RLS-Policy.
+2. Integration-Lib (falls extern): `src/shared/lib/{name}ApiClient.ts`, Config via `readIntegrationSecretsBatch()`.
+3. API-Route: Auth via `createServerSupabase()`, Validierung mit Zod + `apiValidation.ts`.
+4. UI-Page: `src/app/(dashboard)/{feature}/page.tsx` mit `"use client"` falls interaktiv. **Halte die Page dünn** — Fetch-Logik in Hook, Präsentation in `components/`.
+5. Sidebar-Entry: `src/shared/components/layout/sidebar/navItems.ts` + Rollen-Sichtbarkeit in `useAppStore`.
+6. Übersetzungen: `src/i18n/messages/{de,en,zh}.json`.
+7. Access-Guard: `DashboardRouteAccessGuard`, falls nicht alle Rollen sehen sollen.
 
 ### Bekannte Probleme / Workarounds:
-- `marketplace_promotion_deals` → 404 wenn Migration nicht in Supabase angewendet — Nutzer muss selbst SQL ausführen.
-- Xentral `?includeSales=1` dauert bis 115 s → nicht synchron auf UX-kritischen Pfaden verwenden.
-- Analytics-Page feuert 9 parallele Calls → Concurrency-3-Drossel ist aktiv, weitere Optimierung offen.
-- Dev-Cache `.next/` bläht sich auf 7 GB auf → gelegentlich löschen.
+- Xentral `?includeSales=1` dauert bis 115 s → nicht synchron auf UX-Pfaden.
+- Analytics-Page feuert 9 parallele Calls → Concurrency-3-Drossel aktiv; Aggregator `marketplace-overview` existiert.
+- `integration_data_cache` ohne RLS — keine User-Daten dort speichern.
+- Dev-Cache `.next/` wächst stark — gelegentlich `rm -rf .next`.
 
 ### Technische Constraints:
-- Supabase Connection-Pool = 10 (Free-Plan). Nicht überschreiten.
-- Xentral-Delivery-Sales-Cache schreibt in lokale JSON — nicht parallelisieren ohne Lock.
-- Amazon SP-API rate-limited — `amazonSpApiGetWithQuotaRetry()` nutzen.
-- Claude-API-Calls sind teuer — nur bei Content-Audit auslösen.
-- Vercel Serverless-Funktions-Timeout: max 300 s (per `maxDuration`), heavy-Routes sind auf 60/120/300 gesetzt.
-- Turbopack-Dev-Cache kann groß werden — regelmäßig `rm -rf .next`.
+- Supabase Connection-Pool = 10 (Free-Plan).
+- Xentral-Delivery-Sales-Cache schreibt in lokale JSON — keine Parallelisierung ohne Lock.
+- Amazon SP-API rate-limited — `amazonSpApiGetWithQuotaRetry()`.
+- Claude-API teuer — nur Content-Audit.
+- Vercel Serverless-Funktion-Timeout: max 300 s (per `maxDuration`).
+- Turbopack-Dev-Cache wächst — regelmäßig löschen.
+
+### Qualitäts-Gates (zwingend):
+- `npm run typecheck` → 0 Errors
+- `npx eslint src/ --max-warnings 0` → 0 Warnings
+- `npm run build` → erfolgreich
+- `npm test` → 29/29 grün
+- Nach jedem Refactor-Schritt committen, nicht batchen.
 ```
 
 ---
 
 ## Scan-Zusammenfassung
 
-- **Gescannte Dateien:** ~ gesamtes Repo (vollständiger Scan über 3 parallele Explore-Agents).
-- **Identifizierte Features:** 15+ Kern-Features dokumentiert (Stichproben aus >30 sichtbaren User-Facing-Flows).
-- **Identifizierte kritische Issues:** 4 Kritisch, 6 Hoch, 5 Mittel, 4 Niedrig — siehe Abschnitt 15.
-- **Haupt-Risiko:** Kopplung von 9 parallelen Marktplatz-Calls an einen 10-Connection Supabase-Pool → bereits zweimal zu Produktionsvorfällen geführt.
-- **Haupt-Stärke:** Dichte, bewusst gepflegte Dokumentations- und Konventions-Basis (CLAUDE.md, docs/) plus konsequente Typ-Sicherheit.
+- **Gescannte Dateien:** 394 TS/TSX in `src/`, 22 Migrations, alle Config-Files, alle Docs, vollständiger Git-Log.
+- **Identifizierte Features:** 18+ dokumentiert (5 mit neu bewerteten Qualitätsnoten).
+- **Identifizierte Schulden:** 24 (2 geschlossen, 2 teilweise, 4 neu, 16 bleiben).
+- **Haupt-Erfolge seit Vor-Review:** Monolith-Pages zerlegt (9 062 → 1 698 LOC, −81 %); 8 neue Hooks; Security-Headers; `rateLimit.ts` + `apiValidation.ts` als Fundament.
+- **Haupt-Risiko (bleibend):** 10-Connection Supabase-Pool bei parallelen Marktplatz-Calls.
+- **Haupt-Stärke:** Modernes Stack, konsequente Typ-Sicherheit, dichte Doku-Basis, reife Refactor-Disziplin (alle Gates grün durch 39 Commits).
 
 _Review-Ende._
