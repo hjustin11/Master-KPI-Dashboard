@@ -23,7 +23,6 @@ import {
   parseYmdToUtcNoon,
 } from "@/shared/lib/xentralArticleForecastProject";
 import { DASHBOARD_PAGE_SHELL } from "@/shared/lib/dashboardUi";
-import { isProcurementProductLine } from "@/shared/lib/procurement/procurementAggregation";
 import { usePromotionDeals } from "../marketplaces/usePromotionDeals";
 import { ArticleForecastHeader } from "./components/ArticleForecastHeader";
 import { ArticleForecastAlerts } from "./components/ArticleForecastAlerts";
@@ -35,20 +34,18 @@ import {
 import useColumnVisibility from "@/shared/hooks/useColumnVisibility";
 import useArticleForecastRules from "@/shared/hooks/useArticleForecastRules";
 import { useArticleForecastColumns } from "./components/useArticleForecastColumns";
+import useArticleForecastComputed from "@/shared/hooks/useArticleForecastComputed";
 import {
   ARTICLE_FORECAST_CACHE_KEY,
   MARKETPLACE_COLUMN_VISIBILITY_KEY,
   WAREHOUSE_COLUMN_VISIBILITY_KEY,
   XENTRAL_ARTICLES_SEED_CACHE_KEY,
-  computeForecast,
   normalizeSkuKey,
   readStoredMarketplaceVisibility,
   readStoredWarehouseVisibility,
-  sumStockForVisibleLocations,
   type ArticleForecastCachedPayload,
   type ArticleForecastRow,
   type ArticlesResponseMeta,
-  type ForecastResult,
   type ProcurementLine,
   type XentralArticlesSeedPayload,
 } from "@/shared/lib/article-forecast-utils";
@@ -466,64 +463,15 @@ export default function AnalyticsArticleForecastPage() {
     setDateManuallySet(false);
   }, [dateManuallySet, fromYmd, toYmd, ruleScope, setRulesByScope]);
 
-  const inboundBySkuUntilHorizon = useMemo(() => {
-    const out = new Map<string, number>();
-    const horizonTs = parseYmdToUtcNoon(addDaysToYmd(toYmd, activeRules.projectionDays));
-    if (horizonTs == null) return out;
-    for (const line of procurementLines) {
-      if (!isProcurementProductLine(line)) continue;
-      if (!Number.isFinite(line.amount) || line.amount <= 0) continue;
-      const ts = parseYmdToUtcNoon(line.arrivalAtPort);
-      if (ts == null || ts > horizonTs) continue;
-      const key = normalizeSkuKey(line.sku);
-      if (!key) continue;
-      out.set(key, (out.get(key) ?? 0) + line.amount);
-    }
-    return out;
-  }, [activeRules.projectionDays, procurementLines, toYmd]);
-
-  const forecastBySku = useMemo(() => {
-    const out = new Map<string, ForecastResult>();
-    for (const row of rows) {
-      /** Immer Gesamtverkauf im Zeitraum (Spalte „Verkauft“) — unabhängig von Marktplatz-Spalten-Einblendung. */
-      const soldInWindow = Number.isFinite(row.totalSold) ? row.totalSold : 0;
-      const stockNow = sumStockForVisibleLocations(row, visibleWarehouseColumns, warehouseColumns);
-      const inboundUntilHorizon = inboundBySkuUntilHorizon.get(normalizeSkuKey(row.sku)) ?? 0;
-      const result = computeForecast({
-        rules: activeRules,
-        soldInWindow,
-        stockNow,
-        fromYmd,
-        toYmd,
-        inboundUntilHorizon,
-      });
-      /**
-       * Keine Ampel nach Bestandsschwellen, wenn im gewählten Verkaufsfenster kein Absatz erkennbar ist:
-       * - „0 verkauft, 0 Bestand“ (Ruhe/inaktiv)
-       * - „0 verkauft, aber noch Lager“ (z. B. 13 Stück): ohne Nachfrage im Fenster ist eine Orange-Warnung
-       *   nach absoluter Schwellenlage irreführend — kein sichtbarer Verbrauch.
-       * Negative Bestände (< 0) weiterhin kritisch (Ampel nicht unterdrücken).
-       */
-      const suppressThresholdAmpel = soldInWindow === 0 && stockNow >= 0;
-      out.set(
-        normalizeSkuKey(row.sku),
-        suppressThresholdAmpel ? { ...result, status: "ok" as const } : result
-      );
-    }
-    return out;
-  }, [activeRules, fromYmd, inboundBySkuUntilHorizon, rows, toYmd, visibleWarehouseColumns, warehouseColumns]);
-
-  const rowClassBySku = useMemo(() => {
-    const out = new Map<string, string>();
-    for (const [sku, forecast] of forecastBySku.entries()) {
-      if (forecast.status === "critical") {
-        out.set(sku, "bg-red-500/10 hover:!bg-red-500/15");
-      } else if (forecast.status === "low") {
-        out.set(sku, "bg-orange-500/10 hover:!bg-orange-500/15");
-      }
-    }
-    return out;
-  }, [forecastBySku]);
+  const { forecastBySku, rowClassBySku } = useArticleForecastComputed({
+    rows,
+    procurementLines,
+    activeRules,
+    fromYmd,
+    toYmd,
+    visibleWarehouseColumns,
+    warehouseColumns,
+  });
 
   const columns = useArticleForecastColumns({
     rows,
