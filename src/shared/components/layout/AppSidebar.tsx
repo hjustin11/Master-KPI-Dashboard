@@ -10,9 +10,7 @@ import {
   PanelLeft,
   User,
 } from "lucide-react";
-import { CollapsedMarketplacePopover } from "./sidebar/CollapsedMarketplacePopover";
-import { MarketplaceExpandedGroup } from "./sidebar/MarketplaceExpandedGroup";
-import { SingleNavItem } from "./sidebar/SingleNavItem";
+import { SidebarNavSections } from "./sidebar/SidebarNavSections";
 import {
   Sidebar,
   SidebarContent,
@@ -213,68 +211,21 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="p-2">
-        <nav className="space-y-1">
-          {start.map((item) => (
-            <SingleNavItem
-              key={item.key}
-              item={item}
-              pathname={pathname}
-              hasPermission={effectiveHasPermission}
-              canAccessPageByPath={canAccessPageByPath}
-              collapsed={collapsed}
-              userIsLoading={user.isLoading}
-              isAdvertisingDeveloper={isAdvertisingDeveloper}
-              wipPageLocks={wipPageLocks}
-              accessEdit={navAccessEdit}
-              updatesBellState={updatesBellState}
-              t={t}
-            />
-          ))}
-          {marketplaces.length > 0 ? (
-            collapsed ? (
-              <CollapsedMarketplacePopover
-                items={marketplaces}
-                pathname={pathname}
-                hasPermission={effectiveHasPermission}
-                canAccessPageByPath={canAccessPageByPath}
-                userIsLoading={user.isLoading}
-                isAdvertisingDeveloper={isAdvertisingDeveloper}
-                wipPageLocks={wipPageLocks}
-                accessEdit={navAccessEdit}
-                t={t}
-              />
-            ) : (
-              <MarketplaceExpandedGroup
-                items={marketplaces}
-                pathname={pathname}
-                hasPermission={effectiveHasPermission}
-                canAccessPageByPath={canAccessPageByPath}
-                userIsLoading={user.isLoading}
-                isAdvertisingDeveloper={isAdvertisingDeveloper}
-                wipPageLocks={wipPageLocks}
-                accessEdit={navAccessEdit}
-                updatesBellState={updatesBellState}
-                t={t}
-              />
-            )
-          ) : null}
-          {rest.map((item) => (
-            <SingleNavItem
-              key={item.key}
-              item={item}
-              pathname={pathname}
-              hasPermission={effectiveHasPermission}
-              canAccessPageByPath={canAccessPageByPath}
-              collapsed={collapsed}
-              userIsLoading={user.isLoading}
-              isAdvertisingDeveloper={isAdvertisingDeveloper}
-              wipPageLocks={wipPageLocks}
-              accessEdit={navAccessEdit}
-              updatesBellState={updatesBellState}
-              t={t}
-            />
-          ))}
-        </nav>
+        <SidebarNavSections
+          start={start}
+          marketplaces={marketplaces}
+          rest={rest}
+          collapsed={collapsed}
+          pathname={pathname}
+          hasPermission={effectiveHasPermission}
+          canAccessPageByPath={canAccessPageByPath}
+          userIsLoading={user.isLoading}
+          isAdvertisingDeveloper={isAdvertisingDeveloper}
+          wipPageLocks={wipPageLocks}
+          accessEdit={navAccessEdit}
+          updatesBellState={updatesBellState}
+          t={t}
+        />
       </SidebarContent>
 
       <SidebarFooter className="border-t border-border/50 p-3">
@@ -484,54 +435,22 @@ export function MobileSidebarTrigger() {
           </SheetTitle>
           <SheetDescription className="text-xs">{t("sidebar.navigation")}</SheetDescription>
         </SheetHeader>
-        <nav className="space-y-1 px-4 pb-4">
-          {start.map((item) => (
-            <SingleNavItem
-              key={item.key}
-              item={item}
-              pathname={pathname}
-              hasPermission={effectiveHasPermission}
-              canAccessPageByPath={canAccessPageByPath}
-              collapsed={false}
-              userIsLoading={user.isLoading}
-              isAdvertisingDeveloper={isAdvertisingDeveloper}
-              wipPageLocks={wipPageLocks}
-              accessEdit={navAccessEdit}
-              updatesBellState={updatesBellState}
-              t={t}
-            />
-          ))}
-          {marketplaces.length > 0 ? (
-            <MarketplaceExpandedGroup
-              items={marketplaces}
-              pathname={pathname}
-              hasPermission={effectiveHasPermission}
-              canAccessPageByPath={canAccessPageByPath}
-              userIsLoading={user.isLoading}
-              isAdvertisingDeveloper={isAdvertisingDeveloper}
-              wipPageLocks={wipPageLocks}
-              accessEdit={navAccessEdit}
-              updatesBellState={updatesBellState}
-              t={t}
-            />
-          ) : null}
-          {rest.map((item) => (
-            <SingleNavItem
-              key={item.key}
-              item={item}
-              pathname={pathname}
-              hasPermission={effectiveHasPermission}
-              canAccessPageByPath={canAccessPageByPath}
-              collapsed={false}
-              userIsLoading={user.isLoading}
-              isAdvertisingDeveloper={isAdvertisingDeveloper}
-              wipPageLocks={wipPageLocks}
-              accessEdit={navAccessEdit}
-              updatesBellState={updatesBellState}
-              t={t}
-            />
-          ))}
-        </nav>
+        <SidebarNavSections
+          start={start}
+          marketplaces={marketplaces}
+          rest={rest}
+          collapsed={false}
+          pathname={pathname}
+          hasPermission={effectiveHasPermission}
+          canAccessPageByPath={canAccessPageByPath}
+          userIsLoading={user.isLoading}
+          isAdvertisingDeveloper={isAdvertisingDeveloper}
+          wipPageLocks={wipPageLocks}
+          accessEdit={navAccessEdit}
+          updatesBellState={updatesBellState}
+          t={t}
+          className="space-y-1 px-4 pb-4"
+        />
         <div className="mt-auto border-t border-border/50 p-4">
           <DropdownMenu>
             <DropdownMenuTrigger
