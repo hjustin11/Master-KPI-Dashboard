@@ -44,7 +44,7 @@ import {
   parseYmdToUtcNoon,
 } from "@/shared/lib/xentralArticleForecastProject";
 import { cn } from "@/lib/utils";
-import { DASHBOARD_PAGE_SHELL, DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboardUi";
+import { DASHBOARD_PAGE_SHELL } from "@/shared/lib/dashboardUi";
 import {
   DEFAULT_ARTICLE_FORECAST_RULES,
   sanitizeArticleForecastRulesByScope,
@@ -54,6 +54,9 @@ import {
 } from "@/shared/lib/articleForecastRules";
 import { isProcurementProductLine } from "@/shared/lib/procurement/procurementAggregation";
 import { usePromotionDeals } from "../marketplaces/usePromotionDeals";
+import { ArticleForecastHeader } from "./components/ArticleForecastHeader";
+import { ArticleForecastAlerts } from "./components/ArticleForecastAlerts";
+import { ArticleForecastMetaBanner } from "./components/ArticleForecastMetaBanner";
 import {
   ARTICLE_FORECAST_CACHE_KEY,
   ARTICLE_FORECAST_RULE_SCOPE_KEY,
@@ -935,57 +938,21 @@ export default function AnalyticsArticleForecastPage() {
 
   return (
     <div className={DASHBOARD_PAGE_SHELL}>
-      <div className="space-y-1">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <h1 className={DASHBOARD_PAGE_TITLE}>{t("articleForecast.title")}</h1>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!hasMounted}
-              onClick={() => void load(true)}
-            >
-              {t("articleForecast.refresh")}
-            </Button>
-            {isBackgroundSyncing ? (
-              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                {t("articleForecast.syncing")}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {error ? (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-700">
-          {error}
-        </div>
-      ) : null}
-
-      {salesAggError && !isLoading ? (
-        <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
-          <span className="flex-1">{t("articleForecast.salesLoadError")}</span>
-          <button
-            type="button"
-            className="shrink-0 text-xs underline underline-offset-2 hover:no-underline"
-            onClick={() => {
-              setSalesAggError(false);
-              void load(true);
-            }}
-          >
-            {t("commonUi.retry")}
-          </button>
-        </div>
-      ) : null}
-
-      {windowWarning ? (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-950">
-          {windowWarning}
-        </div>
-      ) : null}
+      <ArticleForecastHeader
+        hasMounted={hasMounted}
+        isBackgroundSyncing={isBackgroundSyncing}
+        onRefresh={() => void load(true)}
+      />
+      <ArticleForecastAlerts
+        error={error}
+        salesAggError={salesAggError}
+        isLoading={isLoading}
+        windowWarning={windowWarning}
+        onRetrySalesAgg={() => {
+          setSalesAggError(false);
+          void load(true);
+        }}
+      />
 
       <div className="relative min-h-[360px] w-full min-w-0 flex-1">
         <DataTable
@@ -1356,50 +1323,13 @@ export default function AnalyticsArticleForecastPage() {
         />
       </div>
 
-      {meta?.salesWindow && !isLoading ? (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-          <span>
-            {t("articleForecast.metaWindow", {
-              from: meta.salesWindow.fromYmd ?? fromYmd,
-              to: meta.salesWindow.toYmd ?? toYmd,
-            })}
-          </span>
-          <span>
-            {t("articleForecast.metaNotes", {
-              notes: String(meta.salesWindow.deliveryNotesInWindow ?? 0),
-              lines: String(meta.salesWindow.lineItemsParsed ?? 0),
-            })}
-          </span>
-          <span>
-            {meta.salesWindow.source === "v3_delivery_notes" ? "v3" : "v1"}
-            {meta.salesWindow.cacheDaysUsed
-              ? ` + Cache (${meta.salesWindow.cacheDaysUsed}d)`
-              : ""}
-          </span>
-        </div>
-      ) : null}
-
-      {relevantDeals.length > 0 ? (
-        <div className="rounded-xl border border-border/50 bg-card/80 p-3">
-          <h4 className="mb-2 text-xs font-medium text-muted-foreground">
-            {t("articleForecast.activeDeals", { count: String(relevantDeals.length) })}
-          </h4>
-          <div className="flex flex-wrap gap-2">
-            {relevantDeals.map((deal) => (
-              <span
-                key={deal.id}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background/80 px-2 py-1 text-xs"
-              >
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: deal.color }}
-                />
-                {deal.label} · {deal.from} — {deal.to}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <ArticleForecastMetaBanner
+        meta={meta}
+        isLoading={isLoading}
+        fromYmd={fromYmd}
+        toYmd={toYmd}
+        relevantDeals={relevantDeals}
+      />
     </div>
   );
 }
