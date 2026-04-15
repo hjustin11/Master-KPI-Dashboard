@@ -42,6 +42,7 @@ import {
   ArticleForecastDateRangePicker,
   ArticleForecastToolbarBetween,
 } from "./components/ArticleForecastToolbar";
+import useColumnVisibility from "@/shared/hooks/useColumnVisibility";
 import {
   ARTICLE_FORECAST_CACHE_KEY,
   ARTICLE_FORECAST_RULE_SCOPE_KEY,
@@ -127,12 +128,6 @@ export default function AnalyticsArticleForecastPage() {
   const [rulesSaving, setRulesSaving] = useState(false);
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [rulesNotice, setRulesNotice] = useState<string | null>(null);
-  const [marketplaceColumnVisibility, setMarketplaceColumnVisibility] = useState<
-    Record<string, boolean>
-  >({});
-  const [warehouseColumnVisibility, setWarehouseColumnVisibility] = useState<Record<string, boolean>>(
-    {}
-  );
   const fetchGenerationRef = useRef(0);
 
   const load = useCallback(
@@ -487,66 +482,24 @@ export default function AnalyticsArticleForecastPage() {
     return [...names].sort((a, b) => a.localeCompare(b, "de"));
   }, [rows]);
 
-  useEffect(() => {
-    const stored = readStoredMarketplaceVisibility();
-    setMarketplaceColumnVisibility((prev) => {
-      const base = Object.keys(prev).length > 0 ? prev : stored;
-      const next: Record<string, boolean> = { ...base };
-      for (const p of projectColumns) {
-        // Standard: Marktplatz-Spalten initial ausgeblendet, bis sie aktiv eingeblendet werden.
-        if (next[p] === undefined) next[p] = false;
-      }
-      if (projectColumns.length > 0) {
-        for (const k of Object.keys(next)) {
-          if (!projectColumns.includes(k)) delete next[k];
-        }
-      }
-      return next;
-    });
-  }, [projectColumns]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (Object.keys(marketplaceColumnVisibility).length === 0) return;
-    try {
-      localStorage.setItem(
-        MARKETPLACE_COLUMN_VISIBILITY_KEY,
-        JSON.stringify(marketplaceColumnVisibility)
-      );
-    } catch {
-      /* ignore quota / private mode */
-    }
-  }, [marketplaceColumnVisibility]);
-
-  useEffect(() => {
-    const stored = readStoredWarehouseVisibility();
-    setWarehouseColumnVisibility((prev) => {
-      const base = Object.keys(prev).length > 0 ? prev : stored;
-      const next: Record<string, boolean> = { ...base };
-      for (const w of warehouseColumns) {
-        if (next[w] === undefined) next[w] = true;
-      }
-      if (warehouseColumns.length > 0) {
-        for (const k of Object.keys(next)) {
-          if (!warehouseColumns.includes(k)) delete next[k];
-        }
-      }
-      return next;
-    });
-  }, [warehouseColumns]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (Object.keys(warehouseColumnVisibility).length === 0) return;
-    try {
-      localStorage.setItem(
-        WAREHOUSE_COLUMN_VISIBILITY_KEY,
-        JSON.stringify(warehouseColumnVisibility)
-      );
-    } catch {
-      /* ignore */
-    }
-  }, [warehouseColumnVisibility]);
+  const {
+    visibility: marketplaceColumnVisibility,
+    setVisibility: setMarketplaceColumnVisibility,
+  } = useColumnVisibility({
+    storageKey: MARKETPLACE_COLUMN_VISIBILITY_KEY,
+    columns: projectColumns,
+    defaultVisible: false,
+    readStored: readStoredMarketplaceVisibility,
+  });
+  const {
+    visibility: warehouseColumnVisibility,
+    setVisibility: setWarehouseColumnVisibility,
+  } = useColumnVisibility({
+    storageKey: WAREHOUSE_COLUMN_VISIBILITY_KEY,
+    columns: warehouseColumns,
+    defaultVisible: true,
+    readStored: readStoredWarehouseVisibility,
+  });
 
   const visibleProjectColumns = useMemo(
     () => projectColumns.filter((p) => marketplaceColumnVisibility[p] !== false),
