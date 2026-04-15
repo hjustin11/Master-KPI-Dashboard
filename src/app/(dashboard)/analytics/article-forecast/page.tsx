@@ -26,13 +26,6 @@ import {
 } from "@/shared/lib/xentralArticleForecastProject";
 import { cn } from "@/lib/utils";
 import { DASHBOARD_PAGE_SHELL } from "@/shared/lib/dashboardUi";
-import {
-  DEFAULT_ARTICLE_FORECAST_RULES,
-  sanitizeArticleForecastRulesByScope,
-  type ArticleForecastRuleScope,
-  type ArticleForecastRules,
-  type ArticleForecastRulesByScope,
-} from "@/shared/lib/articleForecastRules";
 import { isProcurementProductLine } from "@/shared/lib/procurement/procurementAggregation";
 import { usePromotionDeals } from "../marketplaces/usePromotionDeals";
 import { ArticleForecastHeader } from "./components/ArticleForecastHeader";
@@ -43,16 +36,15 @@ import {
   ArticleForecastToolbarBetween,
 } from "./components/ArticleForecastToolbar";
 import useColumnVisibility from "@/shared/hooks/useColumnVisibility";
+import useArticleForecastRules from "@/shared/hooks/useArticleForecastRules";
 import {
   ARTICLE_FORECAST_CACHE_KEY,
-  ARTICLE_FORECAST_RULE_SCOPE_KEY,
   MARKETPLACE_COLUMN_VISIBILITY_KEY,
   WAREHOUSE_COLUMN_VISIBILITY_KEY,
   XENTRAL_ARTICLES_SEED_CACHE_KEY,
   computeForecast,
   normalizeSkuKey,
   readStoredMarketplaceVisibility,
-  readStoredRuleScope,
   readStoredWarehouseVisibility,
   sumStockForVisibleLocations,
   type ArticleForecastCachedPayload,
@@ -111,6 +103,18 @@ export default function AnalyticsArticleForecastPage() {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
 
+  const {
+    ruleScope,
+    setRuleScope,
+    setRulesByScope,
+    activeRules,
+    rulesLoading,
+    rulesSaving,
+    rulesError,
+    rulesNotice,
+    saveRules,
+  } = useArticleForecastRules({ hasMounted, t });
+
   const { deals: promotionDeals } = usePromotionDeals();
   const relevantDeals = useMemo(
     () => promotionDeals.filter((d) => d.from <= toYmd && d.to >= fromYmd),
@@ -119,15 +123,6 @@ export default function AnalyticsArticleForecastPage() {
   const [error, setError] = useState<string | null>(null);
   const [salesAggError, setSalesAggError] = useState(false);
   const [meta, setMeta] = useState<ArticlesResponseMeta | null>(null);
-  const [ruleScope, setRuleScope] = useState<ArticleForecastRuleScope>("temporary");
-  const [rulesByScope, setRulesByScope] = useState<ArticleForecastRulesByScope>({
-    fixed: { ...DEFAULT_ARTICLE_FORECAST_RULES },
-    temporary: { ...DEFAULT_ARTICLE_FORECAST_RULES },
-  });
-  const [rulesLoading, setRulesLoading] = useState(true);
-  const [rulesSaving, setRulesSaving] = useState(false);
-  const [rulesError, setRulesError] = useState<string | null>(null);
-  const [rulesNotice, setRulesNotice] = useState<string | null>(null);
   const fetchGenerationRef = useRef(0);
 
   const load = useCallback(
@@ -355,71 +350,6 @@ export default function AnalyticsArticleForecastPage() {
     return () => window.clearInterval(id);
   }, [hasMounted, load]);
 
-  useEffect(() => {
-    if (!hasMounted) return;
-    setRuleScope(readStoredRuleScope());
-  }, [hasMounted]);
-
-  useEffect(() => {
-    if (!hasMounted) return;
-    try {
-      localStorage.setItem(ARTICLE_FORECAST_RULE_SCOPE_KEY, ruleScope);
-    } catch {
-      /* ignore */
-    }
-  }, [hasMounted, ruleScope]);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      setRulesLoading(true);
-      setRulesError(null);
-      try {
-        const res = await fetch("/api/article-forecast/rules", { cache: "no-store" });
-        const payload = (await res.json()) as {
-          error?: string;
-          rules?: Partial<ArticleForecastRulesByScope>;
-        };
-        if (!res.ok) {
-          throw new Error(payload.error ?? t("articleForecast.rulesLoadError"));
-        }
-        if (!alive) return;
-        setRulesByScope(sanitizeArticleForecastRulesByScope(payload.rules ?? null));
-      } catch (e) {
-        if (!alive) return;
-        setRulesError(e instanceof Error ? e.message : t("articleForecast.rulesLoadError"));
-      } finally {
-        if (!alive) return;
-        setRulesLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [t]);
-
-  const saveRules = useCallback(
-    async (scope: ArticleForecastRuleScope, rules: ArticleForecastRules) => {
-      setRulesSaving(true);
-      setRulesError(null);
-      setRulesNotice(null);
-      try {
-        const res = await fetch("/api/article-forecast/rules", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scope, rules }),
-        });
-        const payload = (await res.json()) as { error?: string; rules?: ArticleForecastRules };
-        if (!res.ok) throw new Error(payload.error ?? t("articleForecast.rulesSaveError"));
-        setRulesNotice(t("articleForecast.rulesSaved"));
-      } catch (e) {
-        setRulesError(e instanceof Error ? e.message : t("articleForecast.rulesSaveError"));
-      } finally {
-        setRulesSaving(false);
-      }
-    },
-    [t]
-  );
 
   const windowWarning = useMemo(() => {
     const sw = meta?.salesWindow;
@@ -511,8 +441,6 @@ export default function AnalyticsArticleForecastPage() {
     [warehouseColumns, warehouseColumnVisibility]
   );
 
-  const activeRules = rulesByScope[ruleScope];
-
   // Regel → Datum: Wenn salesWindowDays in den Regeln geändert wird, fromYmd automatisch berechnen.
   const salesWindowDaysRef = useRef(activeRules.salesWindowDays);
   useEffect(() => {
@@ -538,7 +466,7 @@ export default function AnalyticsArticleForecastPage() {
       [ruleScope]: { ...prev[ruleScope], salesWindowDays: clamped },
     }));
     setDateManuallySet(false);
-  }, [dateManuallySet, fromYmd, toYmd, ruleScope]);
+  }, [dateManuallySet, fromYmd, toYmd, ruleScope, setRulesByScope]);
 
   const inboundBySkuUntilHorizon = useMemo(() => {
     const out = new Map<string, number>();
