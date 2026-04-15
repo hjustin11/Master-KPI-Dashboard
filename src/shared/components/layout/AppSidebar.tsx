@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,6 +11,7 @@ import {
   User,
 } from "lucide-react";
 import { SidebarNavSections } from "./sidebar/SidebarNavSections";
+import { SidebarRoleControls } from "./sidebar/SidebarRoleControls";
 import {
   Sidebar,
   SidebarContent,
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { LogoutMenuItem } from "@/shared/components/auth/LogoutMenuItem";
 import {
   Sheet,
   SheetContent,
@@ -37,19 +39,12 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { LogoutMenuItem } from "@/shared/components/auth/LogoutMenuItem";
 import { useUser } from "@/shared/hooks/useUser";
 import { usePermissions } from "@/shared/hooks/usePermissions";
-import {
-  ROLE_OPTIONS,
-  type SidebarItemKey,
-} from "@/shared/lib/access-control";
-import { useAppStore } from "@/shared/stores/useAppStore";
 import { useTranslation } from "@/i18n/I18nProvider";
-import { resolveRoleLabel } from "@/i18n/resolve-role-label";
 import { useTutorialNavGate } from "@/shared/components/tutorial/TutorialNavContext";
-import type { NavAccessEditConfig } from "@/shared/lib/nav-access-edit";
 import useSidebarNav from "@/shared/hooks/useSidebarNav";
+import useSidebarRoleTesting from "@/shared/hooks/useSidebarRoleTesting";
 import useUpdatesPolling from "@/shared/hooks/useUpdatesPolling";
 
 export function AppSidebar() {
@@ -63,32 +58,20 @@ export function AppSidebar() {
     hasPermission,
     canAccessSidebarItem,
     canAccessPageByPath,
-    activeRole: effectiveRole,
     isAdvertisingDeveloper,
   } = usePermissions();
-  const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
-  const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
-  const roleTestAccessEditMode = useAppStore((stateFromStore) => stateFromStore.roleTestAccessEditMode);
-  const roleSidebarItems = useAppStore((stateFromStore) => stateFromStore.roleSidebarItems);
-  const toggleRoleSidebarItem = useAppStore((stateFromStore) => stateFromStore.toggleRoleSidebarItem);
-  const setRoleTestingEnabled = useAppStore(
-    (stateFromStore) => stateFromStore.setRoleTestingEnabled
-  );
-  const customRoleKeys = useAppStore((stateFromStore) => stateFromStore.customRoleKeys);
-  const roleLabels = useAppStore((stateFromStore) => stateFromStore.roleLabels);
-  const setActiveRole = useAppStore((stateFromStore) => stateFromStore.setActiveRole);
-  const wipPageLocks = useAppStore((stateFromStore) => stateFromStore.wipPageLocks);
-  const roleLabel = resolveRoleLabel(effectiveRole, roleLabels[effectiveRole], locale);
-  const roleOptions = [
-    ...ROLE_OPTIONS.map((item) => ({
-      value: item.value,
-      label: resolveRoleLabel(item.value, roleLabels[item.value], locale),
-    })),
-    ...customRoleKeys.map((key) => ({
-      value: key,
-      label: resolveRoleLabel(key, roleLabels[key], locale),
-    })),
-  ];
+  const {
+    activeRole,
+    setActiveRole,
+    roleTestingEnabled,
+    setRoleTestingEnabled,
+    roleOptions,
+    roleLabel,
+    canRoleSwitch,
+    cycleRole,
+    navAccessEdit,
+    wipPageLocks,
+  } = useSidebarRoleTesting(locale);
   const isHydrated = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -101,7 +84,6 @@ export function AppSidebar() {
   // Verhindert Hydration-Mismatch: initial immer expanded rendern,
   // erst nach dem Client-Mount den echten Sidebar-State verwenden.
   const collapsed = isHydrated ? state === "collapsed" : false;
-  const canRoleSwitch = !user.isLoading && user.roleKey === "owner" && roleTestingEnabled;
   const {
     start,
     marketplaces,
@@ -115,36 +97,6 @@ export function AppSidebar() {
     userIsLoading: user.isLoading,
   });
   const { updatesBellState } = useUpdatesPolling();
-  const cycleRole = (direction: "prev" | "next") => {
-    if (!canRoleSwitch) return;
-    const values = roleOptions.map((r) => r.value);
-    const currentIndex = values.indexOf(activeRole);
-    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
-    const nextIndex =
-      direction === "prev"
-        ? (safeIndex - 1 + values.length) % values.length
-        : (safeIndex + 1) % values.length;
-    setActiveRole(values[nextIndex] ?? "owner");
-  };
-
-  const navAccessEdit = useMemo((): NavAccessEditConfig | undefined => {
-    if (user.isLoading || user.roleKey !== "owner" || !roleTestingEnabled || !roleTestAccessEditMode) {
-      return undefined;
-    }
-    return {
-      targetRoleKey: activeRole,
-      isChecked: (key: SidebarItemKey) => Boolean(roleSidebarItems[activeRole]?.[key]),
-      toggle: (key: SidebarItemKey) => toggleRoleSidebarItem(activeRole, key),
-    };
-  }, [
-    user.isLoading,
-    user.roleKey,
-    roleTestingEnabled,
-    roleTestAccessEditMode,
-    activeRole,
-    roleSidebarItems,
-    toggleRoleSidebarItem,
-  ]);
 
   return (
     <Sidebar
@@ -229,102 +181,20 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-border/50 p-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <div
-                role="button"
-                tabIndex={0}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-all duration-200 hover:bg-accent/60",
-                  collapsed && "justify-center"
-                )}
-              />
-            }
-          >
-              <Avatar size="sm">
-                <AvatarFallback>{user.initials}</AvatarFallback>
-              </Avatar>
-              {!collapsed ? (
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{user.fullName}</p>
-                  <div className="mt-0.5 flex items-center justify-between gap-2">
-                    <p className="truncate text-xs text-muted-foreground">
-                      {user.isLoading ? t("common.loading") : roleLabel}
-                    </p>
-                    {canRoleSwitch ? (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            cycleRole("prev");
-                          }}
-                          className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-                          aria-label={t("sidebar.prevRole")}
-                          title={t("sidebar.prevRole")}
-                        >
-                          <ChevronLeft className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            cycleRole("next");
-                          }}
-                          className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
-                          aria-label={t("sidebar.nextRole")}
-                          title={t("sidebar.nextRole")}
-                        >
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="end" className="w-56">
-            <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
-              <User className="h-4 w-4" />
-              {t("header.profile")}
-            </DropdownMenuItem>
-            {!user.isLoading && user.roleKey === "owner" ? (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setRoleTestingEnabled(!roleTestingEnabled)}
-                  className={roleTestingEnabled ? "bg-primary/10 text-primary" : ""}
-                >
-                  {t("header.roleTestMode")}: {roleTestingEnabled ? t("common.on") : t("common.off")}
-                </DropdownMenuItem>
-
-                {roleTestingEnabled ? (
-                  <>
-                    {activeRole !== "owner" ? (
-                      <DropdownMenuItem onClick={() => setActiveRole("owner")}>
-                        {t("header.restoreDeveloperView")}
-                      </DropdownMenuItem>
-                    ) : null}
-                    {roleOptions.map((role) => (
-                      <DropdownMenuItem
-                        key={role.value}
-                        onClick={() => setActiveRole(role.value)}
-                        className={
-                          role.value === activeRole ? "bg-primary/10 text-primary" : ""
-                        }
-                      >
-                        {t("header.testAs", { role: role.label })}
-                      </DropdownMenuItem>
-                    ))}
-                  </>
-                ) : null}
-              </>
-            ) : null}
-            <DropdownMenuSeparator />
-            <LogoutMenuItem />
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <SidebarRoleControls
+          collapsed={collapsed}
+          user={user}
+          roleLabel={roleLabel}
+          canRoleSwitch={canRoleSwitch}
+          cycleRole={cycleRole}
+          onProfileClick={() => router.push("/settings/profile")}
+          roleTestingEnabled={roleTestingEnabled}
+          setRoleTestingEnabled={setRoleTestingEnabled}
+          roleOptions={roleOptions}
+          activeRole={activeRole}
+          setActiveRole={setActiveRole}
+          t={t}
+        />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
@@ -341,9 +211,20 @@ export function MobileSidebarTrigger() {
     hasPermission,
     canAccessSidebarItem,
     canAccessPageByPath,
-    activeRole: effectiveRole,
     isAdvertisingDeveloper,
   } = usePermissions();
+  const {
+    activeRole,
+    setActiveRole,
+    roleTestingEnabled,
+    setRoleTestingEnabled,
+    roleOptions,
+    roleLabel,
+    canRoleSwitch,
+    cycleRole,
+    navAccessEdit,
+    wipPageLocks,
+  } = useSidebarRoleTesting(locale);
   const {
     start,
     marketplaces,
@@ -357,62 +238,6 @@ export function MobileSidebarTrigger() {
     userIsLoading: user.isLoading,
   });
   const { updatesBellState } = useUpdatesPolling();
-  const activeRole = useAppStore((stateFromStore) => stateFromStore.activeRole);
-  const roleTestingEnabled = useAppStore((stateFromStore) => stateFromStore.roleTestingEnabled);
-  const roleTestAccessEditMode = useAppStore((stateFromStore) => stateFromStore.roleTestAccessEditMode);
-  const roleSidebarItems = useAppStore((stateFromStore) => stateFromStore.roleSidebarItems);
-  const toggleRoleSidebarItem = useAppStore((stateFromStore) => stateFromStore.toggleRoleSidebarItem);
-  const setRoleTestingEnabled = useAppStore(
-    (stateFromStore) => stateFromStore.setRoleTestingEnabled
-  );
-  const customRoleKeys = useAppStore((stateFromStore) => stateFromStore.customRoleKeys);
-  const roleLabels = useAppStore((stateFromStore) => stateFromStore.roleLabels);
-  const setActiveRole = useAppStore((stateFromStore) => stateFromStore.setActiveRole);
-  const wipPageLocks = useAppStore((stateFromStore) => stateFromStore.wipPageLocks);
-  const roleLabel = resolveRoleLabel(effectiveRole, roleLabels[effectiveRole], locale);
-  const roleOptions = [
-    ...ROLE_OPTIONS.map((item) => ({
-      value: item.value,
-      label: resolveRoleLabel(item.value, roleLabels[item.value], locale),
-    })),
-    ...customRoleKeys.map((key) => ({
-      value: key,
-      label: resolveRoleLabel(key, roleLabels[key], locale),
-    })),
-  ];
-
-  const canRoleSwitch = !user.isLoading && user.roleKey === "owner" && roleTestingEnabled;
-
-  const cycleRole = (direction: "prev" | "next") => {
-    if (!canRoleSwitch) return;
-    const values = roleOptions.map((r) => r.value);
-    const currentIndex = values.indexOf(activeRole);
-    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
-    const nextIndex =
-      direction === "prev"
-        ? (safeIndex - 1 + values.length) % values.length
-        : (safeIndex + 1) % values.length;
-    setActiveRole(values[nextIndex] ?? "owner");
-  };
-
-  const navAccessEdit = useMemo((): NavAccessEditConfig | undefined => {
-    if (user.isLoading || user.roleKey !== "owner" || !roleTestingEnabled || !roleTestAccessEditMode) {
-      return undefined;
-    }
-    return {
-      targetRoleKey: activeRole,
-      isChecked: (key: SidebarItemKey) => Boolean(roleSidebarItems[activeRole]?.[key]),
-      toggle: (key: SidebarItemKey) => toggleRoleSidebarItem(activeRole, key),
-    };
-  }, [
-    user.isLoading,
-    user.roleKey,
-    roleTestingEnabled,
-    roleTestAccessEditMode,
-    activeRole,
-    roleSidebarItems,
-    toggleRoleSidebarItem,
-  ]);
 
   return (
     <Sheet>
