@@ -18,12 +18,21 @@ export function extractAttributes(obj: Record<string, unknown>): Record<string, 
   return obj;
 }
 
-/** Projekt-keyName (Xentral) → lesbarer Marktplatz in der UI */
+/** Projekt-keyName (Xentral) → lesbarer Marktplatz/Kanal in der UI.
+ * Quelle: Xentral → Stammdaten → Projekte (Stand April 2026). */
 export const MARKETPLACE_KEY_DISPLAY: Record<string, string> = {
-  FN: "FRESSNAPF",
-  KL: "KAUFLAND",
-  AP: "SHOPIFY",
-  TT: "TIKTOK",
+  "AMZ-FBM": "Amazon",
+  "AMZ-FBA": "Amazon",
+  KL: "Kaufland",
+  FN: "Fressnapf",
+  MMS: "MediaMarkt & Saturn",
+  OTTO: "Otto",
+  EBAY: "eBay",
+  TT: "TikTok",
+  TERACT: "Teract",
+  "ZP-FR": "Zooplus FR",
+  AP: "AstroPet.de",
+  PR: "PetRhein.de",
 };
 
 export function expandMarketplaceKeyName(label: string): string {

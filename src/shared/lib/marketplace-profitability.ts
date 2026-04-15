@@ -1,4 +1,4 @@
-import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import { readIntegrationSecretsBatch } from "@/shared/lib/integrationSecrets";
 
 export type CostCoverage = "api" | "estimated" | "mixed";
 export type FeeSource = "api" | "configured_percentage" | "default_percentage";
@@ -95,9 +95,13 @@ export function classifyOrderStatus(rawStatus: unknown): "returned" | "cancelled
 
 export async function getMarketplaceFeePolicy(id: MarketplaceId): Promise<MarketplaceFeePolicy> {
   const suffix = toConfigKey(id);
-  const percentRaw = await getIntegrationSecretValue(`MARKETPLACE_FEE_${suffix}_PERCENT`);
-  const fixedRaw = await getIntegrationSecretValue(`MARKETPLACE_FEE_${suffix}_FIXED_PER_ORDER`);
-  const defaultPercentRaw = await getIntegrationSecretValue("MARKETPLACE_FEE_DEFAULT_PERCENT");
+  const percentKey = `MARKETPLACE_FEE_${suffix}_PERCENT`;
+  const fixedKey = `MARKETPLACE_FEE_${suffix}_FIXED_PER_ORDER`;
+  const defaultKey = "MARKETPLACE_FEE_DEFAULT_PERCENT";
+  const secrets = await readIntegrationSecretsBatch([percentKey, fixedKey, defaultKey]);
+  const percentRaw = secrets.get(percentKey) ?? "";
+  const fixedRaw = secrets.get(fixedKey) ?? "";
+  const defaultPercentRaw = secrets.get(defaultKey) ?? "";
 
   const configuredPercent = toNumber(percentRaw);
   const defaultPercent = toNumber(defaultPercentRaw);
@@ -171,19 +175,39 @@ export function sumStatusAmounts<T>(args: {
   items: T[];
   getStatus: (item: T) => unknown;
   getAmount: (item: T) => unknown;
-}): { returnedAmount: number; cancelledAmount: number; returnsSource: ReturnsSource } {
+  /** Optional: Units pro Item für Netto-Berechnung. */
+  getUnits?: (item: T) => number;
+}): {
+  returnedAmount: number;
+  cancelledAmount: number;
+  /** Units in zurückgegebenen Bestellungen. */
+  returnedUnits: number;
+  /** Units in stornierten Bestellungen. */
+  cancelledUnits: number;
+  returnsSource: ReturnsSource;
+} {
   let returnedAmount = 0;
   let cancelledAmount = 0;
+  let returnedUnits = 0;
+  let cancelledUnits = 0;
   for (const item of args.items) {
     const amount = Math.max(0, toNumber(args.getAmount(item)));
-    if (amount <= 0) continue;
+    const units = args.getUnits ? Math.max(0, args.getUnits(item)) : 0;
     const bucket = classifyOrderStatus(args.getStatus(item));
-    if (bucket === "returned") returnedAmount += amount;
-    if (bucket === "cancelled") cancelledAmount += amount;
+    if (bucket === "returned") {
+      if (amount > 0) returnedAmount += amount;
+      returnedUnits += units;
+    }
+    if (bucket === "cancelled") {
+      if (amount > 0) cancelledAmount += amount;
+      cancelledUnits += units;
+    }
   }
   return {
     returnedAmount: round2(returnedAmount),
     cancelledAmount: round2(cancelledAmount),
+    returnedUnits,
+    cancelledUnits,
     returnsSource: returnedAmount > 0 || cancelledAmount > 0 ? "status_based" : "none",
   };
 }

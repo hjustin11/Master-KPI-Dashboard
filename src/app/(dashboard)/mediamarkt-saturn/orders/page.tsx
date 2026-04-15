@@ -304,6 +304,7 @@ export default function MmsOrdersPage() {
       <div className="space-y-1">
         <div className="flex items-center gap-3">
           <span className={cn(DASHBOARD_MARKETPLACE_LOGO_FRAME, DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_MD)}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={WIKIMEDIA_MEDIAMARKT_SATURN_LOGO_SVG}
               alt={t("nav.mediamarktSaturn")}
@@ -377,6 +378,7 @@ export default function MmsOrdersPage() {
         <DataTable
           columns={columns}
           data={tableRows}
+          getRowId={(row) => row.orderId}
           filterColumn={t("filters.mmsOrders")}
           paginate={false}
           compact

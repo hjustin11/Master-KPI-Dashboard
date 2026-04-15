@@ -26,6 +26,7 @@ import {
   DASHBOARD_SECTION_TITLE,
 } from "@/shared/lib/dashboardUi";
 import {
+  DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
   readLocalJsonCache,
   shouldRunBackgroundSync,
   writeLocalJsonCache,
@@ -116,7 +117,7 @@ type ParityResponse = {
 };
 
 const PRICE_PARITY_CACHE_KEY = "marketplace_price_parity_v4";
-const PRICE_PARITY_BACKGROUND_SYNC_MS = 60 * 60 * 1000;
+const PRICE_PARITY_BACKGROUND_SYNC_MS = DASHBOARD_CLIENT_BACKGROUND_SYNC_MS;
 
 /** Einheitliche Breite für Amazon- und Marktplatz-Preisspalten */
 const MARKETPLACE_PRICE_COL =
@@ -556,7 +557,6 @@ export function MarketplacePriceParitySection() {
     await load(true, keepCurrentVisible);
   }, [load]);
 
-  const issueCount = payload?.issueCount ?? 0;
   const stickyHeadBg = headerSolid ? "bg-muted" : "bg-muted/60";
 
   return (

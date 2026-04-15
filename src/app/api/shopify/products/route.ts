@@ -8,7 +8,7 @@ import type { MarketplaceProductsListResponse } from "@/shared/lib/marketplacePr
 /** Vercel: viele Produktseiten brauchen länger als 10s (Hobby-Default). */
 export const maxDuration = 60;
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     const config = await getShopifyIntegrationConfig();
     const missing = shopifyMissingKeysForConfig(config).filter((x) => x.missing);

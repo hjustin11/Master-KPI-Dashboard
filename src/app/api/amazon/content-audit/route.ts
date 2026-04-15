@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import { runAmazonContentAudit } from "@/shared/lib/amazonContentAudit";
 import {
   buildAmazonTitleProductContext,
-  buildRulebookExcerptForTitleLlm,
 } from "@/shared/lib/amazonTitleOptimizationContext";
-import { runAmazonTitleLlmReview } from "@/shared/lib/amazonTitleLlmReview";
+import { runAmazonContentOptimization } from "@/shared/lib/amazonTitleLlmReview";
 
 export const maxDuration = 120;
 
@@ -204,8 +203,7 @@ export async function GET(request: Request) {
       otherMarketplaceHints,
     });
 
-    const rulebookExcerpt = buildRulebookExcerptForTitleLlm(rulebookMarkdown);
-    const shopifyForTitle = shopify
+    const shopifyForContext = shopify
       ? {
           title: shopify.title,
           descriptionExcerpt: shopify.description.length > 3500 ? `${shopify.description.slice(0, 3500)}…` : shopify.description,
@@ -229,18 +227,26 @@ export async function GET(request: Request) {
         conditionType: amazon.conditionType,
         attributes: amazon.attributes,
       },
-      shopify: shopifyForTitle,
+      shopify: shopifyForContext,
     });
 
-    const titleOptimization = await runAmazonTitleLlmReview({
+    const titleOptimization = await runAmazonContentOptimization({
       productContext,
-      rulebookExcerpt,
+      rulebookMarkdown,
     });
 
     let recommendations = audit.recommendations;
-    const llmTitle = titleOptimization.improvedTitle?.trim();
-    if (titleOptimization.usedLlm && llmTitle) {
-      recommendations = { ...audit.recommendations, title: llmTitle.slice(0, 200) };
+    if (titleOptimization.usedLlm) {
+      const llmTitle = titleOptimization.improvedTitle?.trim();
+      const llmBullets = titleOptimization.improvedBulletPoints;
+      const llmDesc = titleOptimization.improvedDescription?.trim();
+      const llmSearchTerms = titleOptimization.improvedSearchTerms?.trim();
+      recommendations = {
+        title: llmTitle ? llmTitle.slice(0, 200) : audit.recommendations.title,
+        bulletPoints: llmBullets && llmBullets.length > 0 ? llmBullets.slice(0, 5) : audit.recommendations.bulletPoints,
+        description: llmDesc || audit.recommendations.description,
+        searchTerms: llmSearchTerms || audit.recommendations.searchTerms,
+      };
     }
 
     return NextResponse.json({

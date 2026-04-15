@@ -330,7 +330,8 @@
     "unknownError": "Unbekannter Fehler.",
     "loading": "Laden…",
     "syncing": "Daten werden abgeglichen…",
-    "close": "Schließen"
+    "close": "Schließen",
+    "retry": "Erneut versuchen"
   },
   "marketplaceCache": {
     "refresh": "Aktualisieren",
@@ -408,7 +409,14 @@
     "projectedUntil": "Prognose bis {date}",
     "inboundShort": "Beschaffung",
     "legendLow": "Orange: knapp",
-    "legendCritical": "Rot: Minusbestand"
+    "legendCritical": "Rot: Minusbestand",
+    "activeDeals": "Aktionen im Zeitraum ({count})",
+    "salesLoadError": "Verkaufsdaten konnten nicht geladen werden. Alle Mengen zeigen 0.",
+    "otherSales": "Sonstige",
+    "cacheIncomplete": "Historische Verkaufsdaten unvollständig – nur die letzten {days} Tage enthalten Live-Daten.",
+    "salesPageCapDetailed": "Aggregation nach {pages} Seiten gestoppt ({notes} Lieferscheine). Verkaufszahlen könnten unvollständig sein.",
+    "metaWindow": "Zeitraum: {from} – {to}",
+    "metaNotes": "{notes} Lieferscheine · {lines} Positionen"
   },
   "analyticsProcurement": {
     "title": "Beschaffung",
@@ -854,6 +862,17 @@
     "returnsUnits": "Retouren (Stück)",
     "returnsRate": "Retourenquote",
     "activeListings": "Aktive Listings",
+    "sectionComparison": "Vergleich zur Vorperiode",
+    "sectionPerformance": "Tägliche Performance",
+    "sectionProfitability": "Profitabilität",
+    "revenuePerUnit": "Umsatz / Einheit",
+    "avgUnitsPerDay": "Ø Einheiten / Tag",
+    "netRevenue": "Netto-Umsatz",
+    "netRevenueTooltip": "Umsatz nach Abzug von Gebühren, Retouren und Stornierungen.",
+    "marketplaceFees": "Marktplatz-Gebühren",
+    "feeSource": "Quelle",
+    "returnsAmount": "Retouren (Betrag)",
+    "cancelledAmount": "Stornierungen",
     "sessionsVisits": "Sessions / Besuche",
     "conversionRate": "Conversion-Rate",
     "amazonMetricsError": "Amazon-Kennzahlen konnten nicht geladen werden.",

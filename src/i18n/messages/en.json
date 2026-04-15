@@ -331,7 +331,8 @@
     "unknownError": "Unknown error.",
     "loading": "Loading…",
     "syncing": "Syncing data…",
-    "close": "Close"
+    "close": "Close",
+    "retry": "Retry"
   },
   "marketplaceCache": {
     "refresh": "Refresh",
@@ -409,7 +410,14 @@
     "projectedUntil": "Projected until {date}",
     "inboundShort": "inbound",
     "legendLow": "Orange: low",
-    "legendCritical": "Red: negative stock"
+    "legendCritical": "Red: negative stock",
+    "activeDeals": "Promotions in period ({count})",
+    "salesLoadError": "Sales data could not be loaded. All quantities show 0.",
+    "otherSales": "Other",
+    "cacheIncomplete": "Historical sales data incomplete – only the last {days} days contain live data.",
+    "salesPageCapDetailed": "Aggregation stopped after {pages} pages ({notes} delivery notes). Sales figures may be incomplete.",
+    "metaWindow": "Period: {from} – {to}",
+    "metaNotes": "{notes} delivery notes · {lines} line items"
   },
   "analyticsProcurement": {
     "title": "Procurement",
@@ -855,6 +863,17 @@
     "returnsUnits": "Returns (units)",
     "returnsRate": "Return rate",
     "activeListings": "Active listings",
+    "sectionComparison": "Period comparison",
+    "sectionPerformance": "Daily performance",
+    "sectionProfitability": "Profitability",
+    "revenuePerUnit": "Revenue / unit",
+    "avgUnitsPerDay": "Avg. units / day",
+    "netRevenue": "Net revenue",
+    "netRevenueTooltip": "Revenue after deducting fees, returns, and cancellations.",
+    "marketplaceFees": "Marketplace fees",
+    "feeSource": "Source",
+    "returnsAmount": "Returns (amount)",
+    "cancelledAmount": "Cancellations",
     "sessionsVisits": "Sessions / visits",
     "conversionRate": "Conversion rate",
     "amazonMetricsError": "Could not load Amazon metrics.",

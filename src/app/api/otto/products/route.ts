@@ -10,9 +10,8 @@ import {
 import { INTEGRATION_SECRETS_CONFIGURATION_HINT_DE } from "@/shared/lib/integrationSecrets";
 import type { MarketplaceProductsListResponse } from "@/shared/lib/marketplaceProductList";
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
-    const url = new URL(request.url);
     const forceRefresh = false;
     const config = await getOttoIntegrationConfig();
     const missing = {

@@ -15,10 +15,10 @@ import { getIntegrationCachedOrLoad, readIntegrationCache } from "@/shared/lib/i
 /** Muss unter /api/amazon/products maxDuration (120s) liegen; genug für Kalt-Sync ohne Abort. */
 export const maxDuration = 120;
 
-/** Interner fetch zu /api/amazon/products — 2,2s war zu kurz → leere Amazon-Spalte im Preisvergleich. */
+/** Interner fetch zu /api/amazon/products — Fallback falls Cache leer. Reduziert von 115s auf 30s (Cache-First für Amazon aktiv). */
 const AMAZON_PRODUCTS_INTERNAL_FETCH_MS = Math.min(
-  115_000,
-  Math.max(5_000, Number(process.env.PRICE_PARITY_AMAZON_FETCH_MS) || 115_000)
+  60_000,
+  Math.max(5_000, Number(process.env.PRICE_PARITY_AMAZON_FETCH_MS) || 30_000)
 );
 
 class PriceParityHttpError extends Error {
@@ -108,6 +108,7 @@ const ANALYTICS_PRODUCTS_API: Partial<Record<AnalyticsMarketplaceSlug, string>> 
 };
 
 /** Dieselbe Supabase-Cache-Schicht wie die Dashboard-Produkt-GETs (kein interner HTTP-Fetch). */
+/** Marktplätze (ohne Amazon) die Produktdaten direkt aus Supabase-Cache lesen statt HTTP-Roundtrip. Amazon nutzt eigene Cache-Logik in fetchAmazonProductsPriceMap(). */
 const MP_PRODUCTS_INTEGRATION_CACHE_SLUGS = new Set<AnalyticsMarketplaceSlug>([
   "shopify",
   "ebay",
@@ -302,10 +303,6 @@ function applyMajorityDeviation(states: Record<string, MutableCell>): Record<str
     }
   }
   return out;
-}
-
-function env(name: string) {
-  return (process.env[name] ?? "").trim();
 }
 
 function toNumber(value: unknown) {

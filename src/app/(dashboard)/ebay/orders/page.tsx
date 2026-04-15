@@ -384,6 +384,7 @@ export default function EbayOrdersPage() {
         <DataTable
           columns={columns}
           data={tableRows}
+          getRowId={(row) => row.orderId}
           filterColumn={t("filters.ebayOrders")}
           paginate={false}
           compact

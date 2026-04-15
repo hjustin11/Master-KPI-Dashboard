@@ -331,7 +331,8 @@
     "unknownError": "未知错误。",
     "loading": "加载中…",
     "syncing": "正在同步数据…",
-    "close": "关闭"
+    "close": "关闭",
+    "retry": "重试"
   },
   "marketplaceCache": {
     "refresh": "刷新",
@@ -409,7 +410,14 @@
     "projectedUntil": "预测至 {date}",
     "inboundShort": "到货",
     "legendLow": "橙色：库存偏紧",
-    "legendCritical": "红色：负库存"
+    "legendCritical": "红色：负库存",
+    "activeDeals": "期间促销活动 ({count})",
+    "salesLoadError": "销售数据无法加载。所有数量显示为 0。",
+    "otherSales": "其他",
+    "cacheIncomplete": "历史销售数据不完整——仅最近 {days} 天包含实时数据。",
+    "salesPageCapDetailed": "聚合在 {pages} 页后停止（{notes} 个交付单）。销售数字可能不完整。",
+    "metaWindow": "期间：{from} – {to}",
+    "metaNotes": "{notes} 个交付单 · {lines} 个项目"
   },
   "analyticsProcurement": {
     "title": "采购",
@@ -831,6 +839,17 @@
     "returnsUnits": "退货（件）",
     "returnsRate": "退货率",
     "activeListings": "在售 listing",
+    "sectionComparison": "同比对比",
+    "sectionPerformance": "日均表现",
+    "sectionProfitability": "盈利能力",
+    "revenuePerUnit": "每件收入",
+    "avgUnitsPerDay": "日均件数",
+    "netRevenue": "净收入",
+    "netRevenueTooltip": "扣除费用、退货和取消后的收入。",
+    "marketplaceFees": "平台费用",
+    "feeSource": "来源",
+    "returnsAmount": "退货金额",
+    "cancelledAmount": "取消金额",
     "sessionsVisits": "访问/会话",
     "conversionRate": "转化率",
     "amazonMetricsError": "无法加载亚马逊指标。",

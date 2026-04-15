@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useState } from "react";
 
 type Options<T> = {
   rows: T[];
@@ -11,17 +11,16 @@ type Options<T> = {
  * `rows` vorübergehend leer ist (z. B. neuer Filter/Datumsbereich vor der API-Antwort).
  */
 export function useStableTableRowsDuringFetch<T>({ rows, isFetchActive }: Options<T>): T[] {
-  const lastNonEmptyRef = useRef<T[]>([]);
+  const [lastNonEmpty, setLastNonEmpty] = useState<T[]>([]);
 
-  useEffect(() => {
-    if (rows.length > 0) {
-      lastNonEmptyRef.current = rows;
-    }
-  }, [rows]);
+  // Update-during-render Muster (https://react.dev/reference/react/useState#storing-information-from-previous-renders)
+  if (rows.length > 0 && rows !== lastNonEmpty) {
+    setLastNonEmpty(rows);
+  }
 
   return useMemo(() => {
     if (rows.length > 0) return rows;
-    if (isFetchActive && lastNonEmptyRef.current.length > 0) return lastNonEmptyRef.current;
+    if (isFetchActive && lastNonEmpty.length > 0) return lastNonEmpty;
     return rows;
-  }, [rows, isFetchActive]);
+  }, [rows, isFetchActive, lastNonEmpty]);
 }

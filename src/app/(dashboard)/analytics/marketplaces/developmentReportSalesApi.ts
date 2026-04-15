@@ -77,7 +77,7 @@ export function parseCachedAnalyticsSalesCompare(raw: unknown): SalesCompareResp
   if (typeof o.error === "string" && o.error.length > 0) return null;
   const summary = o.summary;
   if (!summary || typeof summary !== "object") return null;
-  const { savedAt: _drop, ...rest } = o;
+  const { savedAt: _, ...rest } = o;
   return rest as SalesCompareResponseLike;
 }
 

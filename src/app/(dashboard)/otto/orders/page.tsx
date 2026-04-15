@@ -378,6 +378,7 @@ export default function OttoOrdersPage() {
         <DataTable
           columns={columns}
           data={tableRows}
+          getRowId={(row) => row.orderId}
           filterColumn={t("filters.ottoOrders")}
           paginate={false}
           compact

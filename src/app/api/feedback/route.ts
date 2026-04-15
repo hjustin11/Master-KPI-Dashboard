@@ -94,7 +94,6 @@ export async function GET() {
       return NextResponse.json({ items: rows });
     }
 
-    const msg = full.error.message ?? "";
     const legacyMissingColumn = isLegacyFeatureRequestColumnError(full.error);
 
     if (!legacyMissingColumn) {

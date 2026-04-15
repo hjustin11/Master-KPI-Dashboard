@@ -305,6 +305,7 @@ export default function AmazonOrdersPage() {
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <span className={DASHBOARD_MARKETPLACE_LOGO_FRAME}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg"
               alt={t("nav.amazon")}
@@ -382,6 +383,7 @@ export default function AmazonOrdersPage() {
         <DataTable
           columns={columns}
           data={tableRows}
+          getRowId={(row) => row.orderId}
           filterColumn={t("filters.amazonOrders")}
           paginate={false}
           compact

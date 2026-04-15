@@ -98,28 +98,6 @@ function normalizeUpdates(raw: unknown): { items: UpdateItem[]; unknownSlugFailu
   return { items: out, unknownSlugFailures };
 }
 
-function parseShopifyNextPath(linkHeader: string | null, baseUrlRaw: string): string | null {
-  if (!linkHeader?.trim()) return null;
-  let baseOrigin = "";
-  try {
-    baseOrigin = new URL(baseUrlRaw.replace(/\/+$/, "")).origin;
-  } catch {
-    return null;
-  }
-  for (const segment of linkHeader.split(",")) {
-    const m = segment.trim().match(/<([^>]+)>\s*;\s*rel="next"/i);
-    if (!m?.[1]) continue;
-    try {
-      const u = new URL(m[1].trim());
-      if (u.origin !== baseOrigin) continue;
-      return `${u.pathname}${u.search}`;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
 async function syncViaInternalShopifyRoute(
   request: Request,
   updates: UpdateItem[]

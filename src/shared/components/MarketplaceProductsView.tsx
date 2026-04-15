@@ -3,22 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
-  AlertTriangle,
-  CheckCircle2,
-  Download,
   Loader2,
-  Maximize2,
   PencilLine,
   Plus,
   RotateCw,
-  Trash2,
-  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -26,30 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { MarketplaceProductEditorDialogContent } from "@/shared/components/MarketplaceProductEditorDialogContent";
-import {
-  MARKETPLACE_PRODUCT_EDITOR_BODY_PADDING_CLASS,
-  MARKETPLACE_PRODUCT_EDITOR_CONTROL as AMAZON_EDITOR_CONTROL,
-  MARKETPLACE_PRODUCT_EDITOR_FIELD as AMAZON_EDITOR_FIELD,
-  MARKETPLACE_PRODUCT_EDITOR_FOOTER_CLASS,
-  MARKETPLACE_PRODUCT_EDITOR_HEADER_CLASS,
-  MARKETPLACE_PRODUCT_EDITOR_HINT as AMAZON_EDITOR_HINT,
-  MARKETPLACE_PRODUCT_EDITOR_H3 as AMAZON_EDITOR_H3,
-  MARKETPLACE_PRODUCT_EDITOR_LABEL as AMAZON_EDITOR_LABEL,
-  MARKETPLACE_PRODUCT_EDITOR_LOGO_IMG_CLASS,
-  MARKETPLACE_PRODUCT_EDITOR_LOGO_WRAP_CLASS,
-  MARKETPLACE_PRODUCT_EDITOR_SCROLL_OUTER_CLASS,
-  MARKETPLACE_PRODUCT_EDITOR_SECTION as AMAZON_EDITOR_SECTION,
-  MARKETPLACE_PRODUCT_EDITOR_TITLE_CLASS,
-} from "@/shared/lib/marketplaceProductEditorTokens";
+import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/shared/components/DataTable";
 import {
@@ -84,36 +53,14 @@ import { useStableTableRowsDuringFetch } from "@/shared/lib/useStableTableRowsDu
 import { useUser } from "@/shared/hooks/useUser";
 import {
   AMAZON_DRAFT_IMAGE_SLOT_COUNT,
-  type AmazonProductDraftMode,
-  type AmazonProductDraftRecord,
-  type AmazonProductDraftValues,
-  deriveDraftStatus,
-  draftValuesFromSource,
-  emptyDraftValues,
-  normalizeDraftValues,
   padAmazonDraftImages,
-  sanitizeAmazonBulletPoints,
-  sanitizeAmazonDescription,
-  sourceSnapshotFromRow,
 } from "@/shared/lib/amazonProductDraft";
-import {
-  getAmazonProductTypeOptions,
-  getAmazonProductTypeSchema,
-  getMissingAmazonRequiredFields,
-} from "@/shared/lib/amazonProductTypeSchema";
-import {
-  AMAZON_EDITOR_CONDITION_VALUES,
-  formatDraftValuesPhysicalFieldsForEditor,
-  isLikelyAmazonShippingUuid,
-  normalizeConditionTypeForDraft,
-  serializeDraftPhysicalFieldsForSave,
-} from "@/shared/lib/amazonMeasureDisplay";
+import { getAmazonProductTypeOptions } from "@/shared/lib/amazonProductTypeSchema";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { intlLocaleTag } from "@/i18n/locale-formatting";
-import type { AmazonContentAuditPayload } from "@/shared/lib/amazonContentAuditPayload";
-import type { AmazonAuditFinding } from "@/shared/lib/amazonContentAudit";
-import { buildAmazonTitleRecommendation, getTitleAuditFindings } from "@/shared/lib/amazonContentAudit";
-import { AmazonDraftSuggestionTrigger } from "@/shared/components/AmazonDraftSuggestionTrigger";
+import { AmazonProductEditor } from "@/shared/components/AmazonProductEditor";
+import { useAmazonContentAudit } from "@/shared/hooks/useAmazonContentAudit";
+import { useAmazonDraftEditor } from "@/shared/hooks/useAmazonDraftEditor";
 
 type ProductStatus = "active" | "inactive" | "all";
 
@@ -132,21 +79,6 @@ type CachedProductsPayload = {
   totalCount?: number;
 };
 
-type DraftApiPayload = {
-  item?: AmazonProductDraftRecord | null;
-  items?: AmazonProductDraftRecord[];
-  tableMissing?: boolean;
-  error?: string;
-};
-
-type AmazonProductDetailPayload = {
-  sourceSnapshot?: ReturnType<typeof sourceSnapshotFromRow>;
-  draftValues?: AmazonProductDraftValues;
-  draft?: AmazonProductDraftRecord | null;
-  error?: string;
-  /** Hinweis wenn SP-API-Listings-Details fehlen (nur Tabellenstammdaten). */
-  detailLoadHint?: string;
-};
 
 export type MarketplaceProductsViewProps = {
   /** Feste URL oder Builder bei Amazon-Statusfilter */
@@ -218,137 +150,6 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-async function downloadImageDirect(url: string, filename: string) {
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error("download_failed");
-    const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(objectUrl);
-  } catch {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  }
-}
-
-function AmazonDraftImageSlot({
-  index,
-  url,
-  onClear,
-}: {
-  index: number;
-  url: string;
-  onClear: () => void;
-}) {
-  const [broken, setBroken] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const trimmed = url.trim();
-  const showImg = Boolean(trimmed && isLikelyImageUrl(trimmed) && !broken);
-  useEffect(() => {
-    setBroken(false);
-  }, [trimmed]);
-
-  return (
-    <div className="h-fit w-full min-w-0 rounded border border-border/60 bg-card p-px shadow-sm">
-      <div className="relative aspect-square w-full overflow-hidden rounded border border-border/45 bg-muted/30">
-        <span className="pointer-events-none absolute top-0.5 left-0.5 z-[1] rounded bg-background/90 px-0.5 py-px text-[8px] font-semibold tabular-nums text-foreground shadow-sm ring-1 ring-border/60 backdrop-blur-sm">
-          {index + 1}
-        </span>
-        {showImg ? (
-          <img
-            src={trimmed}
-            alt=""
-            className="h-full w-full object-contain"
-            loading="lazy"
-            onError={() => setBroken(true)}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center p-1">
-            <span className="text-center text-[8px] leading-tight text-muted-foreground">
-              {broken ? "Vorschau fehlerhaft" : "—"}
-            </span>
-          </div>
-        )}
-        <div className="absolute inset-x-0 bottom-0 z-[1] flex flex-row items-center justify-center gap-px border-t border-border/50 bg-background/90 px-0.5 py-px backdrop-blur-sm">
-          {trimmed ? (
-            <button
-              type="button"
-              onClick={() => setPreviewOpen(true)}
-              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border/60 bg-muted/40 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              aria-label={`Bild ${index + 1} vergrößern`}
-              title="Vergrößern"
-            >
-              <Maximize2 className="h-2.5 w-2.5" aria-hidden />
-            </button>
-          ) : null}
-          {trimmed ? (
-            <button
-              type="button"
-              onClick={() => void downloadImageDirect(trimmed, `produktbild-${index + 1}.jpg`)}
-              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border/60 bg-muted/40 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              aria-label={`Bild ${index + 1} herunterladen`}
-              title="Herunterladen"
-            >
-              <Download className="h-2.5 w-2.5" aria-hidden />
-            </button>
-          ) : null}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5 shrink-0 border border-border/60 bg-muted/40 p-0 text-foreground hover:bg-destructive/15 hover:text-destructive"
-            onClick={onClear}
-            aria-label={`Bild ${index + 1} entfernen`}
-            title="Entfernen"
-          >
-            <Trash2 className="h-2.5 w-2.5" aria-hidden />
-          </Button>
-        </div>
-      </div>
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="w-[min(72rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] p-3 sm:max-w-[min(72rem,calc(100vw-1rem))] sm:p-4">
-          <DialogHeader>
-            <DialogTitle>Produktbild {index + 1}</DialogTitle>
-            <DialogDescription>Vergrößerte Vorschau</DialogDescription>
-          </DialogHeader>
-          <div className="flex h-[70vh] w-full items-center justify-center overflow-hidden rounded-md border border-border/50 bg-muted/20 p-2">
-            {showImg ? (
-              <img src={trimmed} alt="" className="max-h-full max-w-full object-contain" loading="eager" />
-            ) : (
-              <p className="text-sm text-muted-foreground">Keine Bildvorschau verfügbar.</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function AmazonDraftImageAddTile({ onAdd }: { onAdd: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onAdd}
-      className="flex aspect-square w-full min-h-0 flex-col items-center justify-center gap-px rounded border border-dashed border-border/70 bg-muted/20 p-px text-center text-[8px] text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/5 hover:text-foreground"
-      aria-label="Weitere Bilder hinzufügen"
-      title="Weitere Bilder hinzufügen"
-    >
-      <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      <span className="px-0.5 text-[8px] font-medium leading-tight">Hinzufügen</span>
-    </button>
-  );
-}
-
 export function MarketplaceProductsView({
   apiUrl,
   cacheKey,
@@ -384,236 +185,96 @@ export function MarketplaceProductsView({
   );
   const [pendingInfo, setPendingInfo] = useState<string | null>(null);
   const [hasMounted, setHasMounted] = useState(false);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editorMode, setEditorMode] = useState<AmazonProductDraftMode>("edit_existing");
-  const [editorSource, setEditorSource] = useState<MarketplaceProductListRow | null>(null);
-  const [draftId, setDraftId] = useState<string | null>(null);
-  const [draftValues, setDraftValues] = useState<AmazonProductDraftValues>(() => emptyDraftValues());
-  const [draftStatus, setDraftStatus] = useState<"draft" | "ready">("draft");
-  const [draftLoading, setDraftLoading] = useState(false);
-  const [draftSaving, setDraftSaving] = useState(false);
-  const [draftError, setDraftError] = useState<string | null>(null);
-  const [draftTableMissing, setDraftTableMissing] = useState(false);
-  const [detailLoadHint, setDetailLoadHint] = useState<string | null>(null);
   const [imageDropActive, setImageDropActive] = useState(false);
   const [shellOpen, setShellOpen] = useState(false);
   const [shellMode, setShellMode] = useState<MarketplaceProductShellMode>("edit");
   const [shellRow, setShellRow] = useState<MarketplaceProductListRow | null>(null);
-  const [auditLoading, setAuditLoading] = useState(false);
-  const [auditError, setAuditError] = useState<string | null>(null);
-  const [auditPayload, setAuditPayload] = useState<AmazonContentAuditPayload | null>(null);
-  const statusRef = useRef(status);
-  const imageFileInputRef = useRef<HTMLInputElement | null>(null);
-  const selectedProductTypeSchema = useMemo(
-    () => getAmazonProductTypeSchema(draftValues.productType),
-    [draftValues.productType]
-  );
-  const missingRequiredFields = useMemo(
-    () => (editorMode === "create_new" ? getMissingAmazonRequiredFields(draftValues) : []),
-    [editorMode, draftValues]
-  );
 
-  type ContentAuditFieldChip = {
-    show: boolean;
-    proposedText: string;
-    sourceLabel: string;
-  };
-  type ContentAuditTitleBadge = {
-    kind: "ok" | "warnStructural" | "warnLlm" | "errorLlm" | "noLlm";
-    label: string;
-    titleAttr: string;
-  };
-  const emptyAuditChip = (): ContentAuditFieldChip => ({
-    show: false,
-    proposedText: "",
-    sourceLabel: "",
+  // --- Draft-editor ↔ Content-audit hook wiring ---
+  // The draft-editor hook needs audit callbacks from the content-audit hook,
+  // while the content-audit hook needs draftValues from the draft-editor hook.
+  // We break this circular dependency by:
+  //  1. Calling the draft-editor hook first with no-op stubs for audit callbacks.
+  //  2. Calling the content-audit hook second, feeding it the draft-editor's draftValues.
+  //  3. Updating the audit callback ref so the draft-editor's internal refs
+  //     pick up the real implementations on the next render.
+  // All draft-editor callbacks that use audit functions are user-triggered,
+  // so the one-render delay before the real callbacks are wired is harmless.
+  const auditNoop = useCallback(async () => {}, []);
+  const auditSetNoop = useCallback(() => {}, []);
+  const auditCallbacksRef = useRef<{
+    fetchContentAudit: (sku: string, opts?: { refresh?: boolean }) => Promise<void>;
+    setAuditPayload: (v: null) => void;
+    setAuditError: (v: null) => void;
+    setAuditLoading: (v: false) => void;
+  }>({
+    fetchContentAudit: auditNoop,
+    setAuditPayload: auditSetNoop,
+    setAuditError: auditSetNoop,
+    setAuditLoading: auditSetNoop,
   });
 
-  const contentAuditSuggestions = useMemo(() => {
-    const emptyFindings: AmazonAuditFinding[] = [];
-    if (!auditPayload || marketplaceSlug !== "amazon" || !canEditProducts) {
-      return {
-        title: emptyAuditChip(),
-        description: emptyAuditChip(),
-        bullets: emptyAuditChip(),
-        brand: emptyAuditChip(),
-        ean: false,
-        titleAuditFindings: emptyFindings,
-        titleBadge: null as ContentAuditTitleBadge | null,
-      };
-    }
-    const rec = auditPayload.recommendations;
-    const titleNorm = (s: string) => s.replace(/\s+/g, " ").trim();
-    const curTitle = titleNorm(draftValues.title);
-    const titleAuditFindings = getTitleAuditFindings({
+  const {
+    editorOpen,
+    setEditorOpen,
+    editorMode,
+    draftValues,
+    setDraftValues,
+    draftStatus,
+    draftLoading,
+    draftSaving,
+    draftError,
+    setDraftError,
+    draftTableMissing,
+    detailLoadHint,
+    saveDraft,
+    openEditorForRow,
+    openCreateEditor,
+  } = useAmazonDraftEditor({
+    marketplaceSlug,
+    canEditProducts,
+    locale,
+    fetchContentAudit: auditCallbacksRef.current.fetchContentAudit,
+    setAuditPayload: auditCallbacksRef.current.setAuditPayload,
+    setAuditError: auditCallbacksRef.current.setAuditError,
+    setAuditLoading: auditCallbacksRef.current.setAuditLoading,
+    closeShellDialog: () => setShellOpen(false),
+    t,
+  });
+
+  const {
+    auditPayload,
+    auditLoading,
+    auditError,
+    contentAuditSuggestions,
+    displayedContentAuditFindings,
+    fetchContentAudit,
+    setAuditPayload,
+    setAuditError,
+    setAuditLoading,
+  } = useAmazonContentAudit({
+    marketplaceSlug,
+    canEditProducts,
+    draftValues: {
       title: draftValues.title,
       brand: draftValues.brand,
-      rulebookMarkdown: auditPayload.rulebookMarkdown ?? "",
-    });
-    const recTitleEditor = buildAmazonTitleRecommendation(draftValues.title);
-    const recTitleNorm = titleNorm(recTitleEditor);
-    const titleDiff = auditPayload.diffs.find((d) => d.field === "title");
-    const serverSnapTitle = titleNorm(auditPayload.amazon?.title ?? "");
-    const draftMatchesAuditSnapshot = serverSnapTitle.length === 0 || curTitle === serverSnapTitle;
-    const llmOpt = auditPayload.titleOptimization;
-
-    let titleBadge: ContentAuditTitleBadge;
-    if (titleAuditFindings.length > 0) {
-      titleBadge = {
-        kind: "warnStructural",
-        label: `${titleAuditFindings.length} Struktur`,
-        titleAttr: titleAuditFindings.map((x) => x.message).join(" · "),
-      };
-    } else if (llmOpt == null) {
-      titleBadge = {
-        kind: "noLlm",
-        label: "LLM-Daten fehlen",
-        titleAttr: "Content-Prüfung erneut ausführen.",
-      };
-    } else if (!llmOpt.usedLlm) {
-      titleBadge = {
-        kind: "noLlm",
-        label: llmOpt.llmSkippedReason === "no_api_key" ? "LLM nicht konfiguriert" : "LLM inaktiv",
-        titleAttr: [llmOpt.summary, llmOpt.llmSkippedReason].filter(Boolean).join(" · "),
-      };
-    } else if (llmOpt.llmError) {
-      titleBadge = {
-        kind: "errorLlm",
-        label: "LLM-Fehler",
-        titleAttr: llmOpt.llmError,
-      };
-    } else if (!llmOpt.noMaterialImprovement || llmOpt.issues.length > 0 || llmOpt.score < 76) {
-      titleBadge = {
-        kind: "warnLlm",
-        label: `LLM ${llmOpt.score}${llmOpt.issues.length ? ` · ${llmOpt.issues.length}` : ""}`,
-        titleAttr: [llmOpt.summary, ...llmOpt.issues].filter(Boolean).join(" · "),
-      };
-    } else {
-      titleBadge = {
-        kind: "ok",
-        label: `OK · LLM ${llmOpt.score}`,
-        titleAttr: llmOpt.summary || "Kein wesentlicher Verbesserungsbedarf laut LLM und Regelwerk-Kontext.",
-      };
-    }
-
-    let title = emptyAuditChip();
-    const llmTitleRaw = llmOpt?.improvedTitle?.trim() ?? "";
-    if (llmTitleRaw && titleNorm(llmTitleRaw) !== curTitle) {
-      title = {
-        show: true,
-        proposedText: llmTitleRaw,
-        sourceLabel: `LLM${llmOpt?.model ? ` (${llmOpt.model})` : ""}: ${llmOpt?.summary ? `${llmOpt.summary.slice(0, 140)}${llmOpt.summary.length > 140 ? "…" : ""}` : "Alternativer Titelvorschlag"}`,
-      };
-    } else if (recTitleNorm && recTitleNorm !== curTitle) {
-      title = {
-        show: true,
-        proposedText: recTitleEditor,
-        sourceLabel: "Prüfung: optimierter Titel (Länge, unzulässige Begriffe)",
-      };
-    } else if (titleDiff && draftMatchesAuditSnapshot) {
-      const refT = titleNorm(titleDiff.referenceValue);
-      if (refT && refT !== curTitle) {
-        title = {
-          show: true,
-          proposedText: titleDiff.referenceValue.trim(),
-          sourceLabel: titleDiff.note,
-        };
-      }
-    }
-
-    const curDesc = sanitizeAmazonDescription(draftValues.description);
-    const recDesc = sanitizeAmazonDescription(rec.description);
-    const descDiff = auditPayload.diffs.find((d) => d.field === "description");
-
-    let description = emptyAuditChip();
-    if (recDesc && recDesc !== curDesc) {
-      description = {
-        show: true,
-        proposedText: rec.description,
-        sourceLabel: "Prüfung: bereinigte Beschreibung",
-      };
-    } else if (descDiff) {
-      const refD = sanitizeAmazonDescription(descDiff.referenceValue);
-      if (refD && refD !== curDesc) {
-        description = {
-          show: true,
-          proposedText: descDiff.referenceValue,
-          sourceLabel: descDiff.note,
-        };
-      }
-    }
-
-    const propB = sanitizeAmazonBulletPoints(rec.bulletPoints);
-    const curB = sanitizeAmazonBulletPoints(draftValues.bulletPoints);
-    const bulletsDiffer = propB.join("\u001e") !== curB.slice(0, 5).join("\u001e");
-    const bulletsFew = auditPayload.findings.some((f) => f.id === "bullets-too-few");
-
-    let bullets = emptyAuditChip();
-    if (propB.length > 0 && bulletsDiffer && (bulletsFew || propB.length >= 3)) {
-      bullets = {
-        show: true,
-        proposedText: propB.slice(0, 5).join("\n"),
-        sourceLabel: bulletsFew
-          ? "Prüfung: Bullet-Vorschlag aus Beschreibung / Listung"
-          : "Prüfung: konsolidierte Bullet Points",
-      };
-    }
-
-    const brandDiff = auditPayload.diffs.find((d) => d.field === "brand");
-    const brandRef = brandDiff?.referenceValue?.trim() ?? "";
-    let brand = emptyAuditChip();
-    if (brandRef && brandRef !== draftValues.brand.trim()) {
-      brand = {
-        show: true,
-        proposedText: brandRef,
-        sourceLabel: brandDiff?.note ?? "Kanalabgleich",
-      };
-    }
-
-    const xe = (auditPayload.xentralEan ?? "").replace(/\D/g, "");
-    const ean = Boolean(xe.length >= 8 && !draftValues.externalProductId.trim());
-
-    return { title, description, bullets, brand, ean, titleAuditFindings, titleBadge };
-  }, [auditPayload, canEditProducts, draftValues, marketplaceSlug]);
-
-  const displayedContentAuditFindings = useMemo(() => {
-    if (!auditPayload) return [];
-    const titleFx = getTitleAuditFindings({
-      title: draftValues.title,
-      brand: draftValues.brand,
-      rulebookMarkdown: auditPayload.rulebookMarkdown ?? "",
-    });
-    const rest = auditPayload.findings.filter((f) => f.field !== "title");
-    const llmOpt = auditPayload.titleOptimization;
-    const llmRows: AmazonAuditFinding[] = [];
-    if (llmOpt?.usedLlm) {
-      if (llmOpt.summary?.trim()) {
-        llmRows.push({
-          id: "llm-title-summary",
-          severity: "info",
-          message: `LLM (${llmOpt.model ?? "Modell"}), Score ${llmOpt.score}: ${llmOpt.summary.trim()}`,
-          field: "title",
-        });
-      }
-      llmOpt.issues.forEach((msg: string, i: number) => {
-        llmRows.push({
-          id: `llm-title-issue-${i}`,
-          severity: "medium",
-          message: msg,
-          recommendation: llmOpt.improvedTitle ? `Vorschlag: ${llmOpt.improvedTitle}` : undefined,
-          field: "title",
-        });
-      });
-    } else if (llmOpt && !llmOpt.usedLlm && llmOpt.summary?.trim()) {
-      llmRows.push({
-        id: "llm-title-skipped",
-        severity: "info",
-        message: llmOpt.summary.trim(),
-        field: "title",
-      });
-    }
-    return [...titleFx, ...llmRows, ...rest];
-  }, [auditPayload, draftValues.title, draftValues.brand]);
+      description: draftValues.description,
+      bulletPoints: draftValues.bulletPoints,
+      externalProductId: draftValues.externalProductId,
+      productType: draftValues.productType,
+      packageLength: draftValues.packageLength,
+      packageWidth: draftValues.packageWidth,
+      packageHeight: draftValues.packageHeight,
+      packageWeight: draftValues.packageWeight,
+    },
+  });
+  // Wire real audit callbacks so the draft-editor picks them up via refs.
+  auditCallbacksRef.current.fetchContentAudit = fetchContentAudit;
+  auditCallbacksRef.current.setAuditPayload = setAuditPayload;
+  auditCallbacksRef.current.setAuditError = setAuditError;
+  auditCallbacksRef.current.setAuditLoading = setAuditLoading;
+  const statusRef = useRef(status);
+  const imageFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const amazonImageSlots = useMemo(() => padAmazonDraftImages(draftValues.images), [draftValues.images]);
   const filledAmazonImageIndices = useMemo(
@@ -697,257 +358,44 @@ export function MarketplaceProductsView({
     return new Intl.NumberFormat(intlLocaleTag(locale)).format(n);
   }, [serverPagination, totalCount, tableRows.length, locale]);
 
-  const saveDraft = useCallback(async () => {
-    const mode = editorMode;
-    const physical = serializeDraftPhysicalFieldsForSave(draftValues);
-    const values = {
-      ...draftValues,
-      ...physical,
-      conditionType: normalizeConditionTypeForDraft(draftValues.conditionType),
-      bulletPoints: draftValues.bulletPoints.map((x) => x.trim()).filter(Boolean),
-      images: draftValues.images.map((x) => x.trim()).filter(Boolean),
-    };
-    const sourceBase = editorSource
-      ? sourceSnapshotFromRow(editorSource)
-      : sourceSnapshotFromRow({
-          sku: values.sku,
-          secondaryId: values.asin,
-          title: values.title,
-          statusLabel: "",
-          isActive: true,
-        });
-    const source = {
-      ...sourceBase,
-      sku: values.sku || sourceBase.sku,
-      asin: values.asin || sourceBase.asin,
-      title: values.title || sourceBase.title,
-      description: values.description,
-      bulletPoints: values.bulletPoints,
-      images: values.images,
-      productType: values.productType,
-      brand: values.brand,
-      conditionType: values.conditionType,
-      externalProductId: values.externalProductId,
-      externalProductIdType: values.externalProductIdType,
-      uvpEur: values.uvpEur ? Number(values.uvpEur) : null,
-      listPriceEur: values.listPriceEur ? Number(values.listPriceEur) : null,
-      handlingTime: values.handlingTime,
-      shippingTemplate: values.shippingTemplate,
-      quantity: values.quantity ? Number(values.quantity) : null,
-      packageLength: values.packageLength,
-      packageWidth: values.packageWidth,
-      packageHeight: values.packageHeight,
-      packageWeight: values.packageWeight,
-      attributes: values.attributes,
-    };
-    const statusOut = deriveDraftStatus(values, mode);
-    setDraftSaving(true);
-    setDraftError(null);
-    try {
-      const method = mode === "create_new" && !draftId ? "POST" : "PUT";
-      const res = await fetch("/api/amazon/products/drafts", {
-        method,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          id: draftId ?? undefined,
-          mode,
-          sku: values.sku || editorSource?.sku || undefined,
-          sourceSnapshot: source,
-          draftValues: values,
-        }),
-      });
-      const payload = (await res.json().catch(() => ({}))) as DraftApiPayload;
-      if (!res.ok) throw new Error(payload.error ?? "Entwurf konnte nicht gespeichert werden.");
-      const item = payload.item ?? null;
-      if (item?.id) setDraftId(item.id);
-      setDraftStatus(statusOut);
-    } catch (e) {
-      setDraftError(e instanceof Error ? e.message : t("commonUi.unknownError"));
-    } finally {
-      setDraftSaving(false);
-    }
-  }, [draftId, draftValues, editorMode, editorSource, t]);
-
-  const fetchContentAudit = useCallback(
-    async (sku: string, options?: { refresh?: boolean }) => {
-      const s = sku.trim();
-      if (!s || marketplaceSlug !== "amazon" || !canEditProducts) return;
-      setAuditLoading(true);
-      setAuditError(null);
-      setAuditPayload(null);
-      try {
-        const qs = new URLSearchParams();
-        qs.set("sku", s);
-        if (options?.refresh) qs.set("refresh", "1");
-        const res = await fetch(`/api/amazon/content-audit?${qs.toString()}`, { cache: "no-store" });
-        const payload = (await res.json().catch(() => ({}))) as AmazonContentAuditPayload & { error?: string };
-        if (!res.ok) throw new Error(payload.error ?? "Content-Prüfung konnte nicht geladen werden.");
-        setAuditPayload(payload);
-      } catch (e) {
-        setAuditError(e instanceof Error ? e.message : "Content-Prüfung konnte nicht geladen werden.");
-      } finally {
-        setAuditLoading(false);
-      }
-    },
-    [canEditProducts, marketplaceSlug]
-  );
-
-  const loadDraft = useCallback(
-    async (sku: string, mode: AmazonProductDraftMode) => {
-      setDraftLoading(true);
-      setDraftError(null);
-      setDraftTableMissing(false);
-      setDetailLoadHint(null);
-      try {
-        if (mode === "edit_existing" && sku) {
-          const detailRes = await fetch(`/api/amazon/products/${encodeURIComponent(sku)}`, {
-            cache: "no-store",
-          });
-          const detailPayload = (await detailRes.json().catch(() => ({}))) as AmazonProductDetailPayload;
-          if (!detailRes.ok) {
-            throw new Error(detailPayload.error ?? "Produktdetails konnten nicht geladen werden.");
-          }
-          setDetailLoadHint(
-            typeof detailPayload.detailLoadHint === "string" && detailPayload.detailLoadHint.trim()
-              ? detailPayload.detailLoadHint.trim()
-              : null
-          );
-          const localeTag = intlLocaleTag(locale);
-          const nextValues = formatDraftValuesPhysicalFieldsForEditor(
-            normalizeDraftValues(
-              detailPayload.draftValues ??
-                draftValuesFromSource(
-                  detailPayload.sourceSnapshot ??
-                    sourceSnapshotFromRow({
-                      sku,
-                      secondaryId: "",
-                      title: "",
-                      statusLabel: "",
-                      isActive: true,
-                    })
-                )
-            ),
-            localeTag
-          );
-          setDraftValues(nextValues);
-          if (detailPayload.draft?.id) {
-            setDraftId(detailPayload.draft.id);
-            setDraftStatus(
-              detailPayload.draft.status ??
-                deriveDraftStatus(detailPayload.draft.draft_values ?? nextValues, mode)
-            );
-          } else {
-            setDraftId(null);
-            setDraftStatus(deriveDraftStatus(nextValues, mode));
-          }
-          if (marketplaceSlug === "amazon" && canEditProducts) {
-            void fetchContentAudit(sku);
-          }
-          return;
-        }
-
-        const q = new URLSearchParams();
-        if (sku) q.set("sku", sku);
-        q.set("mode", mode);
-        const res = await fetch(`/api/amazon/products/drafts?${q.toString()}`, { cache: "no-store" });
-        const payload = (await res.json().catch(() => ({}))) as DraftApiPayload;
-        if (payload.tableMissing) {
-          setDraftTableMissing(true);
-          return;
-        }
-        if (!res.ok) throw new Error(payload.error ?? "Entwurf konnte nicht geladen werden.");
-        const item = payload.item ?? null;
-        if (!item) {
-          setDraftId(null);
-          return;
-        }
-        setDraftId(item.id);
-        const dv = formatDraftValuesPhysicalFieldsForEditor(
-          normalizeDraftValues(item.draft_values ?? {}),
-          intlLocaleTag(locale)
-        );
-        setDraftValues(dv);
-        setDraftStatus(item.status ?? deriveDraftStatus(dv, mode));
-        if (mode === "edit_existing" && sku && marketplaceSlug === "amazon" && canEditProducts) {
-          void fetchContentAudit(sku);
-        }
-      } catch (e) {
-        setDraftError(e instanceof Error ? e.message : t("commonUi.unknownError"));
-      } finally {
-        setDraftLoading(false);
-      }
-    },
-    [t, locale, fetchContentAudit, marketplaceSlug, canEditProducts]
-  );
-
-  const openShellForRow = useCallback((row: MarketplaceProductListRow) => {
-    setEditorOpen(false);
-    setShellMode("edit");
-    setShellRow(row);
-    setShellOpen(true);
-  }, []);
-
-  const openShellCreate = useCallback(() => {
-    setEditorOpen(false);
-    setShellMode("create");
-    setShellRow(null);
-    setShellOpen(true);
-  }, []);
-
-  const openEditorForRow = useCallback(
+  const openShellForRow = useCallback(
     (row: MarketplaceProductListRow) => {
-      setShellOpen(false);
-      setAuditPayload(null);
-      setAuditError(null);
-      setAuditLoading(false);
-      const source = sourceSnapshotFromRow(row);
-      setEditorMode("edit_existing");
-      setEditorSource(row);
-      setDraftId(null);
-      const initial = formatDraftValuesPhysicalFieldsForEditor(
-        draftValuesFromSource(source),
-        intlLocaleTag(locale)
-      );
-      setDraftValues(initial);
-      setDraftStatus(deriveDraftStatus(initial, "edit_existing"));
-      setEditorOpen(true);
-      void loadDraft(row.sku, "edit_existing");
+      setEditorOpen(false);
+      setShellMode("edit");
+      setShellRow(row);
+      setShellOpen(true);
     },
-    [loadDraft, locale]
+    [setEditorOpen, setShellMode, setShellRow, setShellOpen]
   );
 
-  const openCreateEditor = useCallback(() => {
-    setShellOpen(false);
-    setAuditPayload(null);
-    setAuditError(null);
-    setAuditLoading(false);
-    setEditorMode("create_new");
-    setEditorSource(null);
-    setDraftId(null);
-    const initial = emptyDraftValues();
-    setDraftValues(initial);
-    setDraftStatus("draft");
-    setDraftError(null);
-    setDraftTableMissing(false);
-    setDetailLoadHint(null);
-    setEditorOpen(true);
-  }, []);
+  const openShellCreate = useCallback(
+    () => {
+      setEditorOpen(false);
+      setShellMode("create");
+      setShellRow(null);
+      setShellOpen(true);
+    },
+    [setEditorOpen, setShellMode, setShellRow, setShellOpen]
+  );
 
-  const appendIncomingImages = useCallback((incoming: string[]) => {
-    if (incoming.length === 0) return;
-    setDraftValues((prev) => {
-      const slots = padAmazonDraftImages(prev.images);
-      let i = 0;
-      for (let s = 0; s < AMAZON_DRAFT_IMAGE_SLOT_COUNT && i < incoming.length; s += 1) {
-        if (!slots[s].trim()) {
-          slots[s] = incoming[i];
-          i += 1;
+  const appendIncomingImages = useCallback(
+    (incoming: string[]) => {
+      if (incoming.length === 0) return;
+      setDraftValues((prev) => {
+        const slots = padAmazonDraftImages(prev.images);
+        let i = 0;
+        for (let s = 0; s < AMAZON_DRAFT_IMAGE_SLOT_COUNT && i < incoming.length; s += 1) {
+          if (!slots[s].trim()) {
+            slots[s] = incoming[i];
+            i += 1;
+          }
         }
-      }
-      return { ...prev, images: slots };
-    });
-    setDraftError(null);
-  }, []);
+        return { ...prev, images: slots };
+      });
+      setDraftError(null);
+    },
+    [setDraftValues, setDraftError]
+  );
 
   const readImageFilesAsDataUrls = useCallback(async (fileList: File[]) => {
     const files = fileList
@@ -974,7 +422,7 @@ export function MarketplaceProductsView({
         setDraftError(e instanceof Error ? e.message : "Bilder konnten nicht verarbeitet werden.");
       }
     },
-    [appendIncomingImages, readImageFilesAsDataUrls]
+    [appendIncomingImages, readImageFilesAsDataUrls, setDraftError]
   );
 
   const handleImageFileInputChange = useCallback(
@@ -987,7 +435,7 @@ export function MarketplaceProductsView({
         setDraftError(e instanceof Error ? e.message : "Bilder konnten nicht verarbeitet werden.");
       }
     },
-    [appendIncomingImages, readImageFilesAsDataUrls]
+    [appendIncomingImages, readImageFilesAsDataUrls, setDraftError]
   );
 
   const columns = useMemo<Array<ColumnDef<MarketplaceProductListRow>>>(
@@ -1314,6 +762,7 @@ export function MarketplaceProductsView({
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div className={cn("flex items-center gap-2", titleRowGapClassName)}>
             <span className={cn(DASHBOARD_MARKETPLACE_LOGO_FRAME, logoFrameClassName)}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={logoSrc}
                 alt={brandAlt}
@@ -1475,664 +924,37 @@ export function MarketplaceProductsView({
         />
       ) : null}
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
-        <MarketplaceProductEditorDialogContent>
-          <DialogHeader className={MARKETPLACE_PRODUCT_EDITOR_HEADER_CLASS}>
-            <DialogTitle className={MARKETPLACE_PRODUCT_EDITOR_TITLE_CLASS}>
-              <span className={MARKETPLACE_PRODUCT_EDITOR_LOGO_WRAP_CLASS} aria-hidden>
-                <img src={logoSrc} alt="" className={MARKETPLACE_PRODUCT_EDITOR_LOGO_IMG_CLASS} loading="lazy" />
-              </span>
-              <span className="inline-flex items-center gap-2">
-                {editorMode === "create_new" ? "Neuen Artikel vorbereiten" : "Artikel bearbeiten"}
-                {marketplaceSlug === "amazon" && editorMode === "edit_existing" && auditLoading ? (
-                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
-                ) : null}
-              </span>
-            </DialogTitle>
-          </DialogHeader>
-          <div className={MARKETPLACE_PRODUCT_EDITOR_SCROLL_OUTER_CLASS}>
-            {draftLoading ? (
-              <div
-                className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card"
-                aria-busy="true"
-                aria-live="polite"
-              >
-                <Loader2 className="h-9 w-9 animate-spin text-muted-foreground" aria-hidden />
-                <p className="text-[10px] text-muted-foreground">Produktdaten werden geladen…</p>
-              </div>
-            ) : null}
-            <div
-              className={cn(
-                MARKETPLACE_PRODUCT_EDITOR_BODY_PADDING_CLASS,
-                draftLoading && "pointer-events-none select-none opacity-[0.35]"
-              )}
-            >
-            {detailLoadHint ? (
-              <div className="rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-[10px] leading-snug text-amber-950 dark:text-amber-100">
-                {detailLoadHint}
-              </div>
-            ) : null}
-            {draftTableMissing ? (
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-1.5 text-[10px] leading-snug text-amber-700">
-                Tabelle für Produkt-Entwürfe fehlt. Bitte Supabase-Migration ausführen.
-              </div>
-            ) : null}
-            {draftError ? (
-              <div className="rounded-md border border-red-500/30 bg-red-500/10 p-1.5 text-[10px] leading-snug text-red-700">
-                {draftError}
-              </div>
-            ) : null}
-            {marketplaceSlug === "amazon" && canEditProducts && editorMode === "edit_existing" ? (
-              <div className="flex flex-col gap-1.5 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-[10px]">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-foreground">Content-Prüfung</span>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="h-7 gap-1 px-2 text-[10px]"
-                    disabled={auditLoading || !draftValues.sku.trim()}
-                    onClick={() => void fetchContentAudit(draftValues.sku)}
-                  >
-                    {auditLoading ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden /> : null}
-                    Erneut prüfen
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 gap-1 px-2 text-[10px]"
-                    disabled={auditLoading || !draftValues.sku.trim()}
-                    onClick={() => void fetchContentAudit(draftValues.sku, { refresh: true })}
-                    title="Lädt u. a. Shopify/Marktplatz-Listen neu und prüft erneut"
-                  >
-                    <RotateCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Mit Marktdaten-Refresh
-                  </Button>
-                </div>
-                {auditPayload && !auditLoading && !auditError ? (
-                  <p className="text-muted-foreground">
-                    {displayedContentAuditFindings.length} Hinweis(e) · {auditPayload.diffs.length}{" "}
-                    Kanal-Abweichung(en)
-                    {displayedContentAuditFindings.length === 0
-                      ? " — keine strukturellen Mängel erkannt."
-                      : ""}
-                  </p>
-                ) : !auditLoading && !auditError && !auditPayload ? (
-                  <p className="text-muted-foreground">
-                    Nach dem Laden der Produktdaten startet die Prüfung automatisch; hier kannst du sie manuell
-                    wiederholen.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            {marketplaceSlug === "amazon" && canEditProducts && auditError ? (
-              <div className="rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-[10px] leading-snug text-amber-950 dark:text-amber-100">
-                Content-Prüfung: {auditError}
-              </div>
-            ) : null}
-            {marketplaceSlug === "amazon" && canEditProducts && auditPayload && !auditLoading ? (
-              <details className="rounded-md border border-border/60 bg-muted/25 px-2 py-1 text-[10px]">
-                <summary className="cursor-pointer font-medium text-foreground">
-                  Alle Prüfhinweise ({displayedContentAuditFindings.length}) — Titel bezogen auf aktuellen Editor-Text
-                </summary>
-                {displayedContentAuditFindings.length === 0 ? (
-                  <p className="mt-1 text-muted-foreground">Keine strukturellen Hinweise.</p>
-                ) : (
-                  <ul className="mt-1 list-disc space-y-1 pl-4 text-muted-foreground">
-                    {displayedContentAuditFindings.map((f) => (
-                      <li key={f.id}>
-                        <span className="font-medium uppercase text-foreground/80">{f.severity}</span>: {f.message}
-                        {f.recommendation ? (
-                          <span className="mt-0.5 block text-[9px]">{f.recommendation}</span>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </details>
-            ) : null}
-            {editorMode === "create_new" && missingRequiredFields.length > 0 ? (
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-1.5 text-[10px] leading-snug text-amber-800">
-                <p className="font-medium">Pflichtfelder fehlen:</p>
-                <p className="mt-0.5">{missingRequiredFields.map((x) => x.label).join(" • ")}</p>
-              </div>
-            ) : null}
-            <div className="flex min-w-0 flex-col gap-1">
-                {selectedProductTypeSchema ? (
-                  <section className={AMAZON_EDITOR_SECTION}>
-                    <h3 className={AMAZON_EDITOR_H3}>
-                      Kategorieattribute ({selectedProductTypeSchema.label})
-                    </h3>
-                    <p className={AMAZON_EDITOR_HINT}>Zusätzliche Felder für den gewählten Produkttyp.</p>
-                    <div className="mt-1 grid grid-cols-1 items-start gap-x-1 gap-y-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-                      {selectedProductTypeSchema.attributes.map((field) => (
-                        <label key={field.key} className={AMAZON_EDITOR_LABEL}>
-                          <span className="text-muted-foreground">
-                            {field.label}
-                            {field.required ? " *" : ""}
-                          </span>
-                          <Input
-                            className={AMAZON_EDITOR_CONTROL}
-                            value={draftValues.attributes[field.key] ?? ""}
-                            onChange={(e) =>
-                              setDraftValues((prev) => ({
-                                ...prev,
-                                attributes: {
-                                  ...prev.attributes,
-                                  [field.key]: e.target.value,
-                                },
-                              }))
-                            }
-                            placeholder={field.placeholder}
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
-              <div className="flex min-h-0 min-w-0 flex-col gap-1 lg:flex-row lg:items-stretch">
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 lg:min-w-0 lg:w-0">
-                <section className={AMAZON_EDITOR_SECTION}>
-                  <h3 className={AMAZON_EDITOR_H3}>Stammdaten</h3>
-                  <p className={AMAZON_EDITOR_HINT}>SKU, ASIN und vollständiger Produkttitel.</p>
-                  <div className="mt-1 flex flex-col gap-1">
-                    <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                      <label className={AMAZON_EDITOR_LABEL}>
-                        <span className="text-muted-foreground">SKU</span>
-                        <Input
-                          className={AMAZON_EDITOR_CONTROL}
-                          value={draftValues.sku}
-                          onChange={(e) => setDraftValues((prev) => ({ ...prev, sku: e.target.value }))}
-                          placeholder="z. B. ASTRO-123"
-                        />
-                      </label>
-                      <label className={AMAZON_EDITOR_LABEL}>
-                        <span className="text-muted-foreground">ASIN</span>
-                        <Input
-                          className={AMAZON_EDITOR_CONTROL}
-                          value={draftValues.asin}
-                          onChange={(e) => setDraftValues((prev) => ({ ...prev, asin: e.target.value }))}
-                          placeholder="z. B. B0..."
-                        />
-                      </label>
-                    </div>
-                    <label className={AMAZON_EDITOR_LABEL}>
-                      <span className="flex flex-wrap items-center gap-1">
-                        <span className="text-muted-foreground">Produkttitel</span>
-                        {auditPayload &&
-                        marketplaceSlug === "amazon" &&
-                        canEditProducts &&
-                        editorMode === "edit_existing" &&
-                        contentAuditSuggestions.titleBadge ? (
-                          <span
-                            className={cn(
-                              "inline-flex max-w-full items-center gap-0.5 rounded border px-1 py-px text-[9px] leading-tight",
-                              contentAuditSuggestions.titleBadge.kind === "ok"
-                                ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-950 dark:text-emerald-100"
-                                : contentAuditSuggestions.titleBadge.kind === "errorLlm"
-                                  ? "border-red-500/40 bg-red-500/10 text-red-950 dark:text-red-100"
-                                  : "border-amber-500/45 bg-amber-500/10 text-amber-950 dark:text-amber-100"
-                            )}
-                            title={contentAuditSuggestions.titleBadge.titleAttr}
-                          >
-                            {contentAuditSuggestions.titleBadge.kind === "ok" ? (
-                              <>
-                                <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
-                                <span>{contentAuditSuggestions.titleBadge.label}</span>
-                              </>
-                            ) : (
-                              <>
-                                <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
-                                <span>{contentAuditSuggestions.titleBadge.label}</span>
-                              </>
-                            )}
-                          </span>
-                        ) : null}
-                        {contentAuditSuggestions.title.show && auditPayload ? (
-                          <AmazonDraftSuggestionTrigger
-                            sourceLabel={contentAuditSuggestions.title.sourceLabel}
-                            currentText={draftValues.title}
-                            proposedText={contentAuditSuggestions.title.proposedText}
-                            onApply={() =>
-                              setDraftValues((prev) => ({
-                                ...prev,
-                                title: contentAuditSuggestions.title.proposedText,
-                              }))
-                            }
-                          />
-                        ) : null}
-                      </span>
-                      <Textarea
-                        value={draftValues.title}
-                        onChange={(e) => setDraftValues((prev) => ({ ...prev, title: e.target.value }))}
-                        placeholder="Vollständiger Listungstitel"
-                        rows={2}
-                        className={cn("min-h-[2.5rem] resize-y py-0.5", AMAZON_EDITOR_FIELD)}
-                      />
-                    </label>
-                  </div>
-                </section>
-                    <div className="flex min-w-0 flex-col gap-1 lg:flex-row lg:items-stretch">
-                      <div className="min-w-0 w-full shrink-0 lg:w-0 lg:flex-[1.45] lg:self-start">
-                <section className={cn(AMAZON_EDITOR_SECTION, "flex min-h-0 min-w-0 flex-col")}>
-                  <h3 className={cn(AMAZON_EDITOR_H3, "shrink-0")}>Katalog &amp; Angebot</h3>
-                  <p className={cn(AMAZON_EDITOR_HINT, "shrink-0")}>Typ, Marke, Preise, Bestand, Versand.</p>
-                  <div className="mt-1 min-h-0 grid grid-cols-1 items-start gap-x-1 gap-y-1 sm:grid-cols-2 xl:grid-cols-3">
-                    <label className={cn(AMAZON_EDITOR_LABEL, "xl:col-span-2")}>
-                      <span className="text-muted-foreground">Produkttyp (Amazon)</span>
-                      <Select
-                        value={draftValues.productType || "__none__"}
-                        onValueChange={(value) =>
-                          setDraftValues((prev) => ({
-                            ...prev,
-                            productType: !value || value === "__none__" ? "" : value,
-                          }))
-                        }
-                      >
-                        <SelectTrigger className={cn("w-full", AMAZON_EDITOR_CONTROL)}>
-                          <SelectValue placeholder="Produkttyp wählen" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Nicht gewählt</SelectItem>
-                          {productTypeOptions.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                              {opt.value} - {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </label>
-                    <label className={AMAZON_EDITOR_LABEL}>
-                      <span className="flex items-center gap-1">
-                        <span className="text-muted-foreground">Marke / Hersteller</span>
-                        {contentAuditSuggestions.brand.show && auditPayload ? (
-                          <AmazonDraftSuggestionTrigger
-                            sourceLabel={contentAuditSuggestions.brand.sourceLabel}
-                            currentText={draftValues.brand}
-                            proposedText={contentAuditSuggestions.brand.proposedText}
-                            onApply={() =>
-                              setDraftValues((prev) => ({
-                                ...prev,
-                                brand: contentAuditSuggestions.brand.proposedText.trim(),
-                              }))
-                            }
-                          />
-                        ) : null}
-                      </span>
-                      <Input
-                        className={AMAZON_EDITOR_CONTROL}
-                        value={draftValues.brand}
-                        onChange={(e) => setDraftValues((prev) => ({ ...prev, brand: e.target.value }))}
-                        placeholder="z. B. AstroPet"
-                      />
-                    </label>
-                    <label className={AMAZON_EDITOR_LABEL}>
-                      <span className="text-muted-foreground">UVP (EUR)</span>
-                      <Input
-                        className={AMAZON_EDITOR_CONTROL}
-                        value={draftValues.uvpEur}
-                        onChange={(e) => setDraftValues((prev) => ({ ...prev, uvpEur: e.target.value }))}
-                        placeholder="z. B. 39.99"
-                        inputMode="decimal"
-                      />
-                    </label>
-                    <label className={AMAZON_EDITOR_LABEL}>
-                      <span className="text-muted-foreground">Preis (EUR)</span>
-                      <Input
-                        className={AMAZON_EDITOR_CONTROL}
-                        value={draftValues.listPriceEur}
-                        onChange={(e) => setDraftValues((prev) => ({ ...prev, listPriceEur: e.target.value }))}
-                        placeholder="z. B. 29.99"
-                        inputMode="decimal"
-                      />
-                    </label>
-                    <label className={AMAZON_EDITOR_LABEL}>
-                      <span className="text-muted-foreground">Bestand</span>
-                      <Input
-                        className={AMAZON_EDITOR_CONTROL}
-                        value={draftValues.quantity}
-                        onChange={(e) => setDraftValues((prev) => ({ ...prev, quantity: e.target.value }))}
-                        placeholder="z. B. 120"
-                        inputMode="numeric"
-                      />
-                    </label>
-                    <label className={AMAZON_EDITOR_LABEL}>
-                      <span className="text-muted-foreground">Bearbeitungszeit</span>
-                      <Input
-                        className={AMAZON_EDITOR_CONTROL}
-                        value={draftValues.handlingTime}
-                        onChange={(e) => setDraftValues((prev) => ({ ...prev, handlingTime: e.target.value }))}
-                        placeholder="z. B. 1-2 Werktage"
-                      />
-                    </label>
-                    <label className={cn(AMAZON_EDITOR_LABEL, "xl:col-span-2")}>
-                      <span className="text-muted-foreground">Versandvorlage</span>
-                      <Input
-                        className={AMAZON_EDITOR_CONTROL}
-                        value={draftValues.shippingTemplate}
-                        onChange={(e) => setDraftValues((prev) => ({ ...prev, shippingTemplate: e.target.value }))}
-                        placeholder="z. B. Standard DE"
-                      />
-                      {isLikelyAmazonShippingUuid(draftValues.shippingTemplate) ? (
-                        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-                          {t("amazonDraft.shippingUuidHint")}
-                        </p>
-                      ) : null}
-                    </label>
-                    <label className={AMAZON_EDITOR_LABEL}>
-                      <span className="text-muted-foreground">Zustand</span>
-                      <Select
-                        value={normalizeConditionTypeForDraft(draftValues.conditionType)}
-                        onValueChange={(value) =>
-                          setDraftValues((prev) => ({ ...prev, conditionType: value ?? "new_new" }))
-                        }
-                      >
-                        <SelectTrigger className={cn("w-full", AMAZON_EDITOR_CONTROL)}>
-                          <SelectValue>
-                            {t(
-                              `amazonDraft.condition.${normalizeConditionTypeForDraft(draftValues.conditionType)}`
-                            )}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {AMAZON_EDITOR_CONDITION_VALUES.map((condKey) => (
-                            <SelectItem key={condKey} value={condKey}>
-                              {t(`amazonDraft.condition.${condKey}`)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </label>
-                    <label className={AMAZON_EDITOR_LABEL}>
-                      <span className="flex items-center gap-1">
-                        <span className="text-muted-foreground">Externe Produkt-ID</span>
-                        {contentAuditSuggestions.ean && auditPayload?.xentralEan ? (
-                          <AmazonDraftSuggestionTrigger
-                            sourceLabel="Xentral (EAN)"
-                            currentText={draftValues.externalProductId.trim() ? draftValues.externalProductId : "—"}
-                            proposedText={auditPayload.xentralEan}
-                            onApply={() =>
-                              setDraftValues((prev) => ({
-                                ...prev,
-                                externalProductId: auditPayload.xentralEan ?? "",
-                                externalProductIdType: "ean",
-                              }))
-                            }
-                          />
-                        ) : null}
-                      </span>
-                      <Input
-                        className={AMAZON_EDITOR_CONTROL}
-                        value={draftValues.externalProductId}
-                        onChange={(e) => setDraftValues((prev) => ({ ...prev, externalProductId: e.target.value }))}
-                        placeholder="EAN/UPC/GTIN/ISBN"
-                      />
-                    </label>
-                    <label className={AMAZON_EDITOR_LABEL}>
-                      <span className="text-muted-foreground">ID-Typ</span>
-                      <Select
-                        value={draftValues.externalProductIdType}
-                        onValueChange={(value) =>
-                          setDraftValues((prev) => ({
-                            ...prev,
-                            externalProductIdType: value as "ean" | "upc" | "gtin" | "isbn" | "none",
-                          }))
-                        }
-                      >
-                        <SelectTrigger className={cn("w-full", AMAZON_EDITOR_CONTROL)}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ean">EAN</SelectItem>
-                          <SelectItem value="upc">UPC</SelectItem>
-                          <SelectItem value="gtin">GTIN</SelectItem>
-                          <SelectItem value="isbn">ISBN</SelectItem>
-                          <SelectItem value="none">Keine (GTIN exemption)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </label>
-                  <label className={AMAZON_EDITOR_LABEL}>
-                    <span className="text-muted-foreground">{t("amazonDraft.dimensionLength")}</span>
-                    <Input
-                      className={AMAZON_EDITOR_CONTROL}
-                      value={draftValues.packageLength}
-                      onChange={(e) => setDraftValues((prev) => ({ ...prev, packageLength: e.target.value }))}
-                      placeholder="0"
-                      inputMode="decimal"
-                    />
-                  </label>
-                  <label className={AMAZON_EDITOR_LABEL}>
-                    <span className="text-muted-foreground">{t("amazonDraft.dimensionWidth")}</span>
-                    <Input
-                      className={AMAZON_EDITOR_CONTROL}
-                      value={draftValues.packageWidth}
-                      onChange={(e) => setDraftValues((prev) => ({ ...prev, packageWidth: e.target.value }))}
-                      placeholder="0"
-                      inputMode="decimal"
-                    />
-                  </label>
-                  <label className={AMAZON_EDITOR_LABEL}>
-                    <span className="text-muted-foreground">{t("amazonDraft.dimensionHeight")}</span>
-                    <Input
-                      className={AMAZON_EDITOR_CONTROL}
-                      value={draftValues.packageHeight}
-                      onChange={(e) => setDraftValues((prev) => ({ ...prev, packageHeight: e.target.value }))}
-                      placeholder="0"
-                      inputMode="decimal"
-                    />
-                  </label>
-                  <label className={AMAZON_EDITOR_LABEL}>
-                    <span className="text-muted-foreground">{t("amazonDraft.weightKg")}</span>
-                    <Input
-                      className={AMAZON_EDITOR_CONTROL}
-                      value={draftValues.packageWeight}
-                      onChange={(e) => setDraftValues((prev) => ({ ...prev, packageWeight: e.target.value }))}
-                      placeholder="0"
-                      inputMode="decimal"
-                    />
-                  </label>
-                  </div>
-                </section>
-                      </div>
-                      <div className="flex min-h-0 min-w-0 w-full flex-col lg:w-0 lg:flex-[1.2] lg:self-stretch">
-                <section
-                  className={cn(
-                    AMAZON_EDITOR_SECTION,
-                    "flex min-h-0 min-w-0 flex-col lg:min-h-0 lg:flex-1"
-                  )}
-                >
-                  <h3 className={cn(AMAZON_EDITOR_H3, "shrink-0")}>
-                    {t("amazonDraft.contentSectionTitle")}
-                  </h3>
-                  <p className={cn(AMAZON_EDITOR_HINT, "shrink-0")}>
-                    {t("amazonDraft.contentSectionHint")}
-                  </p>
-                  <div className="mt-1 flex min-h-0 flex-col gap-1 lg:min-h-0 lg:flex-1">
-                    <label
-                      className={cn(
-                        AMAZON_EDITOR_LABEL,
-                        "flex min-h-0 min-w-0 flex-col lg:min-h-0 lg:flex-1"
-                      )}
-                    >
-                      <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                        Beschreibung
-                        {contentAuditSuggestions.description.show && auditPayload ? (
-                          <AmazonDraftSuggestionTrigger
-                            sourceLabel={contentAuditSuggestions.description.sourceLabel}
-                            currentText={draftValues.description}
-                            proposedText={contentAuditSuggestions.description.proposedText}
-                            onApply={() =>
-                              setDraftValues((prev) => ({
-                                ...prev,
-                                description: contentAuditSuggestions.description.proposedText,
-                              }))
-                            }
-                          />
-                        ) : null}
-                      </span>
-                      <Textarea
-                        value={draftValues.description}
-                        onChange={(e) => setDraftValues((prev) => ({ ...prev, description: e.target.value }))}
-                        className={cn(
-                          "field-sizing-fixed min-h-[2.75rem] resize-y py-0.5 lg:min-h-0 lg:flex-1",
-                          AMAZON_EDITOR_FIELD
-                        )}
-                        rows={2}
-                        placeholder="Beschreibung"
-                      />
-                    </label>
-                  </div>
-                </section>
-                      </div>
-                    </div>
-                <section className={AMAZON_EDITOR_SECTION}>
-                  <div className="flex flex-wrap items-center gap-1">
-                    <h3 className={AMAZON_EDITOR_H3}>{t("amazonDraft.bulletsSectionTitle")}</h3>
-                    {contentAuditSuggestions.bullets.show && auditPayload ? (
-                      <AmazonDraftSuggestionTrigger
-                        className="translate-y-px"
-                        sourceLabel={contentAuditSuggestions.bullets.sourceLabel}
-                        currentText={draftValues.bulletPoints.map((b) => b.trim()).join("\n")}
-                        proposedText={contentAuditSuggestions.bullets.proposedText}
-                        onApply={() => {
-                          const next = contentAuditSuggestions.bullets.proposedText
-                            .split("\n")
-                            .map((x) => x.trim())
-                            .filter(Boolean);
-                          const padded = sanitizeAmazonBulletPoints(next).slice(0, 5);
-                          while (padded.length < 5) padded.push("");
-                          setDraftValues((prev) => ({ ...prev, bulletPoints: padded }));
-                        }}
-                      />
-                    ) : null}
-                  </div>
-                  <p className={AMAZON_EDITOR_HINT}>{t("amazonDraft.bulletsSectionHint")}</p>
-                  <div className="mt-1 flex flex-col gap-0.5">
-                    {[0, 1, 2, 3, 4].map((idx) => (
-                      <label key={`bp-${idx}`} className={AMAZON_EDITOR_LABEL}>
-                        <span className="text-muted-foreground">
-                          {t("amazonDraft.bulletPlaceholder", { n: idx + 1 })}
-                        </span>
-                        <Textarea
-                          className={cn(
-                            "field-sizing-content max-h-[min(22vh,7rem)] min-h-[1.75rem] resize-y overflow-y-auto py-0.5",
-                            AMAZON_EDITOR_FIELD
-                          )}
-                          rows={1}
-                          value={draftValues.bulletPoints[idx] ?? ""}
-                          onChange={(e) =>
-                            setDraftValues((prev) => {
-                              const next = [...prev.bulletPoints];
-                              next[idx] = e.target.value;
-                              return { ...prev, bulletPoints: next };
-                            })
-                          }
-                          placeholder={t("amazonDraft.bulletPlaceholder", { n: idx + 1 })}
-                        />
-                      </label>
-                    ))}
-                  </div>
-                </section>
-                  </div>
-              <div className="flex min-h-0 w-full shrink-0 flex-col self-stretch lg:w-[min(15rem,100%)] lg:max-w-[15rem]">
-                <section className={cn(AMAZON_EDITOR_SECTION, "flex min-h-0 min-w-0 flex-1 flex-col")}>
-                  <div className="mb-1 flex shrink-0 flex-wrap items-baseline justify-between gap-1">
-                    <h3 className={AMAZON_EDITOR_H3}>Bilder</h3>
-                    <span className="text-[9px] tabular-nums leading-none text-muted-foreground">
-                      {filledAmazonImageIndices.length}/{AMAZON_DRAFT_IMAGE_SLOT_COUNT}
-                    </span>
-                  </div>
-                  <div
-                    className={cn(
-                      "mb-1 w-full shrink-0 rounded border border-dashed px-1 py-0.5 text-center text-[9px] leading-tight transition-colors",
-                      imageDropActive
-                        ? "border-primary/70 bg-primary/5 text-foreground"
-                        : "border-border/70 bg-muted/25 text-muted-foreground"
-                    )}
-                    onDragEnter={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setImageDropActive(true);
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (!imageDropActive) setImageDropActive(true);
-                    }}
-                    onDragLeave={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setImageDropActive(false);
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setImageDropActive(false);
-                      void handleImageDrop(e.dataTransfer);
-                    }}
-                  >
-                    <Upload className="mx-auto mb-px h-2.5 w-2.5 opacity-70" aria-hidden />
-                    Ablage · max.&nbsp;{AMAZON_DRAFT_IMAGE_MAX_MB}&nbsp;MB
-                  </div>
-                  <input
-                    ref={imageFileInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => {
-                      void handleImageFileInputChange(e.target.files);
-                      e.currentTarget.value = "";
-                    }}
-                  />
-                  <div className="mt-1 grid w-full grid-cols-2 items-start gap-1">
-                    {filledAmazonImageIndices.map((idx) => (
-                      <AmazonDraftImageSlot
-                        key={idx}
-                        index={idx}
-                        url={amazonImageSlots[idx] ?? ""}
-                        onClear={() =>
-                          setDraftValues((prev) => {
-                            const next = padAmazonDraftImages(prev.images);
-                            next[idx] = "";
-                            return { ...prev, images: next };
-                          })
-                        }
-                      />
-                    ))}
-                    {canAddMoreAmazonImages ? (
-                      <AmazonDraftImageAddTile onAdd={() => imageFileInputRef.current?.click()} />
-                    ) : null}
-                  </div>
-                </section>
-              </div>
-              </div>
-            </div>
-            </div>
-          </div>
-          <DialogFooter className={MARKETPLACE_PRODUCT_EDITOR_FOOTER_CLASS}>
-            <span className="text-[9px] leading-snug text-muted-foreground">
-              Status: {draftLoading ? "lädt..." : draftStatus === "ready" ? "bereit" : "Entwurf"}
-              {editorMode === "create_new" && missingRequiredFields.length > 0
-                ? ` • ${missingRequiredFields.length} Pflichtfeld(er) fehlen`
-                : ""}
-            </span>
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
-              <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={() => setEditorOpen(false)}>
-                Schließen
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="h-6 px-2 text-[10px]"
-                onClick={() => void saveDraft()}
-                disabled={draftSaving || draftLoading}
-              >
-                {draftSaving ? "Speichert..." : "Entwurf speichern"}
-              </Button>
-            </div>
-          </DialogFooter>
-        </MarketplaceProductEditorDialogContent>
+        <AmazonProductEditor
+          draftValues={draftValues}
+          draftLoading={draftLoading}
+          draftSaving={draftSaving}
+          draftError={draftError}
+          draftTableMissing={draftTableMissing}
+          draftStatus={draftStatus}
+          detailLoadHint={detailLoadHint}
+          editorMode={editorMode}
+          auditPayload={auditPayload}
+          auditLoading={auditLoading}
+          auditError={auditError}
+          contentAuditSuggestions={contentAuditSuggestions}
+          displayedContentAuditFindings={displayedContentAuditFindings}
+          onClose={() => setEditorOpen(false)}
+          onSave={saveDraft}
+          onSetDraftValues={setDraftValues}
+          onFetchContentAudit={fetchContentAudit}
+          logoSrc={logoSrc}
+          marketplaceSlug={marketplaceSlug}
+          canEditProducts={canEditProducts}
+          imageDropActive={imageDropActive}
+          onSetImageDropActive={setImageDropActive}
+          imageFileInputRef={imageFileInputRef}
+          amazonImageSlots={amazonImageSlots}
+          filledAmazonImageIndices={filledAmazonImageIndices}
+          canAddMoreAmazonImages={canAddMoreAmazonImages}
+          productTypeOptions={productTypeOptions}
+          onImageDrop={handleImageDrop}
+          onImageFileInputChange={handleImageFileInputChange}
+        />
       </Dialog>
     </div>
   );

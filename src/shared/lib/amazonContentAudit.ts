@@ -88,6 +88,8 @@ export type AmazonAuditOutput = {
 };
 
 const TITLE_MAX_LEN = 200;
+/** Regelwerk empfiehlt 80, Amazon erlaubt 200 — wir warnen ab 80. */
+const TITLE_RECOMMENDED_LEN = 80;
 /** Unterhalb davon wirkt der Titel für Amazon oft zu knapp (Kernmerkmale). */
 const TITLE_MIN_LEN = 30;
 const TITLE_BANNED = [
@@ -99,6 +101,41 @@ const TITLE_BANNED = [
   "gratis",
   "kostenlos",
   "prime",
+  "aktion",
+  "neuheit",
+  "top",
+  "exklusiv",
+  "limitiert",
+  "gratisversand",
+  "schnellversand",
+  "billig",
+  "günstig",
+];
+const TITLE_BANNED_SYMBOLS = /[!?*€®©™""]/;
+const TITLE_HTML_TAGS = /<\/?[a-z][^>]*>/i;
+
+/** Verbotene Inhalte in Bullet Points */
+const BULLET_BANNED = [
+  "sonderangebot",
+  "versandkostenfrei",
+  "gratisversand",
+  "attraktiver preis",
+  "preis-leistungs-sieger",
+  "lieferung ab lager",
+];
+const BULLET_VAGUE = [
+  "original verpackte neuware",
+  "hochwertige aufmachung",
+  "premium qualität",
+];
+
+/** Verbotene Inhalte in Beschreibung */
+const DESC_BANNED = [
+  "sonderangebot",
+  "versandkostenfrei",
+  "sale",
+  "rabatt",
+  "gratis",
 ];
 
 /** Mindestlänge für einen Beschreibungs-Abgleich (weniger = oft Rauschen). */
@@ -282,11 +319,57 @@ export function getTitleAuditFindings(ctx: AmazonTitleAuditContext): AmazonAudit
     });
   }
 
-  if (hasRulebookHint(rb, "TITEL-001") && amazonTitle.length > TITLE_MAX_LEN) {
+  if (hasRulebookHint(rb, "TITEL-001") && amazonTitle.length > TITLE_RECOMMENDED_LEN) {
     findings.push({
       id: "rule-title-001",
+      severity: amazonTitle.length > TITLE_MAX_LEN ? "high" : "medium",
+      message: `Regelwerk TITEL-001: Titel hat ${amazonTitle.length} Zeichen (empfohlen max. ${TITLE_RECOMMENDED_LEN}).`,
+      recommendation: "Titel kürzen — auf mobilen Geräten werden nur ca. 80 Zeichen vollständig angezeigt.",
+      field: "title",
+    });
+  }
+
+  // TITEL-002: Nur Großbuchstaben oder nur Kleinbuchstaben
+  const letters = amazonTitle.replace(/[^a-zA-ZäöüÄÖÜß]/g, "");
+  if (letters.length >= 10 && (letters === letters.toUpperCase() || letters === letters.toLowerCase())) {
+    findings.push({
+      id: "title-case-violation",
       severity: "high",
-      message: "Regelwerk-Check: Titellänge verletzt.",
+      message: "Titel in nur Großbuchstaben oder nur Kleinbuchstaben — korrekte Groß-/Kleinschreibung verwenden.",
+      recommendation: "Deutschen Regeln für Groß-/Kleinschreibung folgen (TITEL-002).",
+      field: "title",
+    });
+  }
+
+  // TITEL-005: Preisangaben im Titel
+  if (/\d+[\s,.]?\d*\s*€|EUR\s*\d|preis/i.test(amazonTitle)) {
+    findings.push({
+      id: "title-price",
+      severity: "high",
+      message: "Titel enthält Preisangabe — verboten laut TITEL-005.",
+      recommendation: "Preisangaben aus dem Titel entfernen.",
+      field: "title",
+    });
+  }
+
+  // TITEL-006: Verbotene Symbole
+  if (TITLE_BANNED_SYMBOLS.test(amazonTitle)) {
+    findings.push({
+      id: "title-banned-symbols",
+      severity: "high",
+      message: "Titel enthält verbotene Symbole (!, ?, *, €, ®, ©, ™ o.ä.) — TITEL-006.",
+      recommendation: "Verbotene Sonderzeichen aus dem Titel entfernen.",
+      field: "title",
+    });
+  }
+
+  // TITEL-009: HTML-Tags im Titel
+  if (TITLE_HTML_TAGS.test(amazonTitle)) {
+    findings.push({
+      id: "title-html-tags",
+      severity: "high",
+      message: "Titel enthält HTML-Tags — TITEL-009.",
+      recommendation: "HTML-Tags aus dem Titel entfernen, sie werden nicht gerendert.",
       field: "title",
     });
   }
@@ -420,19 +503,99 @@ export function runAmazonContentAudit(input: AmazonAuditInput): AmazonAuditOutpu
     findings.push({
       id: "bullets-too-few",
       severity: "medium",
-      message: `Nur ${amazonBullets.length} Bullet Points vorhanden.`,
-      recommendation: "3–5 klare, nutzenorientierte Bullet Points ergänzen (orientieren am Regelwerk).",
+      message: `Nur ${amazonBullets.length} Bullet Points vorhanden (ATTR-001 empfiehlt 5).`,
+      recommendation: "5 klare, nutzenorientierte Bullet Points ergänzen (orientieren am Regelwerk).",
       field: "bulletPoints",
     });
   }
-  if (amazonDesc.length > 0 && amazonDesc.length < 120) {
+  if (amazonBullets.length > 5) {
+    findings.push({
+      id: "bullets-too-many",
+      severity: "medium",
+      message: `${amazonBullets.length} Bullet Points — Amazon zeigt maximal 5 an (ATTR-001).`,
+      recommendation: "Auf die 5 wichtigsten Bullet Points kürzen.",
+      field: "bulletPoints",
+    });
+  }
+
+  // ATTR-002: Jedes Highlight mit Großbuchstaben beginnen
+  for (let i = 0; i < amazonBullets.length; i++) {
+    const b = amazonBullets[i];
+    if (b.length > 0 && b[0] !== b[0].toUpperCase()) {
+      findings.push({
+        id: `bullet-lowercase-start-${i}`,
+        severity: "low",
+        message: `Bullet Point ${i + 1} beginnt mit Kleinbuchstaben (ATTR-002).`,
+        recommendation: "Jeden Bullet Point mit einem Großbuchstaben beginnen.",
+        field: "bulletPoints",
+      });
+      break;
+    }
+  }
+
+  // ATTR-008/009: Verbotene Inhalte in Bullets
+  for (const bullet of amazonBullets) {
+    const lc = bullet.toLowerCase();
+    for (const banned of BULLET_BANNED) {
+      if (lc.includes(banned)) {
+        findings.push({
+          id: `bullet-banned-${banned.replace(/\s/g, "_")}`,
+          severity: "high",
+          message: `Bullet Point enthält verbotenen Begriff: "${banned}" (ATTR-008/009).`,
+          recommendation: "Preis-, Werbe- oder Versandhinweise aus Bullet Points entfernen.",
+          field: "bulletPoints",
+        });
+        break;
+      }
+    }
+    for (const vague of BULLET_VAGUE) {
+      if (lc.includes(vague)) {
+        findings.push({
+          id: `bullet-vague-${vague.replace(/\s/g, "_")}`,
+          severity: "low",
+          message: `Bullet Point enthält vage Aussage: "${vague}" (ATTR-007).`,
+          recommendation: "Durch konkrete, beschreibende Produktmerkmale ersetzen.",
+          field: "bulletPoints",
+        });
+        break;
+      }
+    }
+  }
+
+  // Beschreibung
+  if (!amazonDesc) {
+    findings.push({
+      id: "description-missing",
+      severity: "high",
+      message: "Produktbeschreibung fehlt (BESCH-001).",
+      recommendation: "Produktbeschreibung als Fließtext ergänzen — Nutzen, Anwendung, Alleinstellungsmerkmale.",
+      field: "description",
+    });
+  } else if (amazonDesc.length < 120) {
     findings.push({
       id: "description-short",
       severity: "medium",
-      message: "Produktbeschreibung ist sehr kurz.",
-      recommendation: "Anwendungsfall, Material, Nutzen und Größenangaben ergänzen.",
+      message: `Produktbeschreibung ist sehr kurz (${amazonDesc.length} Zeichen).`,
+      recommendation: "Anwendungsfall, Material, Nutzen und Größenangaben ergänzen (mind. 150 Zeichen empfohlen).",
       field: "description",
     });
+  }
+
+  // BESCH-004: Verbotene Inhalte in Beschreibung
+  if (amazonDesc) {
+    const descLc = amazonDesc.toLowerCase();
+    for (const banned of DESC_BANNED) {
+      if (descLc.includes(banned)) {
+        findings.push({
+          id: `description-banned-${banned}`,
+          severity: "high",
+          message: `Beschreibung enthält verbotenen Begriff: "${banned}" (BESCH-004).`,
+          recommendation: "Preis-/Werbe-/Versandhinweise aus der Beschreibung entfernen.",
+          field: "description",
+        });
+        break;
+      }
+    }
   }
   if (!input.amazon.images?.length) {
     findings.push({
@@ -512,12 +675,34 @@ export function runAmazonContentAudit(input: AmazonAuditInput): AmazonAuditOutpu
     );
   }
 
-  if (hasRulebookHint(input.rulebookMarkdown, "BESCHREIBUNG-001") && amazonDesc.length < 200) {
+  if (hasRulebookHint(input.rulebookMarkdown, "BESCH-001") && !amazonDesc) {
     findings.push({
       id: "rule-description-001",
-      severity: "medium",
-      message: "Regelwerk-Check: Beschreibung unter dokumentierter Mindestlänge.",
+      severity: "high",
+      message: "Regelwerk BESCH-001: Beschreibungsfeld darf nicht leer bleiben.",
       field: "description",
+    });
+  }
+
+  // MARKE-001: Jedes Produkt muss eine Marke hinterlegt haben
+  if (!amazonBrand) {
+    findings.push({
+      id: "brand-missing",
+      severity: "high",
+      message: "Keine Marke hinterlegt (MARKE-001) — Produkt über Markenfilter nicht auffindbar.",
+      recommendation: "Marke im Editor ergänzen.",
+      field: "brand",
+    });
+  }
+
+  // EAN-Check: ALLG-001
+  if (!cleanText(input.amazon.externalProductId)) {
+    findings.push({
+      id: "ean-missing",
+      severity: "high",
+      message: "Keine EAN / GTIN hinterlegt (ALLG-001) — Produkt kann ggf. nicht gelistet werden.",
+      recommendation: "EAN aus Xentral oder Lieferant übernehmen.",
+      field: "externalProductId",
     });
   }
 

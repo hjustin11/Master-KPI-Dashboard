@@ -77,6 +77,7 @@ export function normalizeArticleForecastProjectLabel(label: string): string {
   if (!t) return "—";
   if (t === "—") return "—";
   const expanded = expandMarketplaceKeyName(t);
+  // Falls nach Expansion immer noch ein Roh-Kürzel (AMZ-FBA/AMZ-FBM) → "Amazon"
   const u = expanded.toUpperCase().replace(/\s+/g, " ").trim();
   if (u === "AMZ-FBA" || u === "AMZ-FBM") return "Amazon";
   return expanded;

@@ -265,6 +265,7 @@ export function MarketplaceProductShellDialog({
           <DialogHeader className={MARKETPLACE_PRODUCT_EDITOR_HEADER_CLASS}>
             <DialogTitle className={MARKETPLACE_PRODUCT_EDITOR_TITLE_CLASS}>
               <span className={MARKETPLACE_PRODUCT_EDITOR_LOGO_WRAP_CLASS} aria-hidden>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={logoSrc} alt="" className={MARKETPLACE_PRODUCT_EDITOR_LOGO_IMG_CLASS} loading="lazy" />
               </span>
               {isEdit
@@ -509,6 +510,7 @@ export function MarketplaceProductShellDialog({
                         className="space-y-0.5 rounded-md border border-border/60 bg-background/70 p-1"
                       >
                         <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded border border-border/50 bg-muted/30">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={url} alt="" className="max-h-full max-w-full object-contain" loading="lazy" />
                         </div>
                         <div className="flex justify-end gap-px">
@@ -586,6 +588,7 @@ export function MarketplaceProductShellDialog({
           </DialogHeader>
           <div className="flex h-[70vh] w-full items-center justify-center overflow-hidden rounded-md border border-border/50 bg-muted/20 p-2">
             {previewImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={previewImageUrl} alt="" className="max-h-full max-w-full object-contain" loading="eager" />
             ) : null}
           </div>

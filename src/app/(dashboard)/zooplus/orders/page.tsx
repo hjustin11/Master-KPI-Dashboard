@@ -304,6 +304,7 @@ export default function ZooplusOrdersPage() {
       <div className="space-y-1">
         <div className="flex items-center gap-1.5">
           <span className={cn(DASHBOARD_MARKETPLACE_LOGO_FRAME, DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_LG)}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={WIKIMEDIA_ZOOPLUS_LOGO_PNG}
               alt={t("nav.zooplus")}
@@ -377,6 +378,7 @@ export default function ZooplusOrdersPage() {
         <DataTable
           columns={columns}
           data={tableRows}
+          getRowId={(row) => row.orderId}
           filterColumn={t("filters.zooplusOrders")}
           paginate={false}
           compact

@@ -9,6 +9,7 @@ import {
   pickFirstString,
 } from "@/shared/lib/xentralProjectLookup";
 import { aggregateSkuSalesWithFileCache } from "@/shared/lib/xentralDeliverySalesCache";
+import { aggregateShopifySkuSales } from "@/shared/lib/shopifySkuSalesAggregator";
 
 export type XentralArticle = {
   sku: string;
@@ -761,19 +762,43 @@ export async function computeXentralArticlesPayload(
     if (!includeSales) return { items };
     if (!salesFromYmd || !salesToYmd) return { items };
     const { fromYmd, toYmd } = clampForecastDateRange(salesFromYmd, salesToYmd);
-    const agg = await aggregateSkuSalesWithFileCache({
-      baseUrl,
-      token,
-      projectById,
-      fromYmd,
-      toYmd,
-    });
+    const [agg, shopifyBySku] = await Promise.all([
+      aggregateSkuSalesWithFileCache({
+        baseUrl,
+        token,
+        projectById,
+        fromYmd,
+        toYmd,
+      }),
+      aggregateShopifySkuSales({ fromYmd, toYmd }).catch((e) => {
+        console.error("[shopify-sku-split] aggregation failed:", e instanceof Error ? e.message : e);
+        return new Map<string, number>();
+      }),
+    ]);
+    // Debug: Shopify-Split-Diagnose (temporär)
+    const testSku = agg.bySku.get("aaaf-004");
+    if (testSku) {
+      console.log("[shopify-sku-split] AAAF-004 soldByProject keys:", Object.keys(testSku.soldByProject));
+      console.log("[shopify-sku-split] AAAF-004 soldByProject:", JSON.stringify(testSku.soldByProject));
+      console.log("[shopify-sku-split] shopifyBySku size:", shopifyBySku.size, "AAAF-004:", shopifyBySku.get("aaaf-004"));
+    }
     const next = items.map((row) => {
       const hit = agg.bySku.get(row.sku.trim().toLowerCase());
       if (hit) {
+        const sold = { ...hit.soldByProject };
+        // Split "AstroPet.de" → "Shopify" + "AP Sonstige" using Shopify API data
+        const apTotal = sold["AstroPet.de"] ?? 0;
+        if (apTotal > 0) {
+          const shopifyQty = shopifyBySku.get(row.sku.trim().toLowerCase()) ?? 0;
+          const shopifyActual = Math.min(shopifyQty, apTotal);
+          const apOther = apTotal - shopifyActual;
+          delete sold["AstroPet.de"];
+          if (shopifyActual > 0) sold["Shopify"] = shopifyActual;
+          if (apOther > 0) sold["AP Sonstige"] = apOther;
+        }
         return {
           ...row,
-          soldByProject: hit.soldByProject,
+          soldByProject: sold,
           totalSold: hit.totalSold,
         };
       }

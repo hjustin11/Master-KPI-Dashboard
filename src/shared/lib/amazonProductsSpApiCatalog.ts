@@ -681,7 +681,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
   marketplaceId: string;
   cacheKey: string;
 }): Promise<AmazonProductsCatalogSyncResult> {
-  const { config, lwaAccessToken, effectiveSellerId, marketplaceId, cacheKey } = args;
+  const { config, lwaAccessToken, effectiveSellerId, marketplaceId: _marketplaceId, cacheKey } = args;
   const freshMs = marketplaceIntegrationFreshMs();
   const staleMs = marketplaceIntegrationStaleMs();
   /** SP-API searchListingsItems: Default pageSize 10, Maximum 20. Ohne korrektes Paging nur erste Seite → nach Dedupe wirkt die Liste „kaputt“. */

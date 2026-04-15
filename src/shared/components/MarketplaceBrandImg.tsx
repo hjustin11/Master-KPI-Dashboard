@@ -47,6 +47,7 @@ export function MarketplaceBrandImg({ src, alt, className }: MarketplaceBrandImg
   }, [src]);
 
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img src={displaySrc} alt={alt} className={className} loading="lazy" decoding="async" />
   );
 }

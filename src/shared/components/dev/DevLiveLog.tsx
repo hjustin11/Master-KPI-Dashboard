@@ -193,17 +193,14 @@ function DevLiveLogPanel(props: {
 export function DevLiveLogProvider({ children }: { children: ReactNode }) {
   const enabled = useDeveloperUiVisible();
   const [entries, setEntries] = useState<DevLiveLogEntry[]>([]);
-  const [expanded, setExpanded] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+  const [expanded, setExpanded] = useState(() => {
+    if (typeof window === "undefined") return false;
     try {
-      const v = window.localStorage.getItem(STORAGE_EXPANDED);
-      if (v === "1") setExpanded(true);
+      return window.localStorage.getItem(STORAGE_EXPANDED) === "1";
     } catch {
-      // ignore
+      return false;
     }
-  }, []);
+  });
 
   const setExpandedPersist = useCallback((next: boolean) => {
     setExpanded(next);
@@ -233,7 +230,7 @@ export function DevLiveLogProvider({ children }: { children: ReactNode }) {
   );
 
   const pushRef = useRef(push);
-  pushRef.current = push;
+  useEffect(() => { pushRef.current = push; }, [push]);
 
   useEffect(() => {
     if (!enabled) return;

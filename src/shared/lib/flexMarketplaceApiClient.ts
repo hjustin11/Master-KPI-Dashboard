@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import { getIntegrationSecretValue, readIntegrationSecretsBatch } from "@/shared/lib/integrationSecrets";
 import {
   readIntegrationCache,
   readIntegrationCacheForDashboard,
@@ -12,6 +12,7 @@ import {
   marketplaceIntegrationStaleMs,
 } from "@/shared/lib/integrationCacheTtl";
 import { parseYmdParam, ymdToUtcRangeExclusiveEnd } from "@/shared/lib/orderDateParams";
+import { classifyOrderStatus } from "@/shared/lib/marketplace-profitability";
 
 export { parseYmdParam, ymdToUtcRangeExclusiveEnd };
 
@@ -148,29 +149,38 @@ export type FlexIntegrationConfig = {
 
 export async function getFlexIntegrationConfig(spec: FlexMarketplaceSpec): Promise<FlexIntegrationConfig> {
   const p = spec.envPrefix;
-  let baseUrl = resolveFlexBaseUrl(await readEnv(p, "API_BASE_URL"));
+
+  // Batch: Alle 12 Secrets in 1 DB-Query statt 12 einzelne SELECTs.
+  const suffixes = [
+    "API_BASE_URL", "ACCESS_TOKEN", "API_KEY", "CLIENT_KEY", "SECRET_KEY",
+    "ORDERS_PATH", "AUTH_MODE", "AMOUNT_SCALE", "PAGE_SIZE_PARAM",
+    "PAGINATION_DELAY_MS", "MAX_429_RETRIES", "USE_ORDER_DATE_FILTER",
+  ] as const;
+  const secrets = await readIntegrationSecretsBatch(suffixes.map((s) => `${p}_${s}`));
+  const get = (suffix: string) => (secrets.get(`${p}_${suffix}`) ?? "").trim();
+
+  let baseUrl = resolveFlexBaseUrl(get("API_BASE_URL"));
   if (spec.id === "shopify" && baseUrl) {
     baseUrl = shopifyAdminApiOriginOnly(baseUrl);
   }
-  const accessToken = await readEnv(p, "ACCESS_TOKEN");
-  const apiKeyRaw = await readEnv(p, "API_KEY");
-  const clientKeyRaw = await readEnv(p, "CLIENT_KEY");
-  const secretKeyRaw = await readEnv(p, "SECRET_KEY");
+  const accessToken = get("ACCESS_TOKEN");
+  const apiKeyRaw = get("API_KEY");
+  const clientKeyRaw = get("CLIENT_KEY");
+  const secretKeyRaw = get("SECRET_KEY");
 
   // Für single_key-Marktplätze akzeptieren wir zusätzlich CLIENT_KEY als Alias
   // (z. B. wenn Integrationen ein client/secret-Schema liefern, aber faktisch nur 1 Token nutzen).
   const apiKey =
     spec.authKind === "single_key"
-      ? (apiKeyRaw || accessToken || clientKeyRaw || "").trim()
-      : (accessToken || "").trim();
-  const clientKey = spec.authKind === "client_secret" ? clientKeyRaw.trim() : "";
-  const secretKey = spec.authKind === "client_secret" ? secretKeyRaw.trim() : "";
+      ? (apiKeyRaw || accessToken || clientKeyRaw || "")
+      : accessToken;
+  const clientKey = spec.authKind === "client_secret" ? clientKeyRaw : "";
+  const secretKey = spec.authKind === "client_secret" ? secretKeyRaw : "";
 
-  const ordersPathRaw =
-    (await readEnv(p, "ORDERS_PATH")) || spec.defaultOrdersPath || "/orders";
+  const ordersPathRaw = get("ORDERS_PATH") || spec.defaultOrdersPath || "/orders";
   const ordersPath = ordersPathRaw.startsWith("/") ? ordersPathRaw : `/${ordersPathRaw}`;
 
-  const authRaw = ((await readEnv(p, "AUTH_MODE")) || spec.defaultAuthMode).toLowerCase();
+  const authRaw = (get("AUTH_MODE") || spec.defaultAuthMode).toLowerCase();
   let authMode: FlexAuthMode = "bearer";
   if (authRaw === "x-api-key") authMode = "x-api-key";
   else if (authRaw === "mirakl" || authRaw === "authorization") authMode = "mirakl";
@@ -182,10 +192,9 @@ export async function getFlexIntegrationConfig(spec: FlexMarketplaceSpec): Promi
     authMode = "shopify";
   }
 
-  const scaleRaw = await readEnv(p, "AMOUNT_SCALE");
-  const amountScale = Math.max(1, Number(scaleRaw) || 1);
+  const amountScale = Math.max(1, Number(get("AMOUNT_SCALE")) || 1);
 
-  const pageSizeRaw = ((await readEnv(p, "PAGE_SIZE_PARAM")) || "").toLowerCase();
+  const pageSizeRaw = get("PAGE_SIZE_PARAM").toLowerCase();
   const pageSizeParam: "max" | "limit" =
     pageSizeRaw === "limit"
       ? "limit"
@@ -195,13 +204,10 @@ export async function getFlexIntegrationConfig(spec: FlexMarketplaceSpec): Promi
           ? "max"
           : "limit";
 
-  const delayRaw = await readEnv(p, "PAGINATION_DELAY_MS");
-  const paginationDelayMs = Math.max(0, Number(delayRaw) || 450);
+  const paginationDelayMs = Math.max(0, Number(get("PAGINATION_DELAY_MS")) || 450);
+  const max429Retries = Math.min(30, Math.max(1, Number(get("MAX_429_RETRIES")) || 8));
 
-  const retriesRaw = await readEnv(p, "MAX_429_RETRIES");
-  const max429Retries = Math.min(30, Math.max(1, Number(retriesRaw) || 8));
-
-  const dateFilterRaw = ((await readEnv(p, "USE_ORDER_DATE_FILTER")) || "").trim().toLowerCase();
+  const dateFilterRaw = get("USE_ORDER_DATE_FILTER").toLowerCase();
   const useOrderDateFilter =
     dateFilterRaw === "false" || dateFilterRaw === "0" || dateFilterRaw === "no"
       ? false
@@ -934,13 +940,21 @@ export function summarizeFlexOrders(orders: FlexNormalizedOrder[]): {
   summary: {
     orderCount: number;
     salesAmount: number;
+    /** Netto-Units: Brutto minus stornierte/retournierte Bestellungen. */
     units: number;
+    /** Brutto-Units: Summe aller Bestellpositionen (inkl. storniert/refunded). */
+    grossUnits: number;
+    returnedUnits: number;
+    cancelledUnits: number;
     currency: string;
   };
   points: Array<{ date: string; orders: number; amount: number; units: number }>;
 } {
   const pointsMap = new Map<string, { date: string; orderIds: Set<string>; amount: number; units: number }>();
   let totalAmount = 0;
+  let totalUnits = 0;
+  let returnedUnits = 0;
+  let cancelledUnits = 0;
   let currency = "EUR";
   const orderIds = new Set<string>();
 
@@ -948,6 +962,12 @@ export function summarizeFlexOrders(orders: FlexNormalizedOrder[]): {
     orderIds.add(o.id);
     if (o.currency) currency = o.currency;
     totalAmount += o.amount;
+    totalUnits += o.units;
+
+    const bucket = classifyOrderStatus(o.status);
+    if (bucket === "returned") returnedUnits += o.units;
+    if (bucket === "cancelled") cancelledUnits += o.units;
+
     const ymd = isoDate(o.createdAt);
     const prev = pointsMap.get(ymd) ?? { date: ymd, orderIds: new Set<string>(), amount: 0, units: 0 };
     prev.orderIds.add(o.id);
@@ -965,11 +985,16 @@ export function summarizeFlexOrders(orders: FlexNormalizedOrder[]): {
       units: p.units,
     }));
 
+  const netUnits = Math.max(0, totalUnits - returnedUnits - cancelledUnits);
+
   return {
     summary: {
       orderCount: orderIds.size,
       salesAmount: Number(totalAmount.toFixed(2)),
-      units: orders.reduce((s, o) => s + o.units, 0),
+      units: netUnits,
+      grossUnits: totalUnits,
+      returnedUnits,
+      cancelledUnits,
       currency,
     },
     points,

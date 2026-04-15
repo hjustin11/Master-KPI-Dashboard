@@ -912,9 +912,11 @@ export function AppSidebar() {
   // erst nach dem Client-Mount den echten Sidebar-State verwenden.
   const collapsed = isHydrated ? state === "collapsed" : false;
   const canRoleSwitch = !user.isLoading && user.roleKey === "owner" && roleTestingEnabled;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const effectiveHasPermission: (permission: PermissionKey) => boolean = user.isLoading
     ? () => true
     : hasPermission;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const effectiveCanAccessSidebarItem: (itemKey: SidebarItemKey) => boolean = user.isLoading
     ? () => true
     : canAccessSidebarItem;
@@ -1247,9 +1249,11 @@ export function MobileSidebarTrigger() {
     activeRole: effectiveRole,
     isAdvertisingDeveloper,
   } = usePermissions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const effectiveHasPermission: (permission: PermissionKey) => boolean = user.isLoading
     ? () => true
     : hasPermission;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const effectiveCanAccessSidebarItem: (itemKey: SidebarItemKey) => boolean = user.isLoading
     ? () => true
     : canAccessSidebarItem;

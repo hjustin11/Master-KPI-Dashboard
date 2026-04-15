@@ -308,6 +308,7 @@ export function UserAuthOverlay({
     <div className="rounded-2xl border border-border/50 bg-card/80 p-6 shadow-lg backdrop-blur-sm">
       <div className="mb-6 space-y-3 text-center">
         <div className="flex justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/brand/petrhein-logo-attached.png"
             alt="PetRhein"

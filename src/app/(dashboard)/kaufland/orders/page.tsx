@@ -371,6 +371,7 @@ export default function KauflandOrdersPage() {
         <DataTable
           columns={columns}
           data={tableRows}
+          getRowId={(row) => row.orderId}
           filterColumn={t("filters.kauflandOrders")}
           paginate={false}
           compact

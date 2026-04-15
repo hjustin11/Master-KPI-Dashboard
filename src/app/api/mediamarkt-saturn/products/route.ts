@@ -6,7 +6,7 @@ import {
   loadMarketplaceProductListCached,
 } from "@/shared/lib/marketplaceProductsListCache";
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     const config = await getMmsIntegrationConfig();
     const missing = mmsMissingKeysForConfig(config).filter((x) => x.missing);

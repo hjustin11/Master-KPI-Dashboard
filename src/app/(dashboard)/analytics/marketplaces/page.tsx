@@ -152,6 +152,91 @@ function kpiLabelsForPeriod(
   };
 }
 
+/** Berechnet Delta-% als formatierten String (z.B. "+12,3 %" oder "−4,1 %"). */
+function formatDeltaPct(current: number, previous: number, locale: string): string | undefined {
+  if (!Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) return undefined;
+  const pct = ((current - previous) / previous) * 100;
+  if (!Number.isFinite(pct)) return undefined;
+  const abs = Math.abs(pct);
+  const formatted = abs.toLocaleString(locale, { maximumFractionDigits: 1 });
+  if (pct > 0.05) return `+${formatted} %`;
+  if (pct < -0.05) return `−${formatted} %`;
+  return "±0 %";
+}
+
+/** Bestimmt Trend-Richtung aus Delta-%. */
+function trendFromDelta(current: number, previous: number): TrendDirection {
+  if (!Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) return "unknown";
+  const pct = ((current - previous) / previous) * 100;
+  if (pct > 0.5) return "up";
+  if (pct < -0.5) return "down";
+  return "flat";
+}
+
+/**
+ * Reusable KPI-Grid für Marktplatz-Karten: 6 KPIs mit Δ% statt 4 ohne.
+ * Wird in allen 9+ Marktplatz-Kacheln eingesetzt.
+ */
+function MarketplaceTileKpis({
+  summary,
+  previousSummary,
+  trend,
+  periodKpis,
+  intlTag,
+}: {
+  summary: { salesAmount: number; orderCount: number; units: number; currency: string };
+  previousSummary?: { salesAmount: number; orderCount: number; units: number; currency: string } | null;
+  trend: { text: string; direction: TrendDirection };
+  periodKpis: ReturnType<typeof kpiLabelsForPeriod>;
+  intlTag: string;
+}) {
+  const ps = previousSummary;
+  const fc = (a: number, c: string) => formatCurrency(a, c, intlTag);
+  const fi = (n: number) => formatInt(n, intlTag);
+  const curAov = summary.orderCount > 0 ? summary.salesAmount / summary.orderCount : 0;
+  return (
+    <div className="mt-auto grid grid-cols-2 gap-1 pt-2">
+      <MiniKpi
+        compact
+        label={periodKpis.revenue}
+        value={fc(summary.salesAmount, summary.currency)}
+        trendDirection={trend.direction}
+        deltaPct={ps ? formatDeltaPct(summary.salesAmount, ps.salesAmount, intlTag) : undefined}
+      />
+      <MiniKpi
+        compact
+        label={periodKpis.orders}
+        value={fi(summary.orderCount)}
+        trendDirection={ps ? trendFromDelta(summary.orderCount, ps.orderCount) : "unknown"}
+        deltaPct={ps ? formatDeltaPct(summary.orderCount, ps.orderCount, intlTag) : undefined}
+      />
+      <MiniKpi
+        compact
+        label={periodKpis.units}
+        value={fi(summary.units)}
+        trendDirection={ps ? trendFromDelta(summary.units, ps.units) : "unknown"}
+        deltaPct={ps ? formatDeltaPct(summary.units, ps.units, intlTag) : undefined}
+      />
+      <MiniKpi
+        compact
+        label={periodKpis.trend}
+        value={trend.text}
+        trendDirection={trend.direction}
+      />
+      <MiniKpi
+        compact
+        label="Ø Bestellwert"
+        value={summary.orderCount > 0 ? fc(curAov, summary.currency) : PLACEHOLDER}
+      />
+      <MiniKpi
+        compact
+        label="Umsatz / Einheit"
+        value={summary.units > 0 ? fc(summary.salesAmount / summary.units, summary.currency) : PLACEHOLDER}
+      />
+    </div>
+  );
+}
+
 type MarketplaceTileLogoPreset =
   | "amazon"
   | "zooplus"
@@ -357,18 +442,32 @@ function MiniKpi({
   label,
   value,
   trendDirection = "unknown",
+  previousValue,
+  deltaPct,
+  tooltip,
   compact = false,
   className,
 }: {
   label: string;
   value: string;
   trendDirection?: TrendDirection;
+  /** Vorperiode-Wert (kleine Sub-Zeile). */
+  previousValue?: string;
+  /** Delta-Prozentwert, z. B. "+12,3 %" oder "−4,1 %". */
+  deltaPct?: string;
+  /** Erklärungstext als title-Attribut. */
+  tooltip?: string;
   /** Kompaktere Darstellung in Marktplatz-Kacheln. */
   compact?: boolean;
   className?: string;
 }) {
   const showTrend =
     trendDirection !== "unknown" && trendDirection !== "flat" && value !== PLACEHOLDER;
+
+  // Delta-Farbe: positiv = grün, negativ = rot
+  const deltaPctTrimmed = deltaPct?.trim() ?? "";
+  const deltaIsPositive = deltaPctTrimmed.startsWith("+") || (/^\d/.test(deltaPctTrimmed) && !deltaPctTrimmed.startsWith("0"));
+  const deltaIsNegative = deltaPctTrimmed.startsWith("−") || deltaPctTrimmed.startsWith("-");
 
   return (
     <div
@@ -377,6 +476,7 @@ function MiniKpi({
         compact ? "px-1.5 py-1" : "rounded-lg px-2 py-1.5",
         className
       )}
+      title={tooltip}
     >
       <p
         className={cn(
@@ -398,7 +498,24 @@ function MiniKpi({
         >
           {value}
         </p>
+        {deltaPctTrimmed ? (
+          <span
+            className={cn(
+              "ml-auto text-[10px] tabular-nums font-medium",
+              deltaIsPositive && "text-emerald-600",
+              deltaIsNegative && "text-rose-600",
+              !deltaIsPositive && !deltaIsNegative && "text-muted-foreground"
+            )}
+          >
+            {deltaPctTrimmed}
+          </span>
+        ) : null}
       </div>
+      {previousValue ? (
+        <p className="mt-0.5 text-[9px] tabular-nums text-muted-foreground">
+          Vorperiode: {previousValue}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -824,6 +941,7 @@ function MarketplaceDetailDialog({
   shopifyPreviousPoints,
   promotionDeals,
   periodKpis,
+  reportRows,
   intlTag,
   dfLocale,
   t,
@@ -899,6 +1017,8 @@ function MarketplaceDetailDialog({
   shopifyPreviousPoints: AmazonSalesPoint[] | undefined;
   promotionDeals: PromotionDeal[];
   periodKpis: ReturnType<typeof kpiLabelsForPeriod>;
+  /** Profitabilitätsdaten für alle Marktplätze. */
+  reportRows: MarketplaceReportRow[];
   intlTag: string;
   dfLocale: DateFnsLocale;
   t: (key: string, params?: Record<string, string | number>) => string;
@@ -907,6 +1027,7 @@ function MarketplaceDetailDialog({
   const fi = (n: number) => formatInt(n, intlTag);
 
   const marketplaceId = MARKETPLACE_DETAIL_ORDER[index] ?? "amazon";
+  const currentReportRow = reportRows.find((r) => r.id === marketplaceId);
 
   const [detailPeriodFrom, setDetailPeriodFrom] = useState(periodFrom);
   const [detailPeriodTo, setDetailPeriodTo] = useState(periodTo);
@@ -993,6 +1114,7 @@ function MarketplaceDetailDialog({
     [promotionDeals, marketplaceId]
   );
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const marketplaceMetrics =
     marketplaceId === "amazon"
       ? {
@@ -1182,94 +1304,154 @@ function MarketplaceDetailDialog({
         {marketplaceMetrics.error}
       </p>
     ) : marketplaceMetrics?.summary ? (
-      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
-        <MiniKpi
-          label={periodKpis.revenue}
-          value={fc(marketplaceMetrics.summary.salesAmount, marketplaceMetrics.summary.currency)}
-        />
-        <MiniKpi label={periodKpis.orders} value={fi(marketplaceMetrics.summary.orderCount)} />
-        <MiniKpi label={periodKpis.units} value={fi(marketplaceMetrics.summary.units)} />
-        <MiniKpi
-          label={periodKpis.trend}
-          value={marketplaceMetrics.trend.text}
-          trendDirection={marketplaceMetrics.trend.direction}
-        />
-        <MiniKpi
-          label={t("analyticsMp.avgOrderValue")}
-          value={
-            marketplaceMetrics.summary.orderCount > 0
-              ? fc(
-                  marketplaceMetrics.summary.salesAmount / marketplaceMetrics.summary.orderCount,
-                  marketplaceMetrics.summary.currency
-                )
-              : PLACEHOLDER
-          }
-        />
-        <MiniKpi
-          label={t("analyticsMp.avgUnitsPerOrder")}
-          value={
-            marketplaceMetrics.summary.orderCount > 0
-              ? (
-                  marketplaceMetrics.summary.units / marketplaceMetrics.summary.orderCount
-                ).toLocaleString(intlTag, {
-                  maximumFractionDigits: 2,
-                })
-              : PLACEHOLDER
-          }
-        />
-        <MiniKpi
-          label={t("analyticsMp.prevRevenue")}
-          value={
-            marketplaceMetrics.previousSummary
-              ? fc(
-                  marketplaceMetrics.previousSummary.salesAmount,
-                  marketplaceMetrics.previousSummary.currency
-                )
-              : PLACEHOLDER
-          }
-        />
-        <MiniKpi
-          label={t("analyticsMp.prevOrders")}
-          value={marketplaceMetrics.previousSummary ? fi(marketplaceMetrics.previousSummary.orderCount) : PLACEHOLDER}
-        />
-        <MiniKpi
-          label={t("analyticsMp.prevUnits")}
-          value={marketplaceMetrics.previousSummary ? fi(marketplaceMetrics.previousSummary.units) : PLACEHOLDER}
-        />
-        {dayKpis ? (
-          <>
-            <MiniKpi
-              label={t("analyticsMp.maxDailyRevenue")}
-              value={fc(dayKpis.max, marketplaceMetrics.summary.currency)}
-            />
-            <MiniKpi
-              label={t("analyticsMp.minDayWithRevenue")}
-              value={dayKpis.min > 0 ? fc(dayKpis.min, marketplaceMetrics.summary.currency) : PLACEHOLDER}
-            />
-            <MiniKpi
-              label={t("analyticsMp.avgRevenuePerCalendarDay")}
-              value={fc(dayKpis.avg, marketplaceMetrics.summary.currency)}
-            />
-            <MiniKpi
-              label={t("analyticsMp.daysWithRevenue")}
-              value={`${dayKpis.activeDays} / ${dayKpis.totalDays}`}
-            />
-          </>
-        ) : null}
-        <MiniKpi
-          label={t("analyticsMp.avgOrdersPerDay")}
-          value={
-            dayKpis && dayKpis.totalDays > 0
-              ? (marketplaceMetrics.summary.orderCount / dayKpis.totalDays).toLocaleString(intlTag, {
-                  maximumFractionDigits: 2,
-                })
-              : PLACEHOLDER
-          }
-        />
-        <MiniKpi label={t("analyticsMp.returnsUnits")} value={PLACEHOLDER} />
-        <MiniKpi label={t("analyticsMp.returnsRate")} value={PLACEHOLDER} />
-        <MiniKpi label={t("analyticsMp.activeListings")} value={PLACEHOLDER} />
-      </div>
+      (() => {
+        const s = marketplaceMetrics.summary;
+        const ps = marketplaceMetrics.previousSummary;
+        const cur = s.currency;
+        // Profitabilität-Daten (netBreakdown) sind in reportRows, nicht in marketplaceMetrics — TODO: nachziehen.
+        const prevAov = ps && ps.orderCount > 0 ? ps.salesAmount / ps.orderCount : 0;
+        const curAov = s.orderCount > 0 ? s.salesAmount / s.orderCount : 0;
+        const curRpu = s.units > 0 ? s.salesAmount / s.units : 0;
+        const prevRpu = ps && ps.units > 0 ? ps.salesAmount / ps.units : 0;
+        return (
+          <div className="space-y-3">
+            {/* === Abschnitt: Kernkennzahlen mit Vergleich === */}
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {t("analyticsMp.sectionComparison")}
+              </p>
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
+                <MiniKpi
+                  label={periodKpis.revenue}
+                  value={fc(s.salesAmount, cur)}
+                  trendDirection={marketplaceMetrics.trend.direction}
+                  previousValue={ps ? fc(ps.salesAmount, cur) : undefined}
+                  deltaPct={ps ? formatDeltaPct(s.salesAmount, ps.salesAmount, intlTag) : undefined}
+                />
+                <MiniKpi
+                  label={periodKpis.orders}
+                  value={fi(s.orderCount)}
+                  trendDirection={ps ? trendFromDelta(s.orderCount, ps.orderCount) : "unknown"}
+                  previousValue={ps ? fi(ps.orderCount) : undefined}
+                  deltaPct={ps ? formatDeltaPct(s.orderCount, ps.orderCount, intlTag) : undefined}
+                />
+                <MiniKpi
+                  label={periodKpis.units}
+                  value={fi(s.units)}
+                  trendDirection={ps ? trendFromDelta(s.units, ps.units) : "unknown"}
+                  previousValue={ps ? fi(ps.units) : undefined}
+                  deltaPct={ps ? formatDeltaPct(s.units, ps.units, intlTag) : undefined}
+                />
+                <MiniKpi
+                  label={t("analyticsMp.avgOrderValue")}
+                  value={s.orderCount > 0 ? fc(curAov, cur) : PLACEHOLDER}
+                  trendDirection={ps ? trendFromDelta(curAov, prevAov) : "unknown"}
+                  previousValue={prevAov > 0 ? fc(prevAov, cur) : undefined}
+                  deltaPct={prevAov > 0 ? formatDeltaPct(curAov, prevAov, intlTag) : undefined}
+                />
+                <MiniKpi
+                  label={t("analyticsMp.revenuePerUnit")}
+                  value={s.units > 0 ? fc(curRpu, cur) : PLACEHOLDER}
+                  trendDirection={prevRpu > 0 ? trendFromDelta(curRpu, prevRpu) : "unknown"}
+                  previousValue={prevRpu > 0 ? fc(prevRpu, cur) : undefined}
+                  deltaPct={prevRpu > 0 ? formatDeltaPct(curRpu, prevRpu, intlTag) : undefined}
+                />
+                <MiniKpi
+                  label={t("analyticsMp.avgUnitsPerOrder")}
+                  value={
+                    s.orderCount > 0
+                      ? (s.units / s.orderCount).toLocaleString(intlTag, { maximumFractionDigits: 2 })
+                      : PLACEHOLDER
+                  }
+                />
+              </div>
+            </div>
+            {/* === Abschnitt: Performance === */}
+            {dayKpis ? (
+              <div>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("analyticsMp.sectionPerformance")}
+                </p>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
+                  <MiniKpi
+                    label={t("analyticsMp.avgRevenuePerCalendarDay")}
+                    value={fc(dayKpis.avg, cur)}
+                  />
+                  <MiniKpi
+                    label={t("analyticsMp.avgOrdersPerDay")}
+                    value={
+                      dayKpis.totalDays > 0
+                        ? (s.orderCount / dayKpis.totalDays).toLocaleString(intlTag, { maximumFractionDigits: 1 })
+                        : PLACEHOLDER
+                    }
+                  />
+                  <MiniKpi
+                    label={t("analyticsMp.avgUnitsPerDay")}
+                    value={
+                      dayKpis.totalDays > 0
+                        ? (s.units / dayKpis.totalDays).toLocaleString(intlTag, { maximumFractionDigits: 1 })
+                        : PLACEHOLDER
+                    }
+                  />
+                  <MiniKpi
+                    label={t("analyticsMp.daysWithRevenue")}
+                    value={`${dayKpis.activeDays} / ${dayKpis.totalDays}`}
+                  />
+                  <MiniKpi
+                    label={t("analyticsMp.maxDailyRevenue")}
+                    value={fc(dayKpis.max, cur)}
+                  />
+                  <MiniKpi
+                    label={t("analyticsMp.minDayWithRevenue")}
+                    value={dayKpis.min > 0 ? fc(dayKpis.min, cur) : PLACEHOLDER}
+                  />
+                </div>
+              </div>
+            ) : null}
+            {/* === Abschnitt: Profitabilität === */}
+            {currentReportRow && (currentReportRow.currentFees > 0 || currentReportRow.currentReturns > 0) ? (
+              <div>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("analyticsMp.sectionProfitability")}
+                </p>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
+                  <MiniKpi
+                    label={t("analyticsMp.netRevenue")}
+                    value={fc(currentReportRow.currentNet, cur)}
+                    previousValue={currentReportRow.previousNet > 0 ? fc(currentReportRow.previousNet, cur) : undefined}
+                    deltaPct={formatDeltaPct(currentReportRow.currentNet, currentReportRow.previousNet, intlTag)}
+                    trendDirection={trendFromDelta(currentReportRow.currentNet, currentReportRow.previousNet)}
+                    tooltip={t("analyticsMp.netRevenueTooltip")}
+                  />
+                  <MiniKpi
+                    label={t("analyticsMp.marketplaceFees")}
+                    value={fc(currentReportRow.currentFees, cur)}
+                    deltaPct={
+                      s.salesAmount > 0
+                        ? `${((currentReportRow.currentFees / s.salesAmount) * 100).toFixed(1)} %`
+                        : undefined
+                    }
+                    tooltip={`${t("analyticsMp.feeSource")}: ${currentReportRow.feeSource}`}
+                  />
+                  <MiniKpi
+                    label={t("analyticsMp.returnsAmount")}
+                    value={currentReportRow.currentReturns > 0 ? fc(currentReportRow.currentReturns, cur) : PLACEHOLDER}
+                    deltaPct={
+                      currentReportRow.currentReturns > 0 && s.salesAmount > 0
+                        ? `${((currentReportRow.currentReturns / s.salesAmount) * 100).toFixed(1)} %`
+                        : undefined
+                    }
+                  />
+                  <MiniKpi
+                    label={t("analyticsMp.cancelledAmount")}
+                    value={currentReportRow.currentCancelled > 0 ? fc(currentReportRow.currentCancelled, cur) : PLACEHOLDER}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        );
+      })()
     ) : (
       <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
@@ -1623,6 +1805,35 @@ function AnalyticsMarketplacesPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const CACHE_KEY = "analytics_marketplaces_sales_config_status_v1";
+    const CACHE_TTL_MS = 5 * 60 * 1000;
+
+    const applyPayload = (payload: {
+      ebay?: { configured?: boolean };
+      tiktok?: { configured?: boolean };
+    }) => {
+      if (payload.ebay?.configured === false) setEbaySalesEnabled(false);
+      if (payload.tiktok?.configured === false) setTiktokSalesEnabled(false);
+    };
+
+    try {
+      const cachedRaw = window.sessionStorage.getItem(CACHE_KEY);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw) as {
+          at: number;
+          payload: { ebay?: { configured?: boolean }; tiktok?: { configured?: boolean } };
+        };
+        if (cached && typeof cached.at === "number" && Date.now() - cached.at < CACHE_TTL_MS) {
+          applyPayload(cached.payload);
+          return () => {
+            cancelled = true;
+          };
+        }
+      }
+    } catch {
+      // ignore cache read errors
+    }
+
     void fetch("/api/marketplaces/sales-config-status", { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) return null;
@@ -1634,11 +1845,14 @@ function AnalyticsMarketplacesPage() {
       })
       .then((payload) => {
         if (cancelled || !payload) return;
-        if (payload.ebay?.configured === false) {
-          setEbaySalesEnabled(false);
-        }
-        if (payload.tiktok?.configured === false) {
-          setTiktokSalesEnabled(false);
+        applyPayload(payload);
+        try {
+          window.sessionStorage.setItem(
+            CACHE_KEY,
+            JSON.stringify({ at: Date.now(), payload })
+          );
+        } catch {
+          // ignore cache write errors (quota, privacy mode)
         }
       })
       .catch(() => {
@@ -2230,15 +2444,39 @@ function AnalyticsMarketplacesPage() {
   loadShopifySalesRef.current = loadShopifySales;
 
   useEffect(() => {
-    void loadAmazonSalesRef.current(false, false);
-    void loadEbaySalesRef.current(false, false);
-    void loadOttoSalesRef.current(false, false);
-    void loadKauflandSalesRef.current(false, false);
-    void loadFressnapfSalesRef.current(false, false);
-    void loadMmsSalesRef.current(false, false);
-    void loadZooplusSalesRef.current(false, false);
-    void loadTiktokSalesRef.current(false, false);
-    void loadShopifySalesRef.current(false, false);
+    let cancelled = false;
+    const loaders = [
+      loadAmazonSalesRef,
+      loadEbaySalesRef,
+      loadOttoSalesRef,
+      loadKauflandSalesRef,
+      loadFressnapfSalesRef,
+      loadMmsSalesRef,
+      loadZooplusSalesRef,
+      loadTiktokSalesRef,
+      loadShopifySalesRef,
+    ];
+    const CONCURRENCY = 3;
+    (async () => {
+      let i = 0;
+      const worker = async () => {
+        while (!cancelled) {
+          const idx = i++;
+          if (idx >= loaders.length) return;
+          try {
+            await loaders[idx].current(false, false);
+          } catch {
+            // per-loader errors are surfaced inside each loader
+          }
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, loaders.length) }, () => worker())
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [period.from, period.to]);
 
   useEffect(() => {
@@ -2249,15 +2487,33 @@ function AnalyticsMarketplacesPage() {
     if (!analyticsHasMounted) return;
     const id = window.setInterval(() => {
       if (!shouldRunBackgroundSync()) return;
-      void loadAmazonSalesRef.current(false, true);
-      void loadEbaySalesRef.current(false, true);
-      void loadOttoSalesRef.current(false, true);
-      void loadKauflandSalesRef.current(false, true);
-      void loadFressnapfSalesRef.current(false, true);
-      void loadMmsSalesRef.current(false, true);
-      void loadZooplusSalesRef.current(false, true);
-      void loadTiktokSalesRef.current(false, true);
-      void loadShopifySalesRef.current(false, true);
+      const loaders = [
+        loadAmazonSalesRef,
+        loadEbaySalesRef,
+        loadOttoSalesRef,
+        loadKauflandSalesRef,
+        loadFressnapfSalesRef,
+        loadMmsSalesRef,
+        loadZooplusSalesRef,
+        loadTiktokSalesRef,
+        loadShopifySalesRef,
+      ];
+      const CONCURRENCY = 3;
+      let i = 0;
+      const worker = async () => {
+        while (true) {
+          const idx = i++;
+          if (idx >= loaders.length) return;
+          try {
+            await loaders[idx].current(false, true);
+          } catch {
+            // surfaced per loader
+          }
+        }
+      };
+      void Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, loaders.length) }, () => worker())
+      );
     }, DASHBOARD_CLIENT_BACKGROUND_SYNC_MS);
     return () => window.clearInterval(id);
   }, [analyticsHasMounted]);
@@ -3086,6 +3342,7 @@ function AnalyticsMarketplacesPage() {
         shopifyPreviousPoints={shopifyData?.previousPoints}
         promotionDeals={promotionDeals}
         periodKpis={periodKpis}
+        reportRows={reportRows}
         intlTag={intlTag}
         dfLocale={dfLocale}
         t={t}
@@ -3220,21 +3477,13 @@ function AnalyticsMarketplacesPage() {
               ))}
             </div>
           ) : summary ? (
-            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
-              <MiniKpi
-                compact
-                label={periodKpis.revenue}
-                value={formatCurrency(summary.salesAmount, summary.currency, intlTag)}
-              />
-              <MiniKpi compact label={periodKpis.orders} value={formatInt(summary.orderCount, intlTag)} />
-              <MiniKpi compact label={periodKpis.units} value={formatInt(summary.units, intlTag)} />
-              <MiniKpi
-                compact
-                label={periodKpis.trend}
-                value={trend.text}
-                trendDirection={trend.direction}
-              />
-            </div>
+            <MarketplaceTileKpis
+              summary={summary}
+              previousSummary={prev}
+              trend={trend}
+              periodKpis={periodKpis}
+              intlTag={intlTag}
+            />
           ) : (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
@@ -3273,21 +3522,13 @@ function AnalyticsMarketplacesPage() {
               ))}
             </div>
           ) : ebaySummary ? (
-            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
-              <MiniKpi
-                compact
-                label={periodKpis.revenue}
-                value={formatCurrency(ebaySummary.salesAmount, ebaySummary.currency, intlTag)}
-              />
-              <MiniKpi compact label={periodKpis.orders} value={formatInt(ebaySummary.orderCount, intlTag)} />
-              <MiniKpi compact label={periodKpis.units} value={formatInt(ebaySummary.units, intlTag)} />
-              <MiniKpi
-                compact
-                label={periodKpis.trend}
-                value={ebayTrend.text}
-                trendDirection={ebayTrend.direction}
-              />
-            </div>
+            <MarketplaceTileKpis
+              summary={ebaySummary}
+              previousSummary={ebayPrev}
+              trend={ebayTrend}
+              periodKpis={periodKpis}
+              intlTag={intlTag}
+            />
           ) : (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
@@ -3332,21 +3573,13 @@ function AnalyticsMarketplacesPage() {
               ))}
             </div>
           ) : ottoSummary ? (
-            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
-              <MiniKpi
-                compact
-                label={periodKpis.revenue}
-                value={formatCurrency(ottoSummary.salesAmount, ottoSummary.currency, intlTag)}
-              />
-              <MiniKpi compact label={periodKpis.orders} value={formatInt(ottoSummary.orderCount, intlTag)} />
-              <MiniKpi compact label={periodKpis.units} value={formatInt(ottoSummary.units, intlTag)} />
-              <MiniKpi
-                compact
-                label={periodKpis.trend}
-                value={ottoTrend.text}
-                trendDirection={ottoTrend.direction}
-              />
-            </div>
+            <MarketplaceTileKpis
+              summary={ottoSummary}
+              previousSummary={ottoPrev}
+              trend={ottoTrend}
+              periodKpis={periodKpis}
+              intlTag={intlTag}
+            />
           ) : (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
@@ -3391,25 +3624,13 @@ function AnalyticsMarketplacesPage() {
               ))}
             </div>
           ) : kauflandSummary ? (
-            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
-              <MiniKpi
-                compact
-                label={periodKpis.revenue}
-                value={formatCurrency(kauflandSummary.salesAmount, kauflandSummary.currency, intlTag)}
-              />
-              <MiniKpi
-                compact
-                label={periodKpis.orders}
-                value={formatInt(kauflandSummary.orderCount, intlTag)}
-              />
-              <MiniKpi compact label={periodKpis.units} value={formatInt(kauflandSummary.units, intlTag)} />
-              <MiniKpi
-                compact
-                label={periodKpis.trend}
-                value={kauflandTrend.text}
-                trendDirection={kauflandTrend.direction}
-              />
-            </div>
+            <MarketplaceTileKpis
+              summary={kauflandSummary}
+              previousSummary={kauflandPrev}
+              trend={kauflandTrend}
+              periodKpis={periodKpis}
+              intlTag={intlTag}
+            />
           ) : (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
@@ -3454,25 +3675,13 @@ function AnalyticsMarketplacesPage() {
               ))}
             </div>
           ) : fressnapfSummary ? (
-            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
-              <MiniKpi
-                compact
-                label={periodKpis.revenue}
-                value={formatCurrency(fressnapfSummary.salesAmount, fressnapfSummary.currency, intlTag)}
-              />
-              <MiniKpi
-                compact
-                label={periodKpis.orders}
-                value={formatInt(fressnapfSummary.orderCount, intlTag)}
-              />
-              <MiniKpi compact label={periodKpis.units} value={formatInt(fressnapfSummary.units, intlTag)} />
-              <MiniKpi
-                compact
-                label={periodKpis.trend}
-                value={fressnapfTrend.text}
-                trendDirection={fressnapfTrend.direction}
-              />
-            </div>
+            <MarketplaceTileKpis
+              summary={fressnapfSummary}
+              previousSummary={fressnapfPrev}
+              trend={fressnapfTrend}
+              periodKpis={periodKpis}
+              intlTag={intlTag}
+            />
           ) : (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
@@ -3517,21 +3726,13 @@ function AnalyticsMarketplacesPage() {
               ))}
             </div>
           ) : mmsSummary ? (
-            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
-              <MiniKpi
-                compact
-                label={periodKpis.revenue}
-                value={formatCurrency(mmsSummary.salesAmount, mmsSummary.currency, intlTag)}
-              />
-              <MiniKpi compact label={periodKpis.orders} value={formatInt(mmsSummary.orderCount, intlTag)} />
-              <MiniKpi compact label={periodKpis.units} value={formatInt(mmsSummary.units, intlTag)} />
-              <MiniKpi
-                compact
-                label={periodKpis.trend}
-                value={mmsTrend.text}
-                trendDirection={mmsTrend.direction}
-              />
-            </div>
+            <MarketplaceTileKpis
+              summary={mmsSummary}
+              previousSummary={mmsPrev}
+              trend={mmsTrend}
+              periodKpis={periodKpis}
+              intlTag={intlTag}
+            />
           ) : (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
@@ -3576,25 +3777,13 @@ function AnalyticsMarketplacesPage() {
               ))}
             </div>
           ) : zooplusSummary ? (
-            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
-              <MiniKpi
-                compact
-                label={periodKpis.revenue}
-                value={formatCurrency(zooplusSummary.salesAmount, zooplusSummary.currency, intlTag)}
-              />
-              <MiniKpi
-                compact
-                label={periodKpis.orders}
-                value={formatInt(zooplusSummary.orderCount, intlTag)}
-              />
-              <MiniKpi compact label={periodKpis.units} value={formatInt(zooplusSummary.units, intlTag)} />
-              <MiniKpi
-                compact
-                label={periodKpis.trend}
-                value={zooplusTrend.text}
-                trendDirection={zooplusTrend.direction}
-              />
-            </div>
+            <MarketplaceTileKpis
+              summary={zooplusSummary}
+              previousSummary={zooplusPrev}
+              trend={zooplusTrend}
+              periodKpis={periodKpis}
+              intlTag={intlTag}
+            />
           ) : (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
@@ -3633,25 +3822,13 @@ function AnalyticsMarketplacesPage() {
               ))}
             </div>
           ) : tiktokSummary ? (
-            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
-              <MiniKpi
-                compact
-                label={periodKpis.revenue}
-                value={formatCurrency(tiktokSummary.salesAmount, tiktokSummary.currency, intlTag)}
-              />
-              <MiniKpi
-                compact
-                label={periodKpis.orders}
-                value={formatInt(tiktokSummary.orderCount, intlTag)}
-              />
-              <MiniKpi compact label={periodKpis.units} value={formatInt(tiktokSummary.units, intlTag)} />
-              <MiniKpi
-                compact
-                label={periodKpis.trend}
-                value={tiktokTrend.text}
-                trendDirection={tiktokTrend.direction}
-              />
-            </div>
+            <MarketplaceTileKpis
+              summary={tiktokSummary}
+              previousSummary={tiktokPrev}
+              trend={tiktokTrend}
+              periodKpis={periodKpis}
+              intlTag={intlTag}
+            />
           ) : (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />
@@ -3690,25 +3867,13 @@ function AnalyticsMarketplacesPage() {
               ))}
             </div>
           ) : shopifySummary ? (
-            <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
-              <MiniKpi
-                compact
-                label={periodKpis.revenue}
-                value={formatCurrency(shopifySummary.salesAmount, shopifySummary.currency, intlTag)}
-              />
-              <MiniKpi
-                compact
-                label={periodKpis.orders}
-                value={formatInt(shopifySummary.orderCount, intlTag)}
-              />
-              <MiniKpi compact label={periodKpis.units} value={formatInt(shopifySummary.units, intlTag)} />
-              <MiniKpi
-                compact
-                label={periodKpis.trend}
-                value={shopifyTrend.text}
-                trendDirection={shopifyTrend.direction}
-              />
-            </div>
+            <MarketplaceTileKpis
+              summary={shopifySummary}
+              previousSummary={shopifyPrev}
+              trend={shopifyTrend}
+              periodKpis={periodKpis}
+              intlTag={intlTag}
+            />
           ) : (
             <div className={MARKETPLACE_TILE_KPI_GRID_CLASS}>
               <MiniKpi compact label={periodKpis.revenue} value={PLACEHOLDER} />

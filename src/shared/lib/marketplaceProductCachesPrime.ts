@@ -15,6 +15,7 @@ import {
   getOttoIntegrationConfig,
 } from "@/shared/lib/ottoApiClient";
 import type { MarketplaceProductListRow } from "@/shared/lib/marketplaceProductList";
+import { readIntegrationCache } from "@/shared/lib/integrationDataCache";
 import {
   loadMarketplaceProductListCached,
   syncMarketplaceProductListToCache,
@@ -372,6 +373,27 @@ export async function loadMarketplaceProductRowsForPriceParity(
         },
       });
       return payload.items ?? [];
+    }
+
+    if (s === "amazon") {
+      // Amazon-Produkte liegen bereits in integration_data_cache (gefüllt via SP-API Cron/Prime).
+      // Wir lesen direkt aus dem Cache statt einen langsamen HTTP-Roundtrip zu /api/amazon/products zu machen.
+      const marketplaceId = env("AMAZON_SP_API_MARKETPLACE_IDS")?.split(",")[0]?.trim() ?? "";
+      const cacheKey = marketplaceId ? `amazon:products:${marketplaceId}` : "amazon:products:";
+      const cached = await readIntegrationCache<{ rows?: Array<Record<string, unknown>> }>(cacheKey);
+      if (cached.state === "miss" || !Array.isArray(cached.value?.rows)) return null;
+      const rows: MarketplaceProductListRow[] = cached.value.rows
+        .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+        .map((r) => ({
+          sku: String(r.sku ?? ""),
+          secondaryId: String(r.secondaryId ?? r.asin ?? ""),
+          title: String(r.title ?? ""),
+          statusLabel: String(r.statusLabel ?? ""),
+          isActive: r.isActive === true || r.statusLabel === "Active",
+          priceEur: typeof r.price === "number" && Number.isFinite(r.price) ? r.price : null,
+          stockQty: typeof r.stockQty === "number" && Number.isFinite(r.stockQty) ? r.stockQty : null,
+        }));
+      return rows.length > 0 ? rows : null;
     }
 
     return null;

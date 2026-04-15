@@ -372,6 +372,7 @@ export default function TiktokOrdersPage() {
         <DataTable
           columns={columns}
           data={tableRows}
+          getRowId={(row) => row.orderId}
           filterColumn={t("filters.tiktokOrders")}
           paginate={false}
           compact

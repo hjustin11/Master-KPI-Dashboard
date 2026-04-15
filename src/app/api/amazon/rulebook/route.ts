@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
 
 const FILE_NAME = "amazon_haustierbedarf_regelwerk.md";
-const DOWNLOADS_RULEBOOK_PATH = "/Users/astropetmarktplatz/Downloads/amazon_haustierbedarf_regelwerk.md";
 
 async function firstExistingPath(candidates: string[]): Promise<string | null> {
   for (const candidate of candidates) {
@@ -25,7 +24,6 @@ function buildCandidatePaths(): { existingCandidates: string[]; fallbackWritePat
   const nestedContentPath = path.join(cwd, "master-dashboard", "content", FILE_NAME);
   const existingCandidates = [
     envPath,
-    DOWNLOADS_RULEBOOK_PATH,
     localContentPath,
     nestedContentPath,
   ].filter((entry): entry is string => Boolean(entry));

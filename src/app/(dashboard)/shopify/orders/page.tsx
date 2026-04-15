@@ -315,6 +315,7 @@ export default function ShopifyOrdersPage() {
       <div className="space-y-1">
         <div className="flex items-center gap-3">
           <span className={cn(DASHBOARD_MARKETPLACE_LOGO_FRAME, DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_MD)}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={WIKIMEDIA_SHOPIFY_LOGO_2018_SVG}
               alt={t("nav.shopify")}
@@ -388,6 +389,7 @@ export default function ShopifyOrdersPage() {
         <DataTable
           columns={columns}
           data={tableRows}
+          getRowId={(row) => row.orderId}
           filterColumn={t("filters.shopifyOrders")}
           paginate={false}
           compact

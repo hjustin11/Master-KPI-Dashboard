@@ -2,10 +2,6 @@ import { NextResponse } from "next/server";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import type { XentralPrimaryAddressFields } from "@/shared/lib/xentralPrimaryAddressFields";
 
-function env(name: string) {
-  return (process.env[name] ?? "").trim();
-}
-
 async function resolveXentralConfig() {
   const baseUrl = await getIntegrationSecretValue("XENTRAL_BASE_URL");
   const token =

@@ -231,7 +231,7 @@ export default function UpdatesPage() {
     } finally {
       setManagedLoading(false);
     }
-  }, []);
+  }, [isOwner]);
 
   useEffect(() => {
     void loadManagedUpdates();

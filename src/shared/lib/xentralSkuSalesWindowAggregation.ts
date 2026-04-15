@@ -25,6 +25,92 @@ function asNumber(value: unknown): number | null {
   return null;
 }
 
+function asBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const t = value.trim().toLowerCase();
+    if (!t) return null;
+    if (t === "1" || t === "true" || t === "yes" || t === "ja") return true;
+    if (t === "0" || t === "false" || t === "no" || t === "nein") return false;
+  }
+  return null;
+}
+
+function hasNonEmptyString(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function shouldSkipLikelyComponentLine(
+  line: Record<string, unknown>,
+  attrs: Record<string, unknown>
+): boolean {
+  const flagKeys = [
+    "isSetComponent",
+    "is_set_component",
+    "isBundleComponent",
+    "is_bundle_component",
+    "isComponent",
+    "is_component",
+    "isChildPosition",
+    "is_child_position",
+    "isSubPosition",
+    "is_sub_position",
+    "isOptionalPosition",
+    "is_optional_position",
+  ] as const;
+  for (const k of flagKeys) {
+    const b = asBoolean(attrs[k] ?? line[k]);
+    if (b === true) return true;
+  }
+
+  const parentRefKeys = [
+    "parentId",
+    "parent_id",
+    "parentPositionId",
+    "parent_position_id",
+    "setParentId",
+    "set_parent_id",
+    "bundleParentId",
+    "bundle_parent_id",
+    "parentLineItemId",
+    "parent_line_item_id",
+  ] as const;
+  for (const k of parentRefKeys) {
+    const raw = attrs[k] ?? line[k];
+    if (raw == null) continue;
+    const n = asNumber(raw);
+    if (n != null && n > 0) return true;
+    if (hasNonEmptyString(raw)) return true;
+  }
+
+  const typeLike =
+    pickFirstString(attrs.type) ??
+    pickFirstString(line.type) ??
+    pickFirstString(attrs.positionType) ??
+    pickFirstString(attrs.position_type) ??
+    pickFirstString(line.positionType) ??
+    pickFirstString(line.position_type) ??
+    "";
+  const normalizedType = typeLike.trim().toLowerCase();
+  if (!normalizedType) return false;
+  const skipTypeSnippets = [
+    "page_break",
+    "set_component",
+    "bundle_component",
+    "component",
+    "optional",
+    "comment",
+    "text",
+    "shipping",
+    "discount",
+    "voucher",
+    "subtotal",
+    "total",
+  ];
+  return skipTypeSnippets.some((x) => normalizedType.includes(x));
+}
+
 function toDateYmd(value: string | null): string | null {
   if (!value) return null;
   const s = value.trim();
@@ -70,6 +156,7 @@ export function extractDeliveryNoteYmdFromItem(item: unknown): string | null {
 
 function extractLineSkuQty(line: Record<string, unknown>): { sku: string; quantity: number } | null {
   const po = extractAttributes(line);
+  if (shouldSkipLikelyComponentLine(line, po)) return null;
   let sku =
     pickFirstString(po.sku) ??
     pickFirstString(po.SKU) ??
@@ -192,7 +279,8 @@ function linesFromV3DeliveryNote(doc: Record<string, unknown>): Array<{ sku: str
   for (const line of raw) {
     if (!line || typeof line !== "object") continue;
     const l = line as Record<string, unknown>;
-    if (pickFirstString(l.type) === "page_break") continue;
+    const attrs = extractAttributes(l);
+    if (shouldSkipLikelyComponentLine(l, attrs)) continue;
     let sku = pickFirstString(l.number);
     const prod = l.product;
     if ((!sku || !sku.trim()) && prod && typeof prod === "object" && !Array.isArray(prod)) {
@@ -287,7 +375,7 @@ const V1_DELIVERY_NOTE_PATHS: [string, string] = ["api/v1/deliveryNotes", "api/v
  */
 export function resolveSalesAggMaxPages(): number {
   const raw = Number(process.env.XENTRAL_SALES_AGG_MAX_PAGES);
-  const fallback = 120;
+  const fallback = 400;
   const n = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fallback;
   return Math.min(AGG_MAX_PAGES_HARD, Math.max(5, n));
 }

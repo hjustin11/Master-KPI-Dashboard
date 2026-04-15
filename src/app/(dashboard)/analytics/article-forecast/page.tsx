@@ -53,6 +53,7 @@ import {
   type ArticleForecastRulesByScope,
 } from "@/shared/lib/articleForecastRules";
 import { isProcurementProductLine } from "@/shared/lib/procurement/procurementAggregation";
+import { usePromotionDeals } from "../marketplaces/usePromotionDeals";
 
 export type ArticleForecastRow = {
   sku: string;
@@ -87,7 +88,7 @@ type ArticlesResponseMeta = {
 
 const MARKETPLACE_COLUMN_VISIBILITY_KEY = "articleForecast.marketplaceColumnVisibility";
 const WAREHOUSE_COLUMN_VISIBILITY_KEY = "articleForecast.warehouseColumnVisibility";
-const ARTICLE_FORECAST_CACHE_KEY = "article_forecast_cache_v1";
+const ARTICLE_FORECAST_CACHE_KEY = "article_forecast_cache_v2";
 const XENTRAL_ARTICLES_SEED_CACHE_KEY = "xentral_articles_cache_v5";
 const ARTICLE_FORECAST_RULE_SCOPE_KEY = "articleForecast.ruleScope";
 
@@ -142,6 +143,11 @@ function readStoredMarketplaceVisibility(): Record<string, boolean> {
     for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
       if (typeof v === "boolean") out[k] = v;
     }
+    // Migration: "SHOPIFY" → "Shopify" (mapping corrected 2026-04)
+    if (out["SHOPIFY"] !== undefined && out["Shopify"] === undefined) {
+      out["Shopify"] = out["SHOPIFY"];
+      delete out["SHOPIFY"];
+    }
     return out;
   } catch {
     return {};
@@ -184,10 +190,19 @@ function computeForecast(args: {
   rules: ArticleForecastRules;
   soldInWindow: number;
   stockNow: number;
+  fromYmd: string;
   toYmd: string;
   inboundUntilHorizon: number;
 }): ForecastResult {
-  const windowDays = Math.max(1, args.rules.salesWindowDays);
+  // Berechne tatsächliche Tage aus Datumsbereich statt Rules — vermeidet Race-Condition
+  // zwischen manueller Datums-Änderung und useEffect-Sync der salesWindowDays.
+  const fromTs = parseYmdToUtcNoon(args.fromYmd);
+  const toTs = parseYmdToUtcNoon(args.toYmd);
+  const actualDays =
+    fromTs != null && toTs != null && toTs >= fromTs
+      ? Math.round((toTs - fromTs) / 86400000) + 1
+      : args.rules.salesWindowDays;
+  const windowDays = Math.max(1, actualDays);
   const dailySold = Math.max(0, args.soldInWindow) / windowDays;
   const horizonYmd = addDaysToYmd(args.toYmd, args.rules.projectionDays);
   const inbound = args.rules.includeInboundProcurement ? args.inboundUntilHorizon : 0;
@@ -262,13 +277,21 @@ export default function AnalyticsArticleForecastPage() {
   );
 
   const [{ fromYmd, toYmd }, setRange] = useState(() => defaultArticleForecastFromToYmd());
+  const [dateManuallySet, setDateManuallySet] = useState(false);
   const [rows, setRows] = useState<ArticleForecastRow[]>([]);
   const [procurementLines, setProcurementLines] = useState<ProcurementLine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
+
+  const { deals: promotionDeals } = usePromotionDeals();
+  const relevantDeals = useMemo(
+    () => promotionDeals.filter((d) => d.from <= toYmd && d.to >= fromYmd),
+    [promotionDeals, fromYmd, toYmd]
+  );
   const [error, setError] = useState<string | null>(null);
+  const [salesAggError, setSalesAggError] = useState(false);
   const [meta, setMeta] = useState<ArticlesResponseMeta | null>(null);
   const [ruleScope, setRuleScope] = useState<ArticleForecastRuleScope>("temporary");
   const [rulesByScope, setRulesByScope] = useState<ArticleForecastRulesByScope>({
@@ -358,6 +381,7 @@ export default function AnalyticsArticleForecastPage() {
 
       if (!silent) {
         setError(null);
+        setSalesAggError(false);
       }
 
       try {
@@ -429,8 +453,9 @@ export default function AnalyticsArticleForecastPage() {
             }));
             salesMeta = salesPayload.meta ?? null;
           }
-        } catch {
-          // Sales-Aggregation ist Zusatznutzen; Basisdaten sind bereits sichtbar.
+        } catch (salesErr) {
+          console.warn("[Bedarfsprognose] Sales-Aggregation fehlgeschlagen:", salesErr);
+          setSalesAggError(true);
         }
 
         try {
@@ -481,7 +506,8 @@ export default function AnalyticsArticleForecastPage() {
           setError(e instanceof Error ? e.message : t("commonUi.unknownError"));
         }
       } finally {
-        if (generation !== fetchGenerationRef.current) return;
+        // WICHTIG: isLoading IMMER zurücksetzen, auch wenn die Generation veraltet ist.
+        // Vorher: generation-check + return → isLoading blieb true bei schneller Regeländerung.
         if (!silent) {
           setIsLoading(false);
           setHasLoadedOnce(true);
@@ -587,13 +613,29 @@ export default function AnalyticsArticleForecastPage() {
       return t("articleForecast.windowNoLines", { notes: String(sw.deliveryNotesInWindow) });
     }
     if (sw.hitSalesPageCap) {
-      return t("articleForecast.salesPageCap", { pages: String(sw.pagesFetched ?? 0) });
+      return t("articleForecast.salesPageCapDetailed", {
+        pages: String(sw.pagesFetched ?? 0),
+        notes: String(sw.deliveryNotesInWindow ?? 0),
+      });
     }
     if (sw.stoppedEarly) {
       return t("articleForecast.paginationStopped");
     }
+    // Cache-Lücken: historische Daten unvollständig wenn 0 Cache-Tage aber Zeitraum > Live-Fenster
+    if (sw.cacheDaysUsed === 0 && sw.liveWindowFromYmd) {
+      const fromTs = parseYmdToUtcNoon(fromYmd);
+      const liveTs = parseYmdToUtcNoon(sw.liveWindowFromYmd);
+      if (fromTs != null && liveTs != null && fromTs < liveTs) {
+        const liveDays = sw.liveWindowToYmd && sw.liveWindowFromYmd
+          ? Math.round(
+              ((parseYmdToUtcNoon(sw.liveWindowToYmd) ?? 0) - (parseYmdToUtcNoon(sw.liveWindowFromYmd) ?? 0)) / 86400000
+            ) + 1
+          : 60;
+        return t("articleForecast.cacheIncomplete", { days: String(liveDays) });
+      }
+    }
     return null;
-  }, [meta, t]);
+  }, [meta, fromYmd, t]);
 
   const projectColumns = useMemo(() => {
     const names = new Set<string>();
@@ -693,11 +735,32 @@ export default function AnalyticsArticleForecastPage() {
 
   const activeRules = rulesByScope[ruleScope];
 
+  // Regel → Datum: Wenn salesWindowDays in den Regeln geändert wird, fromYmd automatisch berechnen.
+  const salesWindowDaysRef = useRef(activeRules.salesWindowDays);
   useEffect(() => {
+    if (!hasMounted) return;
+    if (salesWindowDaysRef.current === activeRules.salesWindowDays) return;
+    salesWindowDaysRef.current = activeRules.salesWindowDays;
     const days = Math.max(1, Math.round(activeRules.salesWindowDays));
     const expectedFrom = addDaysToYmd(toYmd, -(days - 1));
     setRange((prev) => (prev.fromYmd === expectedFrom ? prev : { ...prev, fromYmd: expectedFrom }));
-  }, [activeRules.salesWindowDays, toYmd]);
+  }, [activeRules.salesWindowDays, toYmd, hasMounted]);
+
+  // Datum → Regel: Wenn der User fromYmd manuell ändert, salesWindowDays synchronisieren.
+  useEffect(() => {
+    if (!dateManuallySet) return;
+    const from = parseYmdToUtcNoon(fromYmd);
+    const to = parseYmdToUtcNoon(toYmd);
+    if (from == null || to == null || from > to) return;
+    const days = Math.round((to - from) / 86400000) + 1;
+    const clamped = Math.max(1, Math.min(366, days));
+    salesWindowDaysRef.current = clamped;
+    setRulesByScope((prev) => ({
+      ...prev,
+      [ruleScope]: { ...prev[ruleScope], salesWindowDays: clamped },
+    }));
+    setDateManuallySet(false);
+  }, [dateManuallySet, fromYmd, toYmd, ruleScope]);
 
   const inboundBySkuUntilHorizon = useMemo(() => {
     const out = new Map<string, number>();
@@ -726,6 +789,7 @@ export default function AnalyticsArticleForecastPage() {
         rules: activeRules,
         soldInWindow,
         stockNow,
+        fromYmd,
         toYmd,
         inboundUntilHorizon,
       });
@@ -743,7 +807,7 @@ export default function AnalyticsArticleForecastPage() {
       );
     }
     return out;
-  }, [activeRules, inboundBySkuUntilHorizon, rows, toYmd, visibleWarehouseColumns, warehouseColumns]);
+  }, [activeRules, fromYmd, inboundBySkuUntilHorizon, rows, toYmd, visibleWarehouseColumns, warehouseColumns]);
 
   const rowClassBySku = useMemo(() => {
     const out = new Map<string, string>();
@@ -828,6 +892,46 @@ export default function AnalyticsArticleForecastPage() {
         ),
       };
     });
+
+    const hasOtherSales = rows.some((row) => {
+      const namedSum = visibleProjectColumns.reduce((acc, p) => acc + (row.soldByProject[p] ?? 0), 0);
+      return row.totalSold - namedSum > 0;
+    });
+
+    const otherSalesCol: ColumnDef<ArticleForecastRow> | null = hasOtherSales
+      ? {
+          id: "project:__other__",
+          meta: {
+            align: "right" as const,
+            thClassName: qtyThClass,
+            tdClassName: qtyTdClass,
+            headerButtonClassName: headerBtnWrap,
+          },
+          header: () => (
+            <div className="block w-full min-w-0 whitespace-normal break-words text-right font-medium leading-snug normal-case">
+              {sentenceCaseColumnLabel(t("articleForecast.otherSales"))}
+            </div>
+          ),
+          accessorFn: (row) => {
+            const namedSum = visibleProjectColumns.reduce(
+              (acc, p) => acc + (row.soldByProject[p] ?? 0),
+              0
+            );
+            const other = row.totalSold - namedSum;
+            return other > 0 ? other : 0;
+          },
+          cell: ({ row }) => {
+            const namedSum = visibleProjectColumns.reduce(
+              (acc, p) => acc + (row.original.soldByProject[p] ?? 0),
+              0
+            );
+            const other = row.original.totalSold - namedSum;
+            return (
+              <div className="text-right tabular-nums">{formatQty(other > 0 ? other : undefined)}</div>
+            );
+          },
+        }
+      : null;
 
     const totalCol: ColumnDef<ArticleForecastRow> = {
       id: "totalSold",
@@ -967,12 +1071,22 @@ export default function AnalyticsArticleForecastPage() {
       };
     });
 
-    return [...base, ...projectCols, totalCol, totalStockCol, dailySoldCol, projectedStockCol, ...warehouseCols];
+    return [
+      ...base,
+      ...projectCols,
+      ...(otherSalesCol ? [otherSalesCol] : []),
+      totalCol,
+      totalStockCol,
+      dailySoldCol,
+      projectedStockCol,
+      ...warehouseCols,
+    ];
   }, [
     activeRules.projectionDays,
     forecastBySku,
     qtyFmt,
     toYmd,
+    rows,
     visibleProjectColumns,
     visibleWarehouseColumns,
     warehouseColumns,
@@ -1010,6 +1124,23 @@ export default function AnalyticsArticleForecastPage() {
       {error ? (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-700">
           {error}
+        </div>
+      ) : null}
+
+      {salesAggError && !isLoading ? (
+        <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+          <span className="flex-1">{t("articleForecast.salesLoadError")}</span>
+          <button
+            type="button"
+            className="shrink-0 text-xs underline underline-offset-2 hover:no-underline"
+            onClick={() => {
+              setSalesAggError(false);
+              void load(true);
+            }}
+          >
+            {t("commonUi.retry")}
+          </button>
         </div>
       ) : null}
 
@@ -1362,7 +1493,11 @@ export default function AnalyticsArticleForecastPage() {
                   type="date"
                   className="h-8 w-[140px] text-xs"
                   value={fromYmd}
-                  readOnly
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setRange((prev) => ({ ...prev, fromYmd: v }));
+                    setDateManuallySet(true);
+                  }}
                 />
               </div>
               <div className="space-y-1">
@@ -1383,6 +1518,51 @@ export default function AnalyticsArticleForecastPage() {
           }
         />
       </div>
+
+      {meta?.salesWindow && !isLoading ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+          <span>
+            {t("articleForecast.metaWindow", {
+              from: meta.salesWindow.fromYmd ?? fromYmd,
+              to: meta.salesWindow.toYmd ?? toYmd,
+            })}
+          </span>
+          <span>
+            {t("articleForecast.metaNotes", {
+              notes: String(meta.salesWindow.deliveryNotesInWindow ?? 0),
+              lines: String(meta.salesWindow.lineItemsParsed ?? 0),
+            })}
+          </span>
+          <span>
+            {meta.salesWindow.source === "v3_delivery_notes" ? "v3" : "v1"}
+            {meta.salesWindow.cacheDaysUsed
+              ? ` + Cache (${meta.salesWindow.cacheDaysUsed}d)`
+              : ""}
+          </span>
+        </div>
+      ) : null}
+
+      {relevantDeals.length > 0 ? (
+        <div className="rounded-xl border border-border/50 bg-card/80 p-3">
+          <h4 className="mb-2 text-xs font-medium text-muted-foreground">
+            {t("articleForecast.activeDeals", { count: String(relevantDeals.length) })}
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {relevantDeals.map((deal) => (
+              <span
+                key={deal.id}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-background/80 px-2 py-1 text-xs"
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: deal.color }}
+                />
+                {deal.label} · {deal.from} — {deal.to}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

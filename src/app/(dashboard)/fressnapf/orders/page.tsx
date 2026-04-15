@@ -304,6 +304,7 @@ export default function FressnapfOrdersPage() {
       <div className="space-y-1">
         <div className="flex items-center gap-3">
           <span className={cn(DASHBOARD_MARKETPLACE_LOGO_FRAME, DASHBOARD_MARKETPLACE_LOGO_FRAME_EXT_MD)}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={WIKIMEDIA_FRESSNAPF_LOGO_2023_SVG}
               alt={t("nav.fressnapf")}
@@ -377,6 +378,7 @@ export default function FressnapfOrdersPage() {
         <DataTable
           columns={columns}
           data={tableRows}
+          getRowId={(row) => row.orderId}
           filterColumn={t("filters.fressnapfOrders")}
           paginate={false}
           compact

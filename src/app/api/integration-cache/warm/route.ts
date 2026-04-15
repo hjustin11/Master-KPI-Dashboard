@@ -85,6 +85,9 @@ async function runFlexMarketplaceWarm(dayWindows: number[]): Promise<WarmResult[
       const msg = e instanceof Error ? e.message : String(e);
       results.push({ id: spec.id, error: msg });
     }
+
+    // Stagger: 2s Pause zwischen Marktplätzen um Supabase-Connections zu entlasten.
+    await new Promise((r) => setTimeout(r, 2000));
   }
 
   return results;
@@ -153,7 +156,7 @@ async function handleWarm(request: Request): Promise<Response> {
       });
     }
     amazonOrders = { windows: winResults, durationMs: Date.now() - amazonOrdersStarted };
-  } catch (e) {
+  } catch {
     amazonOrders = {
       windows: [],
       durationMs: Date.now() - amazonOrdersStarted,
