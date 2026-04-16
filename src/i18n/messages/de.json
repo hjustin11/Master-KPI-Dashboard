@@ -78,6 +78,7 @@
     "analytics": "Analytics",
     "analyticsMarketplaces": "Marktplätze",
     "analyticsArticleForecast": "Bedarfsprognose",
+    "analyticsPayouts": "Auszahlungen",
     "analyticsProcurement": "Beschaffung",
     "analyticsPerformance": "Performance",
     "settings": "Administration",
@@ -417,6 +418,68 @@
     "salesPageCapDetailed": "Aggregation nach {pages} Seiten gestoppt ({notes} Lieferscheine). Verkaufszahlen könnten unvollständig sein.",
     "metaWindow": "Zeitraum: {from} – {to}",
     "metaNotes": "{notes} Lieferscheine · {lines} Positionen"
+  },
+  "payouts": {
+    "title": "Auszahlungen & Rentabilität",
+    "loading": "Auszahlungsdaten werden geladen…",
+    "noData": "Keine Auszahlungsdaten für den gewählten Zeitraum.",
+    "syncing": "Synchronisiere…",
+    "syncAmazon": "Amazon synchronisieren",
+    "syncAll": "Alle synchronisieren",
+    "compareToggle": "Vergleich mit Vorperiode",
+    "hero": {
+      "payoutAmount": "Netto-Auszahlung",
+      "ofGrossSales": "vom Brutto-Umsatz"
+    },
+    "kpi": {
+      "grossSales": "Brutto-Umsatz",
+      "netPayout": "Netto-Auszahlung",
+      "payoutRatio": "Auszahlungsquote",
+      "returnRate": "Retourenquote",
+      "orders": "Bestellungen",
+      "returns": "Retouren",
+      "acos": "ACOS",
+      "tacos": "TACOS"
+    },
+    "waterfall": {
+      "title": "Auszahlungs-Aufschlüsselung",
+      "onlyReturns": "Dieser Abrechnungszeitraum enthält nur Retouren/Nachbuchungen — kein Brutto-Umsatz.",
+      "gross": "Brutto",
+      "refunds": "Retouren",
+      "fees": "Gebühren",
+      "fulfillment": "Fulfillment",
+      "ads": "Werbung",
+      "shipping": "Versand",
+      "promos": "Rabatte",
+      "other": "Sonstiges",
+      "net": "Netto"
+    },
+    "table": {
+      "marketplace": "Marktplatz",
+      "gross": "Brutto",
+      "fees": "Gebühren",
+      "ads": "Werbung",
+      "returns": "Retouren",
+      "net": "Netto"
+    },
+    "anomalies": {
+      "title": "Auffälligkeiten"
+    },
+    "anomaly": {
+      "lowPayoutRatio": "Auszahlungsquote nur {ratio}% — unter 35%-Schwelle.",
+      "payoutRatioDrop": "Auszahlungsquote um {drop} Prozentpunkte gesunken ggü. Vorperiode.",
+      "highReturnRate": "Retourenquote bei {rate}% — prüfe Produkte.",
+      "revenueDrop": "Umsatz-Einbruch: {drop}% ggü. Vorperiode.",
+      "productHighReturns": "{sku}: {rate}% Retourenquote — kostet ~{cost} €.",
+      "heroProduct": "{sku}: {units} Einheiten verkauft, 0 Retouren, {gross} € Umsatz."
+    },
+    "period": {
+      "current": "Aktuelle Periode (14 Tage)",
+      "previous": "Vorherige Periode",
+      "last30": "Letzte 30 Tage",
+      "lastMonth": "Letzter Monat",
+      "last3Months": "Letzte 3 Monate"
+    }
   },
   "analyticsProcurement": {
     "title": "Beschaffung",

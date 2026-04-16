@@ -8,6 +8,7 @@ export type DashboardPageAccessKey =
   | "settings.profile"
   | "settings.tutorials"
   | "analytics.marketplaces"
+  | "analytics.payouts"
   | "analytics.articleForecast"
   | "analytics.procurement"
   | "advertising.campaigns"
@@ -45,6 +46,7 @@ export const DASHBOARD_PAGE_ACCESS_CONFIG: Array<{
   { key: "settings.profile", label: "Administration · Profil", path: "/settings/profile" },
   { key: "settings.tutorials", label: "Administration · Tutorial-Editor", path: "/settings/tutorials" },
   { key: "analytics.marketplaces", label: "Analytics · Marktplätze", path: "/analytics/marketplaces" },
+  { key: "analytics.payouts", label: "Analytics · Auszahlungen", path: "/analytics/payouts" },
   { key: "analytics.articleForecast", label: "Analytics · Bedarfsprognose", path: "/analytics/article-forecast" },
   { key: "analytics.procurement", label: "Analytics · Beschaffung", path: "/analytics/procurement" },
   { key: "advertising.campaigns", label: "Werbung · Kampagnen", path: "/advertising/campaigns" },

@@ -160,6 +160,7 @@ export const navItems: NavItem[] = [
     requiredPermissions: ["export_data"],
     children: [
       { labelKey: "nav.analyticsMarketplaces", href: "/analytics/marketplaces" },
+      { labelKey: "nav.analyticsPayouts", href: "/analytics/payouts" },
       { labelKey: "nav.analyticsArticleForecast", href: "/analytics/article-forecast" },
       { labelKey: "nav.analyticsProcurement", href: "/analytics/procurement" },
     ],

@@ -310,7 +310,7 @@ async function spApiGet(args: {
   return { res, text, json };
 }
 
-async function spApiRequest(args: {
+export async function spApiRequest(args: {
   endpoint: string;
   region: string;
   method: "GET" | "POST";

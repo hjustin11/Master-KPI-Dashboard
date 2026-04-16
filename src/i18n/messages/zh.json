@@ -78,6 +78,7 @@
     "analytics": "分析",
     "analyticsMarketplaces": "市场",
     "analyticsArticleForecast": "需求预测",
+    "analyticsPayouts": "付款",
     "analyticsProcurement": "采购",
     "analyticsPerformance": "成效",
     "settings": "管理",
@@ -418,6 +419,22 @@
     "salesPageCapDetailed": "聚合在 {pages} 页后停止（{notes} 个交付单）。销售数字可能不完整。",
     "metaWindow": "期间：{from} – {to}",
     "metaNotes": "{notes} 个交付单 · {lines} 个项目"
+  },
+  "payouts": {
+    "title": "付款与盈利能力",
+    "loading": "正在加载付款数据…",
+    "noData": "所选期间无付款数据。",
+    "syncing": "同步中…",
+    "syncAmazon": "同步亚马逊",
+    "syncAll": "全部同步",
+    "compareToggle": "与上一期间比较",
+    "hero": { "payoutAmount": "净付款", "ofGrossSales": "占总销售额" },
+    "kpi": { "grossSales": "总销售额", "netPayout": "净付款", "payoutRatio": "付款比率", "returnRate": "退货率", "orders": "订单", "returns": "退货", "acos": "ACOS", "tacos": "TACOS" },
+    "waterfall": { "title": "付款明细", "onlyReturns": "此结算期仅包含退货/调整——无总销售额。", "gross": "总额", "refunds": "退货", "fees": "费用", "fulfillment": "物流", "ads": "广告", "shipping": "运费", "promos": "折扣", "other": "其他", "net": "净额" },
+    "table": { "marketplace": "市场", "gross": "总额", "fees": "费用", "ads": "广告", "returns": "退货", "net": "净额" },
+    "anomalies": { "title": "异常" },
+    "anomaly": { "lowPayoutRatio": "付款比率仅{ratio}%——低于35%阈值。", "payoutRatioDrop": "付款比率较上期下降{drop}个百分点。", "highReturnRate": "退货率{rate}%——请检查产品。", "revenueDrop": "收入下降：较上期{drop}%。", "productHighReturns": "{sku}：退货率{rate}%——约损失{cost}€。", "heroProduct": "{sku}：售出{units}件，0退货，{gross}€收入。" },
+    "period": { "current": "当前期间（14天）", "previous": "上一期间", "last30": "最近30天", "lastMonth": "上个月", "last3Months": "最近3个月" }
   },
   "analyticsProcurement": {
     "title": "采购",

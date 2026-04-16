@@ -78,6 +78,7 @@
     "analytics": "Analytics",
     "analyticsMarketplaces": "Marketplaces",
     "analyticsArticleForecast": "Demand forecast",
+    "analyticsPayouts": "Payouts",
     "analyticsProcurement": "Procurement",
     "analyticsPerformance": "Performance",
     "settings": "Administration",
@@ -418,6 +419,22 @@
     "salesPageCapDetailed": "Aggregation stopped after {pages} pages ({notes} delivery notes). Sales figures may be incomplete.",
     "metaWindow": "Period: {from} – {to}",
     "metaNotes": "{notes} delivery notes · {lines} line items"
+  },
+  "payouts": {
+    "title": "Payouts & Profitability",
+    "loading": "Loading payout data…",
+    "noData": "No payout data for the selected period.",
+    "syncing": "Syncing…",
+    "syncAmazon": "Sync Amazon",
+    "syncAll": "Sync all",
+    "compareToggle": "Compared with previous period",
+    "hero": { "payoutAmount": "Net Payout", "ofGrossSales": "of gross sales" },
+    "kpi": { "grossSales": "Gross Sales", "netPayout": "Net Payout", "payoutRatio": "Payout Ratio", "returnRate": "Return Rate", "orders": "Orders", "returns": "Returns", "acos": "ACOS", "tacos": "TACOS" },
+    "waterfall": { "title": "Payout Breakdown", "onlyReturns": "This billing period contains only returns/adjustments — no gross sales.", "gross": "Gross", "refunds": "Returns", "fees": "Fees", "fulfillment": "Fulfillment", "ads": "Ads", "shipping": "Shipping", "promos": "Discounts", "other": "Other", "net": "Net" },
+    "table": { "marketplace": "Marketplace", "gross": "Gross", "fees": "Fees", "ads": "Ads", "returns": "Returns", "net": "Net" },
+    "anomalies": { "title": "Anomalies" },
+    "anomaly": { "lowPayoutRatio": "Payout ratio only {ratio}% — below 35% threshold.", "payoutRatioDrop": "Payout ratio dropped by {drop} pp vs. previous period.", "highReturnRate": "Return rate at {rate}% — check products.", "revenueDrop": "Revenue drop: {drop}% vs. previous period.", "productHighReturns": "{sku}: {rate}% return rate — costs ~{cost} €.", "heroProduct": "{sku}: {units} units sold, 0 returns, {gross} € revenue." },
+    "period": { "current": "Current period (14 days)", "previous": "Previous period", "last30": "Last 30 days", "lastMonth": "Last month", "last3Months": "Last 3 months" }
   },
   "analyticsProcurement": {
     "title": "Procurement",
