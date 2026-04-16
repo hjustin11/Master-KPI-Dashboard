@@ -31,6 +31,18 @@ export type XentralArticle = {
   soldByProject: Record<string, number>;
   /** EAN/GTIN aus Stammdaten, falls von der Xentral-API geliefert. */
   ean: string | null;
+  /** Marke/Hersteller, falls in Xentral hinterlegt. */
+  brand: string | null;
+  /** Länge in Zentimetern (normalisiert). */
+  dimL: number | null;
+  /** Breite in Zentimetern. */
+  dimW: number | null;
+  /** Höhe in Zentimetern. */
+  dimH: number | null;
+  /** Gewicht in Kilogramm. */
+  weight: number | null;
+  /** Kategorie/Warengruppen-Pfad, falls in Xentral gepflegt. */
+  category: string | null;
 };
 
 type XentralArticleRaw = {
@@ -46,6 +58,12 @@ type XentralArticleRaw = {
   totalSold: number;
   soldByProjectRaw: Record<string, number>;
   ean: string | null;
+  brand: string | null;
+  dimL: number | null;
+  dimW: number | null;
+  dimH: number | null;
+  weight: number | null;
+  category: string | null;
 };
 
 export type XentralArticlesApiPayload = {
@@ -461,6 +479,127 @@ function extractEanFromProductAttributes(a: Record<string, unknown>, raw: Record
   return null;
 }
 
+/** Versucht eine Zahl aus verschiedenen Formaten zu ziehen (plain number, string, { value }). */
+function coerceNumeric(v: unknown): number | null {
+  if (v == null) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = Number(v.replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  }
+  if (typeof v === "object") {
+    const obj = v as Record<string, unknown>;
+    for (const inner of ["value", "amount", "wert", "betrag"]) {
+      const nested = obj[inner];
+      const out = coerceNumeric(nested);
+      if (out != null) return out;
+    }
+  }
+  return null;
+}
+
+function pickNumericValue(
+  a: Record<string, unknown>,
+  raw: Record<string, unknown>,
+  keys: readonly string[]
+): number | null {
+  // 1) Flache Attribute + Raw
+  for (const k of keys) {
+    const v = coerceNumeric(a[k] ?? raw[k]);
+    if (v != null) return v;
+  }
+  // 2) Verschachtelte Container (Xentral v2 nested sometimes)
+  const containers = [
+    a.dimensions,
+    a.abmessungen,
+    a.packageDimensions,
+    a.packaging,
+    a.verpackung,
+    a.package,
+    (a.weight as unknown) as Record<string, unknown> | undefined,
+    (a.gewicht as unknown) as Record<string, unknown> | undefined,
+    raw.dimensions,
+    raw.abmessungen,
+    raw.packageDimensions,
+  ];
+  for (const container of containers) {
+    if (!container || typeof container !== "object") continue;
+    const obj = container as Record<string, unknown>;
+    for (const k of keys) {
+      const v = coerceNumeric(obj[k]);
+      if (v != null) return v;
+    }
+  }
+  return null;
+}
+
+/**
+ * Xentral liefert Längen häufig in mm und Gewicht in g, aber nicht immer.
+ * Heuristik: bei Länge > 500 nehmen wir mm an (teilen durch 10),
+ * bei Gewicht > 50 nehmen wir g an (teilen durch 1000).
+ */
+function normalizeLengthCm(value: number | null): number | null {
+  if (value == null || !Number.isFinite(value) || value < 0) return null;
+  if (value > 500) return +(value / 10).toFixed(2); // mm → cm
+  return +value.toFixed(2);
+}
+function normalizeWeightKg(value: number | null): number | null {
+  if (value == null || !Number.isFinite(value) || value < 0) return null;
+  if (value > 50) return +(value / 1000).toFixed(3); // g → kg
+  return +value.toFixed(3);
+}
+
+function extractBrandFromArticle(
+  a: Record<string, unknown>,
+  raw: Record<string, unknown>
+): string | null {
+  const keys = ["brand", "marke", "hersteller", "manufacturer", "Marke", "Hersteller"];
+  for (const k of keys) {
+    const v = a[k] ?? raw[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+function extractCategoryFromArticle(
+  a: Record<string, unknown>,
+  raw: Record<string, unknown>
+): string | null {
+  const keys = ["kategorie", "category", "warengruppe", "Kategorie", "productCategory", "categoryPath"];
+  for (const k of keys) {
+    const v = a[k] ?? raw[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+function extractDimensionsFromArticle(
+  a: Record<string, unknown>,
+  raw: Record<string, unknown>
+): { dimL: number | null; dimW: number | null; dimH: number | null; weight: number | null } {
+  const dimLRaw = pickNumericValue(a, raw, [
+    "laenge", "länge", "length", "Länge", "lengthMm", "lengthCm",
+    "tiefe", "depth", "Tiefe", "long",
+  ]);
+  const dimWRaw = pickNumericValue(a, raw, [
+    "breite", "width", "Breite", "widthMm", "widthCm",
+  ]);
+  const dimHRaw = pickNumericValue(a, raw, [
+    "hoehe", "höhe", "height", "Höhe", "heightMm", "heightCm",
+  ]);
+  const weightRaw = pickNumericValue(a, raw, [
+    "gewicht", "weight", "Gewicht", "weightKg", "weightG",
+    "bruttogewicht", "grossWeight", "nettogewicht", "netWeight",
+    "massGrams", "massKg", "mass",
+  ]);
+  return {
+    dimL: normalizeLengthCm(dimLRaw),
+    dimW: normalizeLengthCm(dimWRaw),
+    dimH: normalizeLengthCm(dimHRaw),
+    weight: normalizeWeightKg(weightRaw),
+  };
+}
+
 function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
   const root = payload as Record<string, unknown> | null;
   const candidates: unknown[] =
@@ -593,6 +732,9 @@ function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
     const soldByProjectRaw = extractSoldByProjectRaw(a);
     const totalSold = extractTotalSold(a, soldByProjectRaw);
     const ean = extractEanFromProductAttributes(a, raw);
+    const brand = extractBrandFromArticle(a, raw);
+    const category = extractCategoryFromArticle(a, raw);
+    const dims = extractDimensionsFromArticle(a, raw);
 
     if (!sku && !name) continue;
     if (shouldExcludeArticle({ sku, name })) continue;
@@ -608,6 +750,12 @@ function mapToArticlesRaw(payload: unknown): XentralArticleRaw[] | null {
       totalSold,
       soldByProjectRaw,
       ean,
+      brand,
+      category,
+      dimL: dims.dimL,
+      dimW: dims.dimW,
+      dimH: dims.dimH,
+      weight: dims.weight,
     });
   }
 
@@ -667,6 +815,12 @@ function enrichArticles(
       totalSold,
       soldByProject,
       ean: r.ean,
+      brand: r.brand,
+      dimL: r.dimL,
+      dimW: r.dimW,
+      dimH: r.dimH,
+      weight: r.weight,
+      category: r.category,
     };
   });
 }

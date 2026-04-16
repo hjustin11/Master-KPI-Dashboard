@@ -1159,5 +1159,93 @@
         "description": "快速进入当前 Amazon 订单视图。"
       }
     }
+  },
+  "crossListing": {
+    "loading": "正在加载源数据 …",
+    "source": "来源",
+    "missing": "缺少必填字段",
+    "action": {
+      "createListing": "创建刊登",
+      "openDraft": "打开草稿",
+      "saveDraft": "保存为草稿",
+      "cancel": "取消",
+      "upload": "上传",
+      "addBullet": "添加要点"
+    },
+    "dialog": {
+      "title": "为 {marketplace} 创建新刊登"
+    },
+    "upload": {
+      "comingSoon": "该市场暂不支持上传。",
+      "loading": "上传中…",
+      "saveFirst": "请先保存为草稿。"
+    },
+    "placeholder": {
+      "imageUrl": "输入图片 URL 并按回车",
+      "tag": "输入标签并按回车"
+    },
+    "section": {
+      "catalog": "主数据与目录",
+      "content": "内容",
+      "images": "图片",
+      "platform": "平台专属"
+    },
+    "ai": {
+      "title": "AI 优化",
+      "optimizeButton": "用 AI 优化",
+      "loading": "Claude 正在优化标题、描述和要点 …",
+      "error": "错误",
+      "apply": "应用",
+      "applyAll": "全部应用",
+      "applied": "已 AI 优化",
+      "suggestion": "AI 建议",
+      "noImprovement": "未检测到实质性改进。",
+      "skipped": "AI 调用已跳过"
+    },
+    "field": {
+      "title": "标题",
+      "description": "描述",
+      "bullets": "要点",
+      "images": "图片",
+      "priceEur": "价格 (EUR)",
+      "uvpEur": "建议零售价 (EUR)",
+      "stockQty": "库存",
+      "ean": "EAN",
+      "brand": "品牌",
+      "category": "类别",
+      "dimL": "长度",
+      "dimW": "宽度",
+      "dimH": "高度",
+      "weight": "重量",
+      "petSpecies": "宠物种类",
+      "tags": "标签",
+      "searchTerms": "搜索词",
+      "seoTitle": "SEO 标题",
+      "seoDescription": "SEO 描述",
+      "condition": "状态",
+      "handlingTime": "处理时间(天)",
+      "attributes": "属性",
+      "attributes.hint": "各类别必填属性(如品牌、颜色、尺寸)。",
+      "category.hint.amazon": "例:pet_supplies > cat_scratchers",
+      "category.hint.otto": "例:Katzen > Kratzmöbel",
+      "category.hint.kaufland": "例:Tierbedarf > Katzen > Kratzbäume",
+      "category.hint.fressnapf": "例:猫 > 家具与抓板",
+      "category.hint.mediamarkt-saturn": "例:家居 > 宠物配件",
+      "category.hint.zooplus": "例:猫 > 抓板与家具",
+      "category.hint.tiktok": "例:Pet Supplies > Cat Furniture",
+      "category.hint.shopify": "例:猫 > 抓板家具(astropet 内部类别)",
+      "category.hint.ebay": "例:20742(eBay 类别 ID)"
+    },
+    "hint": {
+      "amazon": "Amazon 规范:标题最长 200 字符,最多 5 条要点,白底图片。",
+      "otto": "Otto 期望高端语气;自有产品 ID 与各类别属性。",
+      "ebay": "eBay:标题建议最长 80 字符;EAN 有助于检索。",
+      "kaufland": "Kaufland 使用 EAN + 自有类别 ID;建议抠图。",
+      "fressnapf": "Fressnapf:面向宠物主人的受众,使用宠物用品 SEO 词。",
+      "mediamarkt-saturn": "MediaMarkt/Saturn:提供精确的技术规格。",
+      "zooplus": "Zooplus:宠物专属属性(物种、生命阶段、尺寸)。",
+      "tiktok": "TikTok Shop:简短、抓眼球的标题;最多 9 张图片。",
+      "shopify": "Shopify (astropet.de):允许 HTML 描述;自定义类别。"
+    }
   }
 }

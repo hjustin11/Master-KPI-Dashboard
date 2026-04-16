@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { ApiDataSourceDebugPopover } from "@/shared/components/ApiDataSourceDebugPopover";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,12 @@ import {
   PRICE_PARITY_DOC_XENTRAL_SKU,
   PRICE_PARITY_DOC_XENTRAL_STOCK,
 } from "@/shared/lib/priceParityDataSourceMeta";
+import useCrossListingDrafts from "@/shared/hooks/useCrossListingDrafts";
+import CrossListingEditorDialog from "./components/CrossListingEditorDialog";
+import type {
+  CrossListingDraftRow,
+  CrossListingTargetSlug,
+} from "@/shared/lib/crossListing/crossListingDraftTypes";
 
 type CellState = "ok" | "missing" | "no_price" | "mismatch" | "not_connected";
 
@@ -155,6 +161,8 @@ function ParityCellValue({
   editingMode,
   onPriceChange,
   onStockChange,
+  onCreateListing,
+  hasDraft,
 }: {
   label: string;
   price: number | null;
@@ -165,6 +173,8 @@ function ParityCellValue({
   editingMode: "price" | "stock" | null;
   onPriceChange: (value: string) => void;
   onStockChange: (value: string) => void;
+  onCreateListing?: () => void;
+  hasDraft?: boolean;
 }) {
   const { t, locale } = useTranslation();
   const intlTag = intlLocaleTag(locale);
@@ -190,6 +200,24 @@ function ParityCellValue({
           {t("priceParity.missingListing")}
         </Badge>
         <span className="text-[10px] leading-tight text-muted-foreground">{t("priceParity.noListing")}</span>
+        {onCreateListing ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-0.5 h-5 w-fit gap-0.5 px-1.5 text-[10px]"
+            onClick={onCreateListing}
+          >
+            {hasDraft ? (
+              <>🔄 {t("crossListing.action.openDraft")}</>
+            ) : (
+              <>
+                <Plus className="size-2.5" />
+                {t("crossListing.action.createListing")}
+              </>
+            )}
+          </Button>
+        ) : null}
       </div>
     );
   }
@@ -282,6 +310,12 @@ export function MarketplacePriceParitySection() {
   const tableWrapRef = useRef<HTMLDivElement | null>(null);
   const canEditPrices = canUseAction("analytics.marketplaces.parity.editPrice");
   const canEditStocks = canUseAction("analytics.marketplaces.parity.editStock");
+  const canCreateListing = canUseAction("analytics.marketplaces.parity.editPrice");
+  const [editorState, setEditorState] = useState<{
+    sku: string;
+    targetSlug: CrossListingTargetSlug;
+    draft: CrossListingDraftRow | null;
+  } | null>(null);
 
   useEffect(() => {
     payloadRef.current = payload;
@@ -401,6 +435,18 @@ export function MarketplacePriceParitySection() {
   const sortedFiltered = useMemo(
     () => sortParityRows(filtered, sort.col, sort.dir),
     [filtered, sort]
+  );
+
+  const visibleSkus = useMemo(() => sortedFiltered.map((r) => r.sku), [sortedFiltered]);
+  const { list: draftsList, reload: reloadDrafts } = useCrossListingDrafts({ skus: visibleSkus });
+  const draftIndex = useMemo(() => {
+    const m = new Map<string, CrossListingDraftRow>();
+    for (const d of draftsList.drafts) m.set(`${d.sku}::${d.targetMarketplaceSlug}`, d);
+    return m;
+  }, [draftsList.drafts]);
+  const findDraft = useCallback(
+    (sku: string, target: string) => draftIndex.get(`${sku}::${target}`) ?? null,
+    [draftIndex]
   );
 
   const toggleSort = useCallback((col: SortColumnId) => {
@@ -832,6 +878,17 @@ export function MarketplacePriceParitySection() {
                         onStockChange={(value) =>
                           setDraftStockValues((prev) => ({ ...prev, [cellKey(row.sku, "amazon")]: value }))
                         }
+                        hasDraft={Boolean(findDraft(row.sku, "amazon"))}
+                        onCreateListing={
+                          canCreateListing
+                            ? () =>
+                                setEditorState({
+                                  sku: row.sku,
+                                  targetSlug: "amazon",
+                                  draft: findDraft(row.sku, "amazon"),
+                                })
+                            : undefined
+                        }
                       />
                     </TableCell>
                     {ANALYTICS_MARKETPLACES.map((m) => {
@@ -865,6 +922,17 @@ export function MarketplacePriceParitySection() {
                             onStockChange={(value) =>
                               setDraftStockValues((prev) => ({ ...prev, [cellKey(row.sku, m.slug)]: value }))
                             }
+                            hasDraft={Boolean(findDraft(row.sku, m.slug))}
+                            onCreateListing={
+                              canCreateListing
+                                ? () =>
+                                    setEditorState({
+                                      sku: row.sku,
+                                      targetSlug: m.slug as CrossListingTargetSlug,
+                                      draft: findDraft(row.sku, m.slug),
+                                    })
+                                : undefined
+                            }
                           />
                         </TableCell>
                       );
@@ -874,9 +942,17 @@ export function MarketplacePriceParitySection() {
               )}
             </TableBody>
           </Table>
-          
+
         </div>
       )}
+      <CrossListingEditorDialog
+        open={editorState !== null}
+        sku={editorState?.sku ?? null}
+        targetSlug={editorState?.targetSlug ?? null}
+        existingDraft={editorState?.draft ?? null}
+        onClose={() => setEditorState(null)}
+        onSaved={() => reloadDrafts()}
+      />
     </section>
   );
 }

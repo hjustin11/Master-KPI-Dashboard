@@ -1183,5 +1183,93 @@
         "description": "Quick access to current Amazon orders."
       }
     }
+  },
+  "crossListing": {
+    "loading": "Loading source data…",
+    "source": "Source",
+    "missing": "Required fields missing",
+    "action": {
+      "createListing": "Create listing",
+      "openDraft": "Open draft",
+      "saveDraft": "Save as draft",
+      "cancel": "Cancel",
+      "upload": "Upload",
+      "addBullet": "Add bullet"
+    },
+    "dialog": {
+      "title": "New listing for {marketplace}"
+    },
+    "upload": {
+      "comingSoon": "Upload not yet available for this marketplace.",
+      "loading": "Uploading…",
+      "saveFirst": "Please save as draft first."
+    },
+    "placeholder": {
+      "imageUrl": "Enter image URL and press Enter",
+      "tag": "Enter tag and press Enter"
+    },
+    "field": {
+      "title": "Title",
+      "description": "Description",
+      "bullets": "Bullet points",
+      "images": "Images",
+      "priceEur": "Price (EUR)",
+      "uvpEur": "RRP (EUR)",
+      "stockQty": "Stock",
+      "ean": "EAN",
+      "brand": "Brand",
+      "category": "Category",
+      "dimL": "Length",
+      "dimW": "Width",
+      "dimH": "Height",
+      "weight": "Weight",
+      "petSpecies": "Pet species",
+      "tags": "Tags",
+      "searchTerms": "Search terms",
+      "seoTitle": "SEO title",
+      "seoDescription": "SEO description",
+      "condition": "Condition",
+      "handlingTime": "Handling time (days)",
+      "attributes": "Attributes",
+      "attributes.hint": "Category-specific required attributes (e.g. brand, color, size).",
+      "category.hint.amazon": "e.g. pet_supplies > cat_scratchers",
+      "category.hint.otto": "e.g. Katzen > Kratzmöbel",
+      "category.hint.kaufland": "e.g. Tierbedarf > Katzen > Kratzbäume",
+      "category.hint.fressnapf": "e.g. Cat > Furniture & Scratchers",
+      "category.hint.mediamarkt-saturn": "e.g. Home > Pet Accessories",
+      "category.hint.zooplus": "e.g. Cat > Scratchers & Furniture",
+      "category.hint.tiktok": "e.g. Pet Supplies > Cat Furniture",
+      "category.hint.shopify": "e.g. Cats > Scratch furniture (internal astropet category)",
+      "category.hint.ebay": "e.g. 20742 (eBay category ID)"
+    },
+    "section": {
+      "catalog": "Master data & catalog",
+      "content": "Content",
+      "images": "Images",
+      "platform": "Marketplace-specific"
+    },
+    "ai": {
+      "title": "AI optimization",
+      "optimizeButton": "Optimize with AI",
+      "loading": "Claude is optimizing title, description and bullets…",
+      "error": "Error",
+      "apply": "Apply",
+      "applyAll": "Apply all",
+      "applied": "AI-optimized",
+      "suggestion": "AI suggestion",
+      "noImprovement": "No material improvements detected.",
+      "skipped": "AI call skipped"
+    },
+    "hint": {
+      "amazon": "Amazon guidelines: title max 200 chars, up to 5 bullets, images on white background.",
+      "otto": "Otto expects a premium tone; dedicated product IDs and per-category attributes.",
+      "ebay": "eBay: titles max 80 chars recommended; EAN boosts discoverability.",
+      "kaufland": "Kaufland uses EAN + custom category IDs; cut-out images preferred.",
+      "fressnapf": "Fressnapf: pet-owner audience, use pet-supply SEO terms.",
+      "mediamarkt-saturn": "MediaMarkt/Saturn: provide precise technical specifications.",
+      "zooplus": "Zooplus: pet-specific attributes (species, life stage, size).",
+      "tiktok": "TikTok Shop: short, attention-grabbing titles; max 9 images.",
+      "shopify": "Shopify (astropet.de): HTML descriptions allowed; custom categories."
+    }
   }
 }

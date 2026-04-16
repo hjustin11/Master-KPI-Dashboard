@@ -1,16 +1,19 @@
 # PROJECT_REVIEW.md — Master Dashboard
 
-_Review-Stand: 2026-04-15 (Post-Refactor) · Verfasser: Architektur-Audit · Basis: vollständiger rekursiver Scan aller Quellen, Migrationen, Lockfile, Docs, Git-Historie · Vergleich mit Vorgänger-Review vom selben Tag (Pre-Refactor)_
+_Review-Stand: 2026-04-16 (Cross-Listing V1.3 — Amazon-Upload Sandbox-grün) · Verfasser: Architektur-Audit · Basis: vollständiger rekursiver Scan aller Quellen, Migrationen, Lockfile, Docs, Git-Historie · Vergleich mit Vorgänger-Review (Post-Refactor 2026-04-15)_
 
 > **Was ist seit dem letzten Review passiert?**
-> Vier Monolith-Pages wurden systematisch in Sub-Komponenten und Custom-Hooks zerlegt:
-> - `analytics/marketplaces/page.tsx` **3 921 → 582** Zeilen (−85 %)
-> - `xentral/orders/page.tsx` **1 839 → 610** Zeilen (−67 %)
-> - `analytics/article-forecast/page.tsx` **1 568 → 325** Zeilen (−79 %)
-> - `shared/components/layout/AppSidebar.tsx` **1 534 → 181** Zeilen (−88 %)
-> **Gesamteinsparung: 9 062 → 1 698 Zeilen (−81 %)** in den Haupt-Page-Dateien bei 1:1 Verhaltens-Parität. Dabei entstanden **31 neue Sub-Komponenten** (5 075 LOC) und **8 neue Hooks** (1 520 LOC). Alle Qualitäts-Gates (typecheck, ESLint 0 warnings, 29/29 Tests, prod-build) durchgängig grün über 39 Commits.
 >
-> **Zusätzlich (abends 2026-04-15):** Remote-Schema-Drift geschlossen — 10 fehlende Supabase-Migrationen appliziert, alle 22 Tracker-Einträge repariert, Parent-Workspace `Master-Dashboard/supabase/` unlinked. `/api/marketplaces/promotion-deals` liefert jetzt 200 statt 500.
+> **Cross-Listing-Feature V1.0 → V1.3 in mehreren Iterationen ausgebaut:**
+> - **V1.0 / V1.1 / V1.2:** Editor-Dialog mit deep-merge der Quellen (Xentral + 9 Marktplätze), Claude-Sonnet-4 LLM-Optimierung via Tool-Use, Bilder-Pool mit Quell-Badges + Lightbox + Auswahl, marktplatzspezifische Kategorie-Hinweise.
+> - **V1.2.2 (Bug-Fix):** Shopify-Produkt-ID wurde als EAN missinterpretiert (13-stellige Numerik matchte `/^\d{8,14}$/`). Fix: `extractEan(slug, row)` slug-aware — für Shopify wird `secondaryId` ignoriert, `extras.variant_barcode` geprüft.
+> - **V1.3 Phase A (Backend):** Migration `cross_listing_drafts_submission` (4 neue Spalten), Pure-Function-Mapper `amazonListingPayload.ts` (CrossListing → Amazon-Attributes-JSON), SP-API-Helper `amazonListingsItemsPut.ts` (PUT `/listings/2021-08-01/items/{sellerId}/{sku}` mit AWS SigV4-Signing, LWA-Token-Reuse, Sandbox-Endpoint-Toggle via `AMAZON_SP_API_SANDBOX=1`), Submit-Route + Dev-Bypass-Route, 7 neue Vitest-Tests.
+> - **V1.3 Phase B (Frontend):** Hook `useCrossListingSubmit`, Footer-Button-Aktivierung Amazon-only, Result-Display (Status, Submission-ID, Issues nach Severity, Sandbox-Badge), i18n DE/EN/ZH.
+> - **End-to-End verifiziert:** Draft `ea9d4a18-…` für SKU `AATB-004` → `ACCEPTED` in Amazon Sandbox.
+>
+> **Qualitäts-Gates grün:** TypeCheck ✓, ESLint 0 Warnings, **Vitest 8 files / 68 tests** (vorher 29), prod-build ✓.
+>
+> **Vorgänger-Refactor-Session (2026-04-15)** unverändert relevant — siehe Abschnitt 1.
 
 ---
 
@@ -21,16 +24,18 @@ _Review-Stand: 2026-04-15 (Post-Refactor) · Verfasser: Architektur-Audit · Bas
 - **Gelöstes Problem:** Eliminiert das Umherschalten zwischen 9+ Seller-Portalen. KPIs (Umsatz, Retouren, Profitabilität, Bestand), Produktdaten, Bestellungen in einer Oberfläche. LLM-gestützte Content-Audits (Anthropic Claude + OpenAI-Fallback) für Amazon-Listings.
 - **Zielgruppe:** Internes Team von AstroPet/Petrhein — Owner/Admin/Manager/Analyst/Viewer. Mehrsprachig DE/EN/ZH, auf DACH-Betrieb optimiert.
 - **Vision:** _"Ein Dashboard, in dem jeder Business-Mitarbeiter seine Arbeit findet, ohne Tools wechseln zu müssen."_
-- **Reifegrad:** **Production-Ready mit signifikant verbesserter Wartbarkeit und stabiler Infrastruktur**. Der monolithische Komponenten-Stil ist als Hauptschuld **geschlossen**; der frühere DB-Pool-Engpass (10) ist durch **Supabase-Pro-Upgrade (Pool 60)** infrastrukturell beseitigt; der **Remote-Schema-Drift** ist geschlossen (22/22 Migrations applied). Offene Baustellen liegen überwiegend bei Security-Hardening (Rate-Limiting, Env-Validator), Observability (Sentry/Logging) und Test-Coverage.
-- **Entwicklungsaufwand bisher:** **394 TS/TSX-Dateien**, **67 606 LOC** in `src/`, **77 API-Routen**, **22 Migrations**, **~50 Shared-Komponenten** + 25 shadcn-Primitives. Grob: **700–1 000 Entwicklerstunden** (4–6 Personen-Monate) für die sichtbare Funktionalität. Wachstum seit letztem Review: +9 Dateien / +0 LOC (netto durch Refactor, Page-LOC wurden zu Hook/Component-LOC umverteilt).
+- **Reifegrad:** **Production-Ready mit signifikant verbesserter Wartbarkeit und stabiler Infrastruktur**. Der monolithische Komponenten-Stil ist als Hauptschuld **geschlossen**; der frühere DB-Pool-Engpass (10) ist durch **Supabase-Pro-Upgrade (Pool 60)** infrastrukturell beseitigt; der **Remote-Schema-Drift** ist geschlossen (23/23 Migrations applied). **Cross-Listing-Feature liefert ersten echten Marktplatz-Write-Pfad** (Amazon SP-API Listings Items API, Sandbox-validiert). Offene Baustellen liegen überwiegend bei Security-Hardening (Rate-Limiting, Env-Validator), Observability (Sentry/Logging) und Test-Coverage.
+- **Entwicklungsaufwand bisher:** ~**405 TS/TSX-Dateien**, ~**70 000 LOC** in `src/`, **78 API-Routen** (+1 Cross-Listing-Submit, +1 Dev-Bypass = 79), **23 Migrations** (+1 cross_listing_drafts_submission), **~55 Shared-Komponenten** + 25 shadcn-Primitives. Grob: **750–1 100 Entwicklerstunden** (5–7 Personen-Monate). Wachstum seit Vor-Review: +11 Dateien (Cross-Listing-Hooks, Mapper, SP-API-PUT-Helper, Submit-Route, Dev-Bypass, Tests).
 
 ### Vergleich zum Vor-Review
-| Dimension | Vor (2026-04-15 a.m.) | Nach (2026-04-15 p.m.) |
+| Dimension | Vor (2026-04-15 p.m.) | Nach (2026-04-16) |
 |---|---|---|
-| Maximale Page-LOC | 3 921 | 610 |
-| Dateien > 1 000 LOC in `src/app/` | 4 | 0 |
-| Neue Custom-Hooks | — | +8 (inkl. Forecast, Orders-Loader, Sidebar, Polling) |
-| Gesamtschulden (Schweregrad × Anzahl) | 20 Einträge | 22 Einträge (5 geschlossen, 7 neu, 10 bleiben) |
+| Maximale Page-LOC | 610 | 610 |
+| Dateien > 1 000 LOC in `src/app/` | 0 | 0 |
+| Neue Custom-Hooks | +8 | +9 (`useCrossListingSubmit` neu) |
+| Vitest Tests | 29 | **68** (+39 für Cross-Listing-Suite) |
+| Migrationen (Remote applied) | 22 | 23 |
+| Marktplatz-Write-Endpoints | 1 (Amazon Stock-PATCH) | 2 (+ Amazon Listings-PUT live in Sandbox) |
 
 ---
 
@@ -806,12 +811,16 @@ Legende: **GESCHLOSSEN** (seit letztem Review gelöst) · **OFFEN** (weiterhin) 
 | 24 | **NEU** | `console.log` (19×) als Dev-Überbleibsel | 25 Dateien | Mittel | Tag | Structured Logger / Cleanup |
 | 25 | **GESCHLOSSEN** | Remote-Schema-Drift: `marketplace_promotion_deals` + 9 weitere Migrationen fehlten auf Supabase-Remote → 500 auf `/api/marketplaces/promotion-deals` | alle Migrations-Files bis `20260405120000` | Kritisch | — | 10 fehlende Migrationen via `supabase db query --linked --file` appliziert, alle 22 Tracker-Einträge via `supabase migration repair --status applied` markiert. REST-Probe bestätigt 10 Tabellen + 7 Spalten + 1 Storage-Bucket vorhanden. |
 | 26 | **GESCHLOSSEN** | Doppelt gelinkter Supabase-Workspace — Parent `Master-Dashboard/supabase/` (leeres `migrations/`, nur Edge-Functions-Ordner) erzeugte `db push --include-all`-Mismatch-Fehler | `Master-Dashboard/supabase/.temp/project-ref` | Niedrig | — | `supabase unlink` im Parent-Workspace. `Master-Dashboard/supabase/functions/{hello-world,master-dashboard}` unberührt gelassen. |
+| 27 | **GESCHLOSSEN** | Cross-Listing EAN aus Shopify-Produkt-ID statt echter Barcode | `src/app/api/cross-listing/source-data/route.ts` | Hoch | — | `extractEan(slug, row)` slug-aware: Shopify-Pfad ignoriert `secondaryId`, prüft `extras.variant_barcode`. |
+| 28 | **NEU** | Dev-Bypass-Endpoint `/api/dev/cross-listing-submit` umgeht Auth (nur unter `NODE_ENV=development`) | `src/app/api/dev/cross-listing-submit/route.ts` | Niedrig | Minuten | Vor Production-Deploy entfernen — war nur für Phase-A-Diagnose nötig, Production-Endpoint mit echter Supabase-Auth steht bereits. |
+| 29 | **NEU** | `AMAZON_SP_API_SANDBOX=1` in `.env.local` — Hochladen geht aktuell nicht in echtes Seller-Central | `master-dashboard/.env.local` | Niedrig | Minuten | Vor Production-Test entfernen / auf 0 setzen. Sandbox-Endpoint liefert statische Mock-Antworten (gleiche `submissionId` für alle Calls). |
+| 30 | **NEU (offen)** | Cross-Listing-Adapter fehlen für 8 Marktplätze | `crossListing/`-Submit-Pfad | Mittel | Wochen | Mirakl-Adapter (Otto/Kaufland/Fressnapf/Zooplus/MMS) als gemeinsamer Pfad, Shopify Admin GraphQL, eBay Trading-API, TikTok Shop OpenAPI. |
 
 **Zusammenfassung:**
-- **Geschlossen seit letztem Review:** 6 (#1 Supabase-Pool via Pro-Upgrade, #3 Monolith-Pages, #10 `src/features/` gelöscht, #12 Security-Headers, #25 Remote-Drift, #26 Workspace-Doppel-Link)
+- **Geschlossen seit letztem Review:** 7 (#1 Supabase-Pool via Pro-Upgrade, #3 Monolith-Pages, #10 `src/features/` gelöscht, #12 Security-Headers, #25 Remote-Drift, #26 Workspace-Doppel-Link, #27 Shopify-EAN-Bug)
 - **Teilweise geschlossen:** 2 (#2 Rate-Limit-Lib da, #5 Zod-Helper da)
-- **Neu aufgetaucht:** 4 (#21 Amazon-Editor + Lib-Monolithen, #22 Loader-Duplikation, #23 `any`-Anstieg, #24 console.log)
-- **Gesamtsaldo:** Qualität **deutlich verbessert** — der kritischste Produktionsvorfall-Auslöser (DB-Pool) ist infrastrukturell gelöst und der letzte latente 500-Fehler aus Remote-Drift ist behoben.
+- **Neu aufgetaucht:** 7 (#21–24 wie zuvor, plus #28 Dev-Bypass-Route, #29 Sandbox-Flag in .env.local, #30 Cross-Listing-Adapter für andere Marktplätze)
+- **Gesamtsaldo:** Qualität **deutlich verbessert** — Cross-Listing liefert ersten echten Marktplatz-Write-Pfad (Amazon SP-API live in Sandbox).
 
 ---
 
@@ -1008,6 +1017,8 @@ Internes Business-Dashboard mit Analytics (Profit/Retouren), Produkt-Editoren (i
 7. Access-Guard: `DashboardRouteAccessGuard`, falls nicht alle Rollen sehen sollen.
 
 ### Bekannte Probleme / Workarounds:
+- **Cross-Listing-Upload steht im Sandbox-Mode** — `AMAZON_SP_API_SANDBOX=1` in `.env.local`. Hochladen liefert Mock-Antworten (gleiche `submissionId f1dc2914-…`), kein echter Listing-Push. Vor Production-Test entfernen.
+- **Dev-Bypass-Endpoint `/api/dev/cross-listing-submit`** existiert für Diagnose (umgeht Auth, nur unter `NODE_ENV=development`). Vor Production-Deploy löschen.
 - Xentral `?includeSales=1` dauert bis 115 s → nicht synchron auf UX-Pfaden. **Aktuelle #1-Performance-Baustelle.**
 - Analytics-Page feuert 9 parallele Calls → seit Pro-Plan kein Pool-Problem mehr; Concurrency-3-Drossel + Aggregator `marketplace-overview` bleiben aus Effizienzgründen empfohlen.
 - `integration_data_cache` ohne RLS — keine User-Daten dort speichern.
@@ -1026,7 +1037,7 @@ Internes Business-Dashboard mit Analytics (Profit/Retouren), Produkt-Editoren (i
 - `npm run typecheck` → 0 Errors
 - `npx eslint src/ --max-warnings 0` → 0 Warnings
 - `npm run build` → erfolgreich
-- `npm test` → 29/29 grün
+- `npm test` → 68/68 grün (Vitest-Suite mit Cross-Listing-Mapper-Tests)
 - Nach jedem Refactor-Schritt committen, nicht batchen.
 ```
 
@@ -1034,11 +1045,12 @@ Internes Business-Dashboard mit Analytics (Profit/Retouren), Produkt-Editoren (i
 
 ## Scan-Zusammenfassung
 
-- **Gescannte Dateien:** 394 TS/TSX in `src/`, 22 Migrations, alle Config-Files, alle Docs, vollständiger Git-Log.
-- **Identifizierte Features:** 18+ dokumentiert (5 mit neu bewerteten Qualitätsnoten).
-- **Identifizierte Schulden:** 26 (5 geschlossen, 2 teilweise, 4 neu, 15 bleiben).
-- **Haupt-Erfolge seit Vor-Review:** Monolith-Pages zerlegt (9 062 → 1 698 LOC, −81 %); 8 neue Hooks; Security-Headers; `rateLimit.ts` + `apiValidation.ts` als Fundament; **Supabase-Pro-Upgrade (Pool 10 → 60)**; **Remote-Schema-Drift geschlossen — 10 fehlende Migrations appliziert, 22/22 Tracker-Einträge repariert**; **Workspace-Doppel-Link entfernt**.
-- **Haupt-Risiko (bleibend):** `/api/xentral/articles?includeSales=1` blockiert bis 115 s; fehlende Rate-Limit-Adoption.
-- **Haupt-Stärke:** Modernes Stack, konsequente Typ-Sicherheit, dichte Doku-Basis, reife Refactor-Disziplin (alle Gates grün durch 39 Commits).
+- **Gescannte Dateien:** ~405 TS/TSX in `src/`, 23 Migrations, alle Config-Files, alle Docs, vollständiger Git-Log.
+- **Identifizierte Features:** 19+ dokumentiert (Cross-Listing als neues Top-Level-Feature mit Editor-UI + Amazon-Submit-Pfad).
+- **Identifizierte Schulden:** 30 (7 geschlossen, 2 teilweise, 7 neu, 14 bleiben).
+- **Haupt-Erfolge seit Vor-Review:** Cross-Listing V1.3 — Amazon-Upload via SP-API Listings Items API live in Sandbox (Mapper, SigV4-PUT, LWA, Submit-Route, UI-Button, Result-Display); Cross-Listing V1.2.2 — Shopify-EAN-Bug behoben; Migration `cross_listing_drafts_submission` auf Remote; Vitest-Suite von 29 auf 68 Tests gewachsen.
+- **Haupt-Risiko (bleibend):** `/api/xentral/articles?includeSales=1` blockiert bis 115 s; fehlende Rate-Limit-Adoption; Cross-Listing aktuell im Sandbox-Mode (kein echter Production-Push).
+- **Offene Aufräum-Punkte vor nächster Session:** Sandbox-Flag entfernen (Production-Test), Dev-Bypass-Route `/api/dev/cross-listing-submit` löschen.
+- **Haupt-Stärke:** Modernes Stack, konsequente Typ-Sicherheit, dichte Doku-Basis, reife Refactor-Disziplin, jetzt erster echter Marktplatz-Write-Pfad mit Sandbox-validiertem End-to-End-Flow.
 
 _Review-Ende._

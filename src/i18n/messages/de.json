@@ -1182,5 +1182,93 @@
         "description": "Schnellzugriff auf aktuelle Amazon-Bestellungen."
       }
     }
+  },
+  "crossListing": {
+    "loading": "Quelldaten werden geladen …",
+    "source": "Quelle",
+    "missing": "Pflichtfelder fehlen",
+    "action": {
+      "createListing": "Listing erstellen",
+      "openDraft": "Draft öffnen",
+      "saveDraft": "Als Draft speichern",
+      "cancel": "Abbrechen",
+      "upload": "Hochladen",
+      "addBullet": "Bullet hinzufügen"
+    },
+    "dialog": {
+      "title": "Neues Listing für {marketplace}"
+    },
+    "upload": {
+      "comingSoon": "Hochladen für diesen Marktplatz noch nicht verfügbar.",
+      "loading": "Lädt hoch…",
+      "saveFirst": "Bitte zuerst als Draft speichern."
+    },
+    "placeholder": {
+      "imageUrl": "Bild-URL eingeben und Enter drücken",
+      "tag": "Tag eingeben und Enter drücken"
+    },
+    "field": {
+      "title": "Titel",
+      "description": "Beschreibung",
+      "bullets": "Bullet Points",
+      "images": "Bilder",
+      "priceEur": "Preis (EUR)",
+      "uvpEur": "UVP (EUR)",
+      "stockQty": "Bestand",
+      "ean": "EAN",
+      "brand": "Marke",
+      "category": "Kategorie",
+      "dimL": "Länge",
+      "dimW": "Breite",
+      "dimH": "Höhe",
+      "weight": "Gewicht",
+      "petSpecies": "Tierart",
+      "tags": "Tags",
+      "searchTerms": "Suchbegriffe",
+      "seoTitle": "SEO-Titel",
+      "seoDescription": "SEO-Beschreibung",
+      "condition": "Zustand",
+      "handlingTime": "Bearbeitungszeit (Tage)",
+      "attributes": "Attribute",
+      "attributes.hint": "Pflicht-Attribute je Marktplatz-Kategorie (z. B. Marke, Farbe, Größe).",
+      "category.hint.amazon": "z. B. pet_supplies > cat_scratchers",
+      "category.hint.otto": "z. B. Katzen > Kratzmöbel",
+      "category.hint.kaufland": "z. B. Tierbedarf > Katzen > Kratzbäume",
+      "category.hint.fressnapf": "z. B. Katze > Möbel & Kratzbäume",
+      "category.hint.mediamarkt-saturn": "z. B. Haushalt > Haustierzubehör",
+      "category.hint.zooplus": "z. B. Katze > Kratzbäume & Möbel",
+      "category.hint.tiktok": "z. B. Pet Supplies > Cat Furniture",
+      "category.hint.shopify": "z. B. Katzen > Kratzmöbel (interne astropet-Kategorie)",
+      "category.hint.ebay": "z. B. 20742 (eBay Kategorie-ID)"
+    },
+    "section": {
+      "catalog": "Stammdaten & Katalog",
+      "content": "Content",
+      "images": "Bilder",
+      "platform": "Marktplatz-spezifisch"
+    },
+    "ai": {
+      "title": "KI-Optimierung",
+      "optimizeButton": "Mit KI optimieren",
+      "loading": "Claude optimiert Titel, Beschreibung und Bullets …",
+      "error": "Fehler",
+      "apply": "Übernehmen",
+      "applyAll": "Alle übernehmen",
+      "applied": "KI-optimiert",
+      "suggestion": "KI-Vorschlag",
+      "noImprovement": "Keine wesentlichen Verbesserungen erkannt.",
+      "skipped": "KI-Aufruf übersprungen"
+    },
+    "hint": {
+      "amazon": "Amazon-Richtlinien: Titel max. 200 Zeichen, bis zu 5 Bullets, Bilder mit weißem Hintergrund.",
+      "otto": "Otto erwartet gehobenen Sprachstil; eigene Produkt-IDs und Attribute je Kategorie.",
+      "ebay": "eBay-Titel max. 80 Zeichen empfohlen; EAN verbessert Auffindbarkeit.",
+      "kaufland": "Kaufland nutzt EAN + eigene Kategorie-IDs; Bilder mit Freisteller bevorzugt.",
+      "fressnapf": "Fressnapf: Zielgruppe Tierhalter, SEO-Begriffe für Haustierbedarf.",
+      "mediamarkt-saturn": "MediaMarkt/Saturn: technische Produktmerkmale präzise angeben.",
+      "zooplus": "Zooplus: Haustier-spezifische Attribute (Tierart, Lebensphase, Größe).",
+      "tiktok": "TikTok Shop: kurze, aufmerksamkeitsstarke Titel; max. 9 Bilder.",
+      "shopify": "Shopify (astropet.de): HTML-Beschreibung erlaubt; eigene Kategorien."
+    }
   }
 }
