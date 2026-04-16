@@ -108,7 +108,13 @@ export async function POST() {
           );
 
         if (upsertErr) {
-          console.error(`[payouts:amazon:sync] Upsert ${meta.reportId}: ${upsertErr.message}`);
+          console.error(
+            `[payouts:amazon:sync] Upsert ${meta.reportId}: ${upsertErr.message}`,
+            `gross=${parsed.grossSales} refunds=${parsed.refundsAmount} fees=${parsed.marketplaceFees} ` +
+            `fulfillment=${parsed.fulfillmentFees} ads=${parsed.advertisingFees} shipping=${parsed.shippingFees} ` +
+            `promos=${parsed.promotionDiscounts} other=${parsed.otherFees} reserve=${parsed.reserveAmount} ` +
+            `net=${parsed.netPayout} orders=${parsed.ordersCount} returns=${parsed.returnsCount} units=${parsed.unitsSold}`
+          );
         } else {
           synced++;
           console.info(

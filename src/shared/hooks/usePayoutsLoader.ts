@@ -3,14 +3,27 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PayoutOverview } from "@/shared/lib/payouts/payoutTypes";
 
+type SyncStatus = "idle" | "running" | "done" | "failed";
+
 type State = {
   data: PayoutOverview | null;
   loading: boolean;
   error: string | null;
   syncing: boolean;
+  syncStatuses: Record<string, SyncStatus>;
 };
 
-const INITIAL: State = { data: null, loading: false, error: null, syncing: false };
+const INITIAL: State = { data: null, loading: false, error: null, syncing: false, syncStatuses: {} };
+
+async function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs = 120_000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export default function usePayoutsLoader(args: {
   from: string;
@@ -40,7 +53,7 @@ export default function usePayoutsLoader(args: {
         throw new Error(body?.error ?? `HTTP ${res.status}`);
       }
       const data = (await res.json()) as PayoutOverview;
-      setState({ data, loading: false, error: null, syncing: false });
+      setState((s) => ({ ...s, data, loading: false, error: null, syncing: false }));
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -58,27 +71,43 @@ export default function usePayoutsLoader(args: {
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   const syncAll = useCallback(async () => {
-    setState((s) => ({ ...s, syncing: true }));
-    try {
-      // Parallel: Amazon + Mirakl + Shopify
-      const results = await Promise.allSettled([
-        fetch("/api/payouts/amazon/sync", { method: "POST" }),
-        fetch("/api/payouts/mirakl/sync", { method: "POST" }),
-        fetch("/api/payouts/shopify/sync", { method: "POST" }),
-      ]);
-      for (const r of results) {
-        if (r.status === "rejected") {
-          console.error("[payouts:syncAll]", r.reason);
+    const syncs = [
+      { key: "amazon", url: "/api/payouts/amazon/sync", timeout: 120_000 },
+      { key: "mirakl", url: "/api/payouts/mirakl/sync", timeout: 30_000 },
+      { key: "shopify", url: "/api/payouts/shopify/sync", timeout: 30_000 },
+    ];
+
+    const statuses: Record<string, SyncStatus> = {};
+    for (const s of syncs) statuses[s.key] = "running";
+    setState((s) => ({ ...s, syncing: true, error: null, syncStatuses: { ...statuses } }));
+
+    const results = await Promise.allSettled(
+      syncs.map(async (s) => {
+        try {
+          const res = await fetchWithTimeout(s.url, { method: "POST" }, s.timeout);
+          statuses[s.key] = res.ok ? "done" : "failed";
+          setState((prev) => ({ ...prev, syncStatuses: { ...statuses } }));
+          return { key: s.key, ok: res.ok };
+        } catch (err) {
+          console.error(`[payouts:syncAll] ${s.key}:`, err instanceof Error ? err.message : err);
+          statuses[s.key] = "failed";
+          setState((prev) => ({ ...prev, syncStatuses: { ...statuses } }));
+          return { key: s.key, ok: false };
         }
-      }
-      setTick((t) => t + 1);
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        syncing: false,
-        error: err instanceof Error ? err.message : "Sync fehlgeschlagen.",
-      }));
-    }
+      })
+    );
+
+    const succeeded = results.filter((r) => r.status === "fulfilled" && r.value.ok).length;
+    const failed = results.length - succeeded;
+
+    setState((s) => ({
+      ...s,
+      syncing: false,
+      error: failed > 0 ? `${succeeded} synchronisiert, ${failed} fehlgeschlagen.` : null,
+    }));
+
+    // Einmaliger Refresh am Ende
+    setTick((t) => t + 1);
   }, []);
 
   return { ...state, refresh, syncAll };

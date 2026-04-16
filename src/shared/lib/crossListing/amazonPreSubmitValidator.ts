@@ -84,9 +84,7 @@ export function validateForAmazonSubmit(
     errors.push({ field: "batteries_included", message: "Batterien enthalten? muss gesetzt sein." });
   }
 
-  if (!nonEmpty(attrs.recommended_browse_nodes) && !nonEmpty(attrs["Browse-Node-ID"])) {
-    errors.push({ field: "recommended_browse_nodes", message: "Browse-Node-ID ist Pflicht." });
-  }
+  // Browse-Node wird automatisch gesetzt (detectBrowseNode), daher kein blockierender Error.
 
   // EPR-Verpackung
   if (!nonEmpty(attrs["epr_product_packaging.main_material"]) && !nonEmpty(attrs.Verpackungsmaterial)) {

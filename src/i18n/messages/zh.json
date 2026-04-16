@@ -434,7 +434,7 @@
     "table": { "marketplace": "市场", "gross": "总额", "fees": "费用", "ads": "广告", "returns": "退货", "net": "净额" },
     "anomalies": { "title": "异常" },
     "anomaly": { "lowPayoutRatio": "付款比率仅{ratio}%——低于35%阈值。", "payoutRatioDrop": "付款比率较上期下降{drop}个百分点。", "highReturnRate": "退货率{rate}%——请检查产品。", "revenueDrop": "收入下降：较上期{drop}%。", "productHighReturns": "{sku}：退货率{rate}%——约损失{cost}€。", "heroProduct": "{sku}：售出{units}件，0退货，{gross}€收入。" },
-    "period": { "current": "当前期间（14天）", "previous": "上一期间", "last30": "最近30天", "lastMonth": "上个月", "last3Months": "最近3个月" }
+    "period": { "presetsLabel": "时间预设", "settlementsLabel": "结算周期", "last14": "最近14天", "last30": "最近30天", "lastMonth": "上个月", "lastQuarter": "上季度", "yearToDate": "今年至今", "custom": "自定义", "open": "进行中", "loading": "加载中…", "noSettlements": "暂无结算周期" }
   },
   "analyticsProcurement": {
     "title": "采购",
@@ -1178,6 +1178,7 @@
     }
   },
   "crossListing": {
+    "amazon": { "pflichtfelder": "亚马逊必填字段", "applyDefaults": "应用默认值", "productType": "产品类型", "browseNode": "浏览节点ID", "modelNumber": "型号", "countryOfOrigin": "原产国", "dgRegulation": "危险品法规", "batteriesRequired": "需要电池？", "batteriesIncluded": "包含电池？", "eprMaterial": "包装材料", "warranty": "保修", "missingFields": "缺少必填字段", "autoDetected": "自动检测" },
     "loading": "正在加载源数据 …",
     "source": "来源",
     "missing": "缺少必填字段",

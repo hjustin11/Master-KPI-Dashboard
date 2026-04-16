@@ -118,7 +118,8 @@ function AmazonDraftImageSlot({
             <button
               type="button"
               onClick={() => {
-                /* Download handler would be passed as prop */
+                const params = new URLSearchParams({ url: trimmed, filename: `produktbild-${index + 1}.jpg` });
+                window.open(`/api/image-proxy?${params.toString()}`, "_self");
               }}
               className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border/60 bg-muted/40 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               aria-label={`Bild ${index + 1} herunterladen`}

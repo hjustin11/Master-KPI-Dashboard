@@ -474,11 +474,17 @@
       "heroProduct": "{sku}: {units} Einheiten verkauft, 0 Retouren, {gross} € Umsatz."
     },
     "period": {
-      "current": "Aktuelle Periode (14 Tage)",
-      "previous": "Vorherige Periode",
+      "presetsLabel": "Zeitraum-Presets",
+      "settlementsLabel": "Abrechnungszeiträume",
+      "last14": "Letzte 14 Tage",
       "last30": "Letzte 30 Tage",
       "lastMonth": "Letzter Monat",
-      "last3Months": "Letzte 3 Monate"
+      "lastQuarter": "Letztes Quartal",
+      "yearToDate": "Jahr bis heute",
+      "custom": "Benutzerdefiniert",
+      "open": "offen",
+      "loading": "Lade…",
+      "noSettlements": "Keine Abrechnungszeiträume"
     }
   },
   "analyticsProcurement": {
@@ -1247,6 +1253,21 @@
     }
   },
   "crossListing": {
+    "amazon": {
+      "pflichtfelder": "Amazon-Pflichtfelder",
+      "applyDefaults": "Standardwerte",
+      "productType": "Produkttyp",
+      "browseNode": "Browse-Node-ID",
+      "modelNumber": "Modellnummer",
+      "countryOfOrigin": "Ursprungsland",
+      "dgRegulation": "Gefahrgutvorschrift",
+      "batteriesRequired": "Batterien erforderlich?",
+      "batteriesIncluded": "Batterien enthalten?",
+      "eprMaterial": "Verpackungsmaterial",
+      "warranty": "Garantie",
+      "missingFields": "Pflichtfelder fehlen",
+      "autoDetected": "Automatisch erkannt"
+    },
     "loading": "Quelldaten werden geladen …",
     "source": "Quelle",
     "missing": "Pflichtfelder fehlen",

@@ -137,6 +137,7 @@ export type CrossListingDraftValues = {
   seoDescription: string;
   condition: string;
   handlingTime: string;
+  amazonProductType: string;
   attributes: Record<string, string>;
 };
 
@@ -189,6 +190,7 @@ export function emptyDraftValues(): CrossListingDraftValues {
     seoDescription: "",
     condition: "Neu",
     handlingTime: "",
+    amazonProductType: "",
     attributes: {},
   };
 }

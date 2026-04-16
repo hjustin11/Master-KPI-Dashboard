@@ -38,6 +38,7 @@ const DraftValuesZ = z.object({
   seoDescription: z.string(),
   condition: z.string(),
   handlingTime: z.string(),
+  amazonProductType: z.string().optional().default(""),
   attributes: z.record(z.string(), z.string()),
 });
 

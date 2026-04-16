@@ -434,7 +434,7 @@
     "table": { "marketplace": "Marketplace", "gross": "Gross", "fees": "Fees", "ads": "Ads", "returns": "Returns", "net": "Net" },
     "anomalies": { "title": "Anomalies" },
     "anomaly": { "lowPayoutRatio": "Payout ratio only {ratio}% — below 35% threshold.", "payoutRatioDrop": "Payout ratio dropped by {drop} pp vs. previous period.", "highReturnRate": "Return rate at {rate}% — check products.", "revenueDrop": "Revenue drop: {drop}% vs. previous period.", "productHighReturns": "{sku}: {rate}% return rate — costs ~{cost} €.", "heroProduct": "{sku}: {units} units sold, 0 returns, {gross} € revenue." },
-    "period": { "current": "Current period (14 days)", "previous": "Previous period", "last30": "Last 30 days", "lastMonth": "Last month", "last3Months": "Last 3 months" }
+    "period": { "presetsLabel": "Period Presets", "settlementsLabel": "Settlement Periods", "last14": "Last 14 days", "last30": "Last 30 days", "lastMonth": "Last month", "lastQuarter": "Last quarter", "yearToDate": "Year to date", "custom": "Custom", "open": "open", "loading": "Loading…", "noSettlements": "No settlement periods" }
   },
   "analyticsProcurement": {
     "title": "Procurement",
@@ -1202,6 +1202,7 @@
     }
   },
   "crossListing": {
+    "amazon": { "pflichtfelder": "Amazon Required Fields", "applyDefaults": "Apply Defaults", "productType": "Product Type", "browseNode": "Browse Node ID", "modelNumber": "Model Number", "countryOfOrigin": "Country of Origin", "dgRegulation": "Dangerous Goods", "batteriesRequired": "Batteries Required?", "batteriesIncluded": "Batteries Included?", "eprMaterial": "Packaging Material", "warranty": "Warranty", "missingFields": "missing fields", "autoDetected": "Auto-detected" },
     "loading": "Loading source data…",
     "source": "Source",
     "missing": "Required fields missing",

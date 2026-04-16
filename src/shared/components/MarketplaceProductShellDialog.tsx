@@ -126,27 +126,9 @@ function collectImageUrls(input: unknown, out = new Set<string>(), depth = 0): S
   return out;
 }
 
-async function downloadImageDirect(url: string, filename: string) {
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error("download_failed");
-    const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(objectUrl);
-  } catch {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  }
+function downloadImageDirect(url: string, filename: string) {
+  const params = new URLSearchParams({ url, filename });
+  window.open(`/api/image-proxy?${params.toString()}`, "_self");
 }
 
 export function MarketplaceProductShellDialog({

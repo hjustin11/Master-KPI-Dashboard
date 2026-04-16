@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectAmazonProductType } from "./productTypeDetection";
+import { detectAmazonProductType, detectBrowseNode } from "./productTypeDetection";
 
 describe("detectAmazonProductType", () => {
   it("erkennt Müllbeutel als WASTE_BAG", () => {
@@ -59,5 +59,52 @@ describe("detectAmazonProductType", () => {
     const r = detectAmazonProductType("AstroPet Produkt", "Dieser Futterbehälter fasst 10kg");
     expect(r.productType).toBe("FOOD_STORAGE_CONTAINER");
     expect(r.confidence).toBeLessThan(0.8);
+  });
+});
+
+describe("detectBrowseNode", () => {
+  it("WASTE_BAG mit Katze → Katzentoilettenauskleidung", () => {
+    const r = detectBrowseNode("WASTE_BAG", "Müllbeutel für Katzentoilette");
+    expect(r.nodeId).toBe("13357953031");
+    expect(r.source).toBe("auto");
+  });
+
+  it("WASTE_BAG ohne Keyword → Default Müllbeutel", () => {
+    const r = detectBrowseNode("WASTE_BAG", "Premium Müllbeutel XL 120 Stück");
+    expect(r.nodeId).toBe("64745031");
+    expect(r.source).toBe("default");
+  });
+
+  it("LITTER_BOX → Default Katzentoiletten", () => {
+    const r = detectBrowseNode("LITTER_BOX", "Katzentoilette XXL selbstreinigend");
+    expect(r.nodeId).toBe("470780031");
+  });
+
+  it("PET_ACTIVITY_STRUCTURE mit Tunnel → Tunnel-Node", () => {
+    const r = detectBrowseNode("PET_ACTIVITY_STRUCTURE", "Katzen Tunnel 3-Wege");
+    expect(r.nodeId).toBe("4254582031");
+    expect(r.source).toBe("auto");
+  });
+
+  it("ANIMAL_STAIR mit Katze → Katzen-Treppen-Node", () => {
+    const r = detectBrowseNode("ANIMAL_STAIR", "Katzentreppe 3 Stufen");
+    expect(r.nodeId).toBe("13357928031");
+  });
+
+  it("PET_FEEDER automatisch → Automatisierte Futterspender", () => {
+    const r = detectBrowseNode("PET_FEEDER", "Automatischer Futterspender 5L");
+    expect(r.nodeId).toBe("470699031");
+  });
+
+  it("Unbekannter Typ → Fallback Haustierbedarf", () => {
+    const r = detectBrowseNode("UNKNOWN_TYPE", "Irgendwas");
+    expect(r.nodeId).toBe("12950271");
+    expect(r.confidence).toBe(0.3);
+  });
+
+  it("PET_SUPPLIES mit Hund → Hunde-Node", () => {
+    const r = detectBrowseNode("PET_SUPPLIES", "Hundespielzeug Kau");
+    expect(r.nodeId).toBe("340852031");
+    expect(r.source).toBe("auto");
   });
 });

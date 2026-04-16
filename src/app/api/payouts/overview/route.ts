@@ -41,7 +41,7 @@ type DbRow = {
   fetched_at: string;
 };
 
-function n(v: number | null): number {
+function num(v: number | null): number {
   return v ?? 0;
 }
 
@@ -52,23 +52,23 @@ function toPayoutRow(r: DbRow): PayoutRow {
     periodFrom: r.period_from,
     periodTo: r.period_to,
     settlementId: r.settlement_id,
-    grossSales: n(r.gross_sales),
-    refundsAmount: n(r.refunds_amount),
-    refundsFeesReturned: n(r.refunds_fees_returned),
-    marketplaceFees: n(r.marketplace_fees),
-    fulfillmentFees: n(r.fulfillment_fees),
-    advertisingFees: n(r.advertising_fees),
-    shippingFees: n(r.shipping_fees),
-    promotionDiscounts: n(r.promotion_discounts),
-    otherFees: n(r.other_fees),
+    grossSales: num(r.gross_sales),
+    refundsAmount: num(r.refunds_amount),
+    refundsFeesReturned: num(r.refunds_fees_returned),
+    marketplaceFees: num(r.marketplace_fees),
+    fulfillmentFees: num(r.fulfillment_fees),
+    advertisingFees: num(r.advertising_fees),
+    shippingFees: num(r.shipping_fees),
+    promotionDiscounts: num(r.promotion_discounts),
+    otherFees: num(r.other_fees),
     otherFeesBreakdown: (r.other_fees_breakdown as Record<string, number>) ?? null,
-    reserveAmount: n(r.reserve_amount),
-    netPayout: n(r.net_payout),
-    ordersCount: n(r.orders_count),
-    returnsCount: n(r.returns_count),
-    unitsSold: n(r.units_sold),
-    payoutRatio: n(r.payout_ratio),
-    returnRate: n(r.return_rate),
+    reserveAmount: num(r.reserve_amount),
+    netPayout: num(r.net_payout),
+    ordersCount: num(r.orders_count),
+    returnsCount: num(r.returns_count),
+    unitsSold: num(r.units_sold),
+    payoutRatio: num(r.payout_ratio),
+    returnRate: num(r.return_rate),
     acos: r.acos,
     tacos: r.tacos,
     productBreakdown: (r.product_breakdown as PayoutProductEntry[]) ?? null,
@@ -77,9 +77,13 @@ function toPayoutRow(r: DbRow): PayoutRow {
   };
 }
 
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 function sumTotals(rows: PayoutRow[]): PayoutTotals {
   let gross = 0, refunds = 0, mFees = 0, fFees = 0, ads = 0, ship = 0, promo = 0, other = 0, net = 0;
-  let orders = 0, returns = 0;
+  let orders = 0, returns = 0, units = 0;
   for (const r of rows) {
     gross += r.grossSales;
     refunds += r.refundsAmount;
@@ -92,33 +96,85 @@ function sumTotals(rows: PayoutRow[]): PayoutTotals {
     net += r.netPayout;
     orders += r.ordersCount;
     returns += r.returnsCount;
+    units += r.unitsSold;
   }
+
+  const totalFees = round2(Math.abs(mFees) + Math.abs(fFees) + Math.abs(ship) + Math.abs(promo) + Math.abs(other));
+  const payoutRatio = gross > 0 ? Math.round((net / gross) * 10000) / 10000 : 0;
+  const returnRate = orders > 0 ? Math.round((returns / orders) * 10000) / 10000 : 0;
+  const aov = orders > 0 ? round2(gross / orders) : 0;
+  const tacos = gross > 0 ? round2((Math.abs(ads) / gross) * 100) : 0;
+
   return {
-    grossSales: Math.round(gross * 100) / 100,
-    refundsAmount: Math.round(refunds * 100) / 100,
-    marketplaceFees: Math.round(mFees * 100) / 100,
-    fulfillmentFees: Math.round(fFees * 100) / 100,
-    advertisingFees: Math.round(ads * 100) / 100,
-    shippingFees: Math.round(ship * 100) / 100,
-    promotionDiscounts: Math.round(promo * 100) / 100,
-    otherFees: Math.round(other * 100) / 100,
-    netPayout: Math.round(net * 100) / 100,
+    grossSales: round2(gross),
+    refundsAmount: round2(refunds),
+    marketplaceFees: round2(mFees),
+    fulfillmentFees: round2(fFees),
+    advertisingFees: round2(ads),
+    shippingFees: round2(ship),
+    promotionDiscounts: round2(promo),
+    otherFees: round2(other),
+    netPayout: round2(net),
     ordersCount: orders,
     returnsCount: returns,
-    payoutRatio: gross > 0 ? Math.round((net / gross) * 10000) / 10000 : 0,
-    returnRate: orders > 0 ? Math.round((returns / orders) * 10000) / 10000 : 0,
+    unitsSold: units,
+    payoutRatio,
+    returnRate,
+    aov,
+    tacos,
+    totalFees,
   };
 }
 
 function computeDeltas(current: PayoutTotals, previous: PayoutTotals): PayoutDeltas {
-  const pctDelta = (c: number, p: number) => (p !== 0 ? Math.round(((c - p) / Math.abs(p)) * 1000) / 10 : null);
+  const pctDelta = (c: number, p: number) =>
+    p !== 0 ? Math.round(((c - p) / Math.abs(p)) * 1000) / 10 : null;
   return {
     grossSales: pctDelta(current.grossSales, previous.grossSales),
     netPayout: pctDelta(current.netPayout, previous.netPayout),
-    payoutRatio: current.payoutRatio - previous.payoutRatio,
-    returnRate: current.returnRate - previous.returnRate,
+    payoutRatio: Math.round((current.payoutRatio - previous.payoutRatio) * 10000) / 10000,
+    returnRate: Math.round((current.returnRate - previous.returnRate) * 10000) / 10000,
     ordersCount: pctDelta(current.ordersCount, previous.ordersCount),
+    refundsAmount: pctDelta(Math.abs(current.refundsAmount), Math.abs(previous.refundsAmount)),
+    advertisingFees: pctDelta(Math.abs(current.advertisingFees), Math.abs(previous.advertisingFees)),
+    aov: pctDelta(current.aov, previous.aov),
+    tacos: round2(current.tacos - previous.tacos),
   };
+}
+
+function midpointDate(from: string, to: string): number {
+  const f = new Date(from).getTime();
+  const t = new Date(to).getTime();
+  return f + (t - f) / 2;
+}
+
+function isInRange(settlementFrom: string, settlementTo: string, rangeFrom: string, rangeTo: string): boolean {
+  const mid = midpointDate(settlementFrom, settlementTo);
+  const rFrom = new Date(rangeFrom).getTime();
+  const rTo = new Date(rangeTo).getTime() + 86_400_000;
+  return mid >= rFrom && mid < rTo;
+}
+
+async function queryAllSettlements(
+  admin: ReturnType<typeof createAdminClient>,
+  fromEarliest: string,
+  toLatest: string,
+  marketplaces: string[]
+) {
+  let query = admin
+    .from("marketplace_payouts")
+    .select("*")
+    .gte("period_to", fromEarliest)
+    .lte("period_from", toLatest)
+    .order("period_from", { ascending: false });
+
+  if (marketplaces.length > 0) {
+    query = query.in("marketplace_slug", marketplaces);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => toPayoutRow(r as DbRow));
 }
 
 export async function GET(request: Request) {
@@ -152,60 +208,51 @@ export async function GET(request: Request) {
     ? marketplacesParam.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
 
-  // Current period
-  let query = admin
-    .from("marketplace_payouts")
-    .select("*")
-    .gte("period_from", from)
-    .lte("period_to", to)
-    .order("period_from", { ascending: false });
+  const fromMs = new Date(from).getTime();
+  const toMs = new Date(to).getTime();
+  const spanMs = toMs - fromMs;
+  const prevFrom = new Date(fromMs - spanMs).toISOString().slice(0, 10);
+  const prevTo = new Date(fromMs - 86_400_000).toISOString().slice(0, 10);
 
-  if (marketplaces.length > 0) {
-    query = query.in("marketplace_slug", marketplaces);
+  const earliestFrom = compare ? prevFrom : from;
+
+  let allRows: PayoutRow[];
+  try {
+    allRows = await queryAllSettlements(admin, earliestFrom, to, marketplaces);
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "DB-Fehler" }, { status: 500 });
   }
 
-  const { data: currentRaw, error: currentErr } = await query;
-  if (currentErr) return NextResponse.json({ error: currentErr.message }, { status: 500 });
+  const currentRows: PayoutRow[] = [];
+  const previousRows: PayoutRow[] = [];
 
-  const rows = (currentRaw ?? []).map((r) => toPayoutRow(r as DbRow));
-  const totals = sumTotals(rows);
+  for (const row of allRows) {
+    if (isInRange(row.periodFrom, row.periodTo, from, to)) {
+      currentRows.push(row);
+    } else if (compare && isInRange(row.periodFrom, row.periodTo, prevFrom, prevTo)) {
+      previousRows.push(row);
+    }
+  }
 
-  // Previous period (mirror-Zeitraum)
+  const totals = sumTotals(currentRows);
   let previousTotals: PayoutTotals | null = null;
   let deltas: PayoutDeltas | null = null;
-  let previousRows: PayoutRow[] = [];
 
   if (compare) {
-    const fromMs = new Date(from).getTime();
-    const toMs = new Date(to).getTime();
-    const spanMs = toMs - fromMs;
-    const prevFrom = new Date(fromMs - spanMs).toISOString().slice(0, 10);
-    const prevTo = new Date(fromMs).toISOString().slice(0, 10);
-
-    let prevQuery = admin
-      .from("marketplace_payouts")
-      .select("*")
-      .gte("period_from", prevFrom)
-      .lte("period_to", prevTo)
-      .order("period_from", { ascending: false });
-
-    if (marketplaces.length > 0) {
-      prevQuery = prevQuery.in("marketplace_slug", marketplaces);
-    }
-
-    const { data: prevRaw } = await prevQuery;
-    previousRows = (prevRaw ?? []).map((r) => toPayoutRow(r as DbRow));
     previousTotals = sumTotals(previousRows);
     deltas = computeDeltas(totals, previousTotals);
   }
 
   const payload: PayoutOverview = {
     period: { from, to },
-    marketplaces: marketplaces.length > 0 ? marketplaces : [...new Set(rows.map((r) => r.marketplaceSlug))],
+    previousPeriod: compare ? { from: prevFrom, to: prevTo } : null,
+    marketplaces: marketplaces.length > 0
+      ? marketplaces
+      : [...new Set([...currentRows, ...previousRows].map((r) => r.marketplaceSlug))],
     totals,
     previousTotals,
     deltas,
-    rows,
+    rows: currentRows,
     previousRows,
   };
 

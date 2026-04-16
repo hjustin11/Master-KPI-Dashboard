@@ -43,6 +43,7 @@ export type PayoutProductEntry = {
 
 export type PayoutOverview = {
   period: { from: string; to: string };
+  previousPeriod: { from: string; to: string } | null;
   marketplaces: string[];
   totals: PayoutTotals;
   previousTotals: PayoutTotals | null;
@@ -63,16 +64,24 @@ export type PayoutTotals = {
   netPayout: number;
   ordersCount: number;
   returnsCount: number;
+  unitsSold: number;
   payoutRatio: number;
   returnRate: number;
+  aov: number;
+  tacos: number;
+  totalFees: number;
 };
 
 export type PayoutDeltas = {
   grossSales: number | null;
   netPayout: number | null;
-  payoutRatio: number | null;
-  returnRate: number | null;
+  payoutRatio: number;
+  returnRate: number;
   ordersCount: number | null;
+  refundsAmount: number | null;
+  advertisingFees: number | null;
+  aov: number | null;
+  tacos: number;
 };
 
 export type PayoutAnomaly = {

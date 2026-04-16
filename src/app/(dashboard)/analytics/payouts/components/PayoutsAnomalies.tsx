@@ -12,9 +12,9 @@ const ICON: Record<string, string> = {
 };
 
 const BG: Record<string, string> = {
-  critical: "bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:border-rose-800",
-  warning: "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800",
-  info: "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800",
+  critical: "bg-gray-100 border-gray-300 dark:bg-gray-800 dark:border-gray-600",
+  warning: "bg-gray-50 border-gray-200 dark:bg-gray-800/60 dark:border-gray-700",
+  info: "bg-gray-50 border-gray-200 dark:bg-gray-800/40 dark:border-gray-700",
 };
 
 function AnomalyLine({ anomaly }: { anomaly: PayoutAnomaly }) {

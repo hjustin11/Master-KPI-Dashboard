@@ -224,6 +224,7 @@ export async function submitAmazonListingItem(
   const path = `/listings/2021-08-01/items/${encodeURIComponent(sellerId)}/${encodeURIComponent(skuTrim)}`;
   const query = {
     marketplaceIds: marketplaceId,
+    productType: args.body.productType,
     issueLocale: "de_DE",
   };
 

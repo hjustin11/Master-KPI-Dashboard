@@ -22,7 +22,7 @@ function buildWaterfallData(t: PayoutTotals, tr: (k: string) => string): Waterfa
     value: t.grossSales,
     start: 0,
     end: t.grossSales,
-    fill: "#6b7280",
+    fill: "#64748b",
   });
 
   const deductions = [
@@ -79,19 +79,19 @@ export function PayoutsWaterfallChart({
 
   if (loading || !totals) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-lg border bg-card p-4">
-        <p className="text-sm text-muted-foreground">{t("payouts.loading")}</p>
+      <div className="flex h-64 items-center justify-center rounded-xl border bg-white p-4 shadow-sm dark:bg-card">
+        <p className="text-sm text-gray-500">{t("payouts.loading")}</p>
       </div>
     );
   }
 
   if (totals.grossSales <= 0) {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
-        <p className="text-sm text-amber-800 dark:text-amber-300">
+      <div className="rounded-lg border border-gray-300 bg-gray-100 p-5 dark:border-gray-600 dark:bg-gray-800">
+        <p className="text-sm font-medium text-black dark:text-white">
           {t("payouts.waterfall.onlyReturns")}
         </p>
-        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+        <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
           {t("payouts.kpi.netPayout")}: {new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(totals.netPayout)}
         </p>
       </div>
@@ -99,28 +99,32 @@ export function PayoutsWaterfallChart({
   }
 
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="mb-3 text-sm font-semibold">{t("payouts.waterfall.title")}</h3>
-      <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={data} margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
+    <div className="rounded-xl border bg-white p-6 shadow-sm dark:bg-card">
+      <h3 className="mb-1 text-base font-bold text-black dark:text-white">
+        {t("payouts.waterfall.title")}
+      </h3>
+      <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+        Vom Bruttoumsatz zur Netto-Auszahlung — jeder rote Balken zeigt einen Abzug
+      </p>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={data} margin={{ top: 10, right: 10, bottom: 30, left: 10 }}>
           <XAxis
             dataKey="label"
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 11, fill: "#64748b" }}
             interval={0}
             angle={-25}
             textAnchor="end"
             height={60}
           />
-          <YAxis tick={{ fontSize: 11 }} tickFormatter={formatEurShort} width={55} />
+          <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={formatEurShort} width={55} />
           <Tooltip
             formatter={(value) =>
               new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(Number(value ?? 0))
             }
-            labelStyle={{ fontWeight: 600 }}
+            labelStyle={{ fontWeight: 600, color: "#1a2332" }}
+            contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13 }}
           />
-          {/* Invisible bar for offset (waterfall effect) */}
           <Bar dataKey="start" stackId="waterfall" fill="transparent" isAnimationActive={false} />
-          {/* Visible bar for the actual value segment */}
           <Bar dataKey={(entry: WaterfallEntry) => Math.abs(entry.end - entry.start)} stackId="waterfall" isAnimationActive>
             {data.map((entry, idx) => (
               <Cell key={idx} fill={entry.fill} />

@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const productType = productTypeOverride || "PRODUCT";
+  const productType = productTypeOverride || values.amazonProductType || "PET_SUPPLIES";
   const built = buildAmazonListingPutBody({
     values,
     marketplaceId,

@@ -37,8 +37,11 @@ import useCrossListingSubmit from "@/shared/hooks/useCrossListingSubmit";
 import { useTranslation } from "@/i18n/I18nProvider";
 import type { EditorCtx } from "./crossListing/types";
 import { CrossListingAiBlock } from "./crossListing/CrossListingAiBlock";
+import { CrossListingAmazonFields } from "./crossListing/CrossListingAmazonFields";
 import { CrossListingEditorBody } from "./crossListing/CrossListingEditorBody";
 import { CrossListingFooter } from "./crossListing/CrossListingFooter";
+import { detectAmazonProductType, detectBrowseNode } from "@/shared/lib/amazon/productTypeDetection";
+import { validateForAmazonSubmit } from "@/shared/lib/crossListing/amazonPreSubmitValidator";
 
 const AMAZON_LOGO = "/brand/marketplaces/amazon.svg";
 
@@ -126,32 +129,39 @@ export default function CrossListingEditorDialog({
     } else {
       return;
     }
-    // Amazon: Pflichtfelder in attributes seeden, damit User sie im Dialog sieht
+    // Amazon: Produkttyp + Browse-Node + alle Compliance-Defaults automatisch setzen
     if (targetSlug === "amazon") {
-      const AMAZON_REQUIRED: Record<string, string> = {
+      // Produkttyp erkennen
+      const pt = vals.amazonProductType || detectAmazonProductType(vals.title, vals.description).productType;
+      // Browse-Node erkennen
+      const bn = detectBrowseNode(pt, vals.title, vals.description);
+      // Modellname: Titel ohne Markenpräfix
+      const modelName = vals.title?.replace(new RegExp(`^${vals.brand}\\s+`, "i"), "").trim() || vals.title;
+
+      const defaults: Record<string, string> = {
+        recommended_browse_nodes: bn.nodeId,
         model_number: sku ?? "",
-        color: "Mehrfarbig",
-        country_of_origin: "DE",
+        model_name: modelName,
+        manufacturer: vals.brand || "",
+        country_of_origin: "Deutschland",
+        supplier_declared_dg_hz_regulation: "Nicht zutreffend",
+        batteries_required: "Nein",
+        batteries_included: "Nein",
+        "epr_product_packaging.main_material": "Papier",
+        warranty_description: "Gesetzliche Gewährleistung",
         unit_count: "1",
         unit_count_type: "Stück",
-        recommended_browse_nodes: "",
-        power_plug_type: "does_not_require_a_plug",
-        accepted_voltage_frequency: "",
-        eu_energy_label_efficiency_class: "",
-        supplier_declared_dg_hz_regulation: "not_applicable",
-        contains_food_or_beverage: "false",
-        contains_liquid_contents: "false",
-        warranty_description: "Gesetzliche Gewährleistung",
+        included_components: `1x ${vals.title || "Produkt"}`,
         directions: "Siehe Produktverpackung",
-        included_components: vals.title || "",
-        efficiency: "Nicht zutreffend",
         specific_uses_for_product: vals.petSpecies || "Haustiere",
+        color: "Mehrfarbig",
       };
-      const seeded = { ...AMAZON_REQUIRED };
+      // User-Werte überschreiben Defaults
+      const seeded = { ...defaults };
       for (const [k, v] of Object.entries(vals.attributes ?? {})) {
         if (v) seeded[k] = v;
       }
-      vals = { ...vals, attributes: seeded };
+      vals = { ...vals, amazonProductType: pt, attributes: seeded };
     }
     setValues(vals);
   }, [open, existingDraft, merged, targetSlug, sku]);
@@ -267,7 +277,7 @@ export default function CrossListingEditorDialog({
       return;
     }
     setError(null);
-    await submit({ draftId, targetMarketplaceSlug: targetSlug, productType: "PET_SUPPLIES" });
+    await submit({ draftId, targetMarketplaceSlug: targetSlug, productType: values.amazonProductType || "PET_SUPPLIES" });
   }
 
   if (!open || !sku || !targetSlug || !config || !meta) {
@@ -335,6 +345,9 @@ export default function CrossListingEditorDialog({
               onOptimize={() => void handleOptimize()}
               onApplyAll={handleApplyAll}
             />
+            {targetSlug === "amazon" && (
+              <CrossListingAmazonFields values={values} setValues={setValues} sku={sku} />
+            )}
             <CrossListingEditorBody ctx={ctx} />
             {(submitState.result || submitState.error) && (
               <div
@@ -376,7 +389,7 @@ export default function CrossListingEditorDialog({
           error={error}
           saving={saving}
           canSave={canSave}
-          uploadEnabled={targetSlug === "amazon" && !!persistedDraftId}
+          uploadEnabled={targetSlug === "amazon" && !!persistedDraftId && (targetSlug !== "amazon" || validateForAmazonSubmit(values, values.amazonProductType || "PET_SUPPLIES").valid)}
           uploading={submitState.loading}
           onClose={onClose}
           onSave={() => void handleSave()}

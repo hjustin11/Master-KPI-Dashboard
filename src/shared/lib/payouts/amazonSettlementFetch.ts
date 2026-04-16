@@ -213,16 +213,51 @@ function parseDate(raw: string): string {
   return s.slice(0, 10);
 }
 
-/** Parst Betrag: "1,234.56" oder "1.234,56" (deutsches Format) → Number */
+/** Parst Betrag: "1,234.56", "1.234,56", "-36.159,16", "€ 1.234 €" → Number */
 function parseAmount(raw: string): number {
-  const s = raw.trim();
-  if (!s) return 0;
-  // Deutsches Format: 1.234,56 → entferne Tausender-Punkte, ersetze Komma mit Punkt
-  if (s.includes(",") && s.indexOf(",") > s.lastIndexOf(".")) {
-    return parseFloat(s.replace(/\./g, "").replace(",", ".")) || 0;
+  if (!raw) return 0;
+  // Entferne alles außer Ziffern, Punkt, Komma, Minus
+  const cleaned = raw.replace(/[^\d,.\-]/g, "").trim();
+  if (!cleaned) return 0;
+
+  const hasComma = cleaned.includes(",");
+  const hasDot = cleaned.includes(".");
+
+  let normalized: string;
+  if (hasComma && hasDot) {
+    const lastComma = cleaned.lastIndexOf(",");
+    const lastDot = cleaned.lastIndexOf(".");
+    if (lastComma > lastDot) {
+      // Deutsch: 1.234,56 → Tausender-Punkt weg, Komma→Punkt
+      normalized = cleaned.replace(/\./g, "").replace(",", ".");
+    } else {
+      // Englisch: 1,234.56 → Komma-Tausender weg
+      normalized = cleaned.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    // Nur Komma: Dezimaltrenner (1234,56) oder Tausender (1,234)?
+    const parts = cleaned.split(",");
+    if (parts.length === 2 && parts[1].length <= 2) {
+      // 2 oder weniger Nachkommastellen → Dezimal
+      normalized = cleaned.replace(",", ".");
+    } else if (parts.length === 2 && parts[1].length === 3 && !parts[0].includes("-")) {
+      // Genau 3 Ziffern → mehrdeutig, nehme Dezimal (Amazon-TSV meist 2 Nachkomma)
+      normalized = cleaned.replace(",", ".");
+    } else {
+      normalized = cleaned.replace(/,/g, "");
+    }
+  } else {
+    normalized = cleaned;
   }
-  // Englisches Format: 1,234.56 → entferne Komma-Tausender
-  return parseFloat(s.replace(/,/g, "")) || 0;
+
+  const num = parseFloat(normalized);
+  if (!Number.isFinite(num)) return 0;
+  // Plausibilitäts-Check: kein Einzelbetrag > 100 Mio
+  if (Math.abs(num) > 100_000_000) {
+    console.warn(`${LOG} Suspicious amount: "${raw}" → ${num}, capped to 0`);
+    return 0;
+  }
+  return num;
 }
 
 function parseSettlementTsv(tsv: string): ParsedSettlement {
