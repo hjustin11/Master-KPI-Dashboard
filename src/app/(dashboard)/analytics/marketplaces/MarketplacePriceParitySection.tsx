@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, Loader2, Plus } from "lucide-react";
+import { AlertCircle, ArrowUpDown, CheckCircle2, ChevronDown, ChevronUp, Loader2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { ApiDataSourceDebugPopover } from "@/shared/components/ApiDataSourceDebugPopover";
 import { Button } from "@/components/ui/button";
@@ -205,6 +205,9 @@ function ParityCellValue({
   onCreateListing,
   hasDraft,
   matchInfo,
+  onVerify,
+  verifying,
+  verifyResult,
 }: {
   label: string;
   price: number | null;
@@ -218,6 +221,9 @@ function ParityCellValue({
   onCreateListing?: () => void;
   hasDraft?: boolean;
   matchInfo?: MatchInfo | null;
+  onVerify?: () => void;
+  verifying?: boolean;
+  verifyResult?: { matched: boolean; reason: string } | null;
 }) {
   const { t, locale } = useTranslation();
   const intlTag = intlLocaleTag(locale);
@@ -243,6 +249,27 @@ function ParityCellValue({
           {t("priceParity.missingListing")}
         </Badge>
         <span className="text-[10px] leading-tight text-muted-foreground">{t("priceParity.noListing")}</span>
+        {matchInfo ? <MatchBadge info={matchInfo} /> : null}
+        {onVerify ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-0.5 h-5 w-fit gap-0.5 px-1.5 text-[10px]"
+            onClick={onVerify}
+            disabled={verifying}
+            title="Listing via Marktplatz-API verifizieren"
+          >
+            {verifying ? (
+              <Loader2 className="size-2.5 animate-spin" />
+            ) : verifyResult?.matched ? (
+              <CheckCircle2 className="size-2.5" />
+            ) : (
+              <Search className="size-2.5" />
+            )}
+            {verifying ? "Prüfe…" : verifyResult ? (verifyResult.matched ? "Gefunden" : "Nicht gefunden") : "Verifizieren"}
+          </Button>
+        ) : null}
         {onCreateListing ? (
           <Button
             type="button"
@@ -349,6 +376,43 @@ export function MarketplacePriceParitySection() {
   const [draftStockValues, setDraftStockValues] = useState<Record<string, string>>({});
   const [savingEdits, setSavingEdits] = useState(false);
   const [headerSolid, setHeaderSolid] = useState(false);
+  const [verifyingCells, setVerifyingCells] = useState<Record<string, boolean>>({});
+  const [verifyResults, setVerifyResults] = useState<Record<string, { matched: boolean; reason: string }>>({});
+
+  const verifyCell = useCallback(
+    async (row: ParityRow, slug: string) => {
+      const key = `${row.sku}::${slug}`;
+      setVerifyingCells((prev) => ({ ...prev, [key]: true }));
+      try {
+        const res = await fetch("/api/marketplaces/price-parity/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sku: row.sku,
+            marketplaceSlug: slug,
+            title: row.name,
+          }),
+        });
+        const json = (await res.json().catch(() => ({}))) as {
+          matched?: boolean;
+          reason?: string;
+          error?: string;
+        };
+        setVerifyResults((prev) => ({
+          ...prev,
+          [key]: {
+            matched: Boolean(json.matched),
+            reason: json.reason ?? json.error ?? "",
+          },
+        }));
+      } catch {
+        setVerifyResults((prev) => ({ ...prev, [key]: { matched: false, reason: "Fehler" } }));
+      } finally {
+        setVerifyingCells((prev) => ({ ...prev, [key]: false }));
+      }
+    },
+    []
+  );
   const payloadRef = useRef<ParityResponse | null>(null);
   const latestRequestRef = useRef(0);
   const pendingForegroundLoadsRef = useRef(0);
@@ -919,6 +983,9 @@ export function MarketplacePriceParitySection() {
                         matchInfo={row.amazon.matchInfo ?? null}
                         editing={Boolean(editMode)}
                         editingMode={editMode}
+                        onVerify={() => verifyCell(row, "amazon")}
+                        verifying={Boolean(verifyingCells[`${row.sku}::amazon`])}
+                        verifyResult={verifyResults[`${row.sku}::amazon`] ?? null}
                         onPriceChange={(value) =>
                           setDraftPriceValues((prev) => ({ ...prev, [cellKey(row.sku, "amazon")]: value }))
                         }
@@ -964,6 +1031,9 @@ export function MarketplacePriceParitySection() {
                             matchInfo={cell.matchInfo ?? null}
                             editing={Boolean(editMode)}
                             editingMode={editMode}
+                            onVerify={() => verifyCell(row, m.slug)}
+                            verifying={Boolean(verifyingCells[`${row.sku}::${m.slug}`])}
+                            verifyResult={verifyResults[`${row.sku}::${m.slug}`] ?? null}
                             onPriceChange={(value) =>
                               setDraftPriceValues((prev) => ({ ...prev, [cellKey(row.sku, m.slug)]: value }))
                             }
