@@ -796,47 +796,56 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
   // Gespeicherte Listing-Mappings laden (z. B. nach Upload via Cross-Listing).
   // Damit wird eine Zelle nicht mehr als "missing" angezeigt, sobald wir den Artikel
   // auf dem Marktplatz hochgeladen haben — auch wenn der Produkt-Cache noch nachhinkt.
+  // WICHTIG: nur SKUs aus der aktuellen Zeilenliste abfragen (Batching statt Full-Scan),
+  // damit die Query skaliert, wenn die Mapping-Tabelle wächst.
   try {
-    const adminForMappings = createAdminClient();
-    const { data: mappings } = await adminForMappings
-      .from("marketplace_article_mappings")
-      .select("xentral_sku, marketplace_slug, match_type, confidence");
-    if (Array.isArray(mappings) && mappings.length) {
-      const bySkuSlug = new Map<string, { matchType: MatchType; confidence: number }>();
-      for (const m of mappings) {
-        const sku =
-          typeof m.xentral_sku === "string" ? m.xentral_sku.trim().toLowerCase() : "";
-        const slug =
-          typeof m.marketplace_slug === "string" ? m.marketplace_slug.trim() : "";
-        const type = typeof m.match_type === "string" ? (m.match_type as MatchType) : "manual";
-        const conf = typeof m.confidence === "number" ? m.confidence : 1;
-        if (!sku || !slug) continue;
-        bySkuSlug.set(`${sku}::${slug}`, { matchType: type, confidence: conf });
-      }
-      for (const row of rows) {
-        const sku = row.sku.trim().toLowerCase();
-        if (!sku) continue;
-        const amazonMapping = bySkuSlug.get(`${sku}::amazon`);
-        if (amazonMapping && row.amazon.state === "missing") {
-          row.amazon.matchInfo = row.amazon.matchInfo ?? {
-            type: amazonMapping.matchType,
-            confidence: amazonMapping.confidence,
-            marketplaceSku: row.sku,
-            reason: "Listing wurde via Cross-Listing hochgeladen.",
-          };
+    const skuList = rows
+      .map((r) => r.sku.trim().toLowerCase())
+      .filter((s): s is string => s.length > 0);
+    if (skuList.length) {
+      const adminForMappings = createAdminClient();
+      const { data: mappings } = await adminForMappings
+        .from("marketplace_article_mappings")
+        .select("xentral_sku, marketplace_slug, match_type, confidence")
+        .in("xentral_sku", skuList)
+        .limit(skuList.length * ANALYTICS_MARKETPLACES.length + 50);
+      if (Array.isArray(mappings) && mappings.length) {
+        const bySkuSlug = new Map<string, { matchType: MatchType; confidence: number }>();
+        for (const m of mappings) {
+          const sku =
+            typeof m.xentral_sku === "string" ? m.xentral_sku.trim().toLowerCase() : "";
+          const slug =
+            typeof m.marketplace_slug === "string" ? m.marketplace_slug.trim() : "";
+          const type = typeof m.match_type === "string" ? (m.match_type as MatchType) : "manual";
+          const conf = typeof m.confidence === "number" ? m.confidence : 1;
+          if (!sku || !slug) continue;
+          bySkuSlug.set(`${sku}::${slug}`, { matchType: type, confidence: conf });
         }
-        for (const m of ANALYTICS_MARKETPLACES) {
-          const mapping = bySkuSlug.get(`${sku}::${m.slug}`);
-          if (!mapping) continue;
-          const cell = row.otherMarketplaces[m.slug];
-          if (!cell) continue;
-          if (cell.state === "missing" || cell.state === "not_connected") {
-            cell.matchInfo = cell.matchInfo ?? {
-              type: mapping.matchType,
-              confidence: mapping.confidence,
+        for (const row of rows) {
+          const sku = row.sku.trim().toLowerCase();
+          if (!sku) continue;
+          const amazonMapping = bySkuSlug.get(`${sku}::amazon`);
+          if (amazonMapping && row.amazon.state === "missing") {
+            row.amazon.matchInfo = row.amazon.matchInfo ?? {
+              type: amazonMapping.matchType,
+              confidence: amazonMapping.confidence,
               marketplaceSku: row.sku,
               reason: "Listing wurde via Cross-Listing hochgeladen.",
             };
+          }
+          for (const m of ANALYTICS_MARKETPLACES) {
+            const mapping = bySkuSlug.get(`${sku}::${m.slug}`);
+            if (!mapping) continue;
+            const cell = row.otherMarketplaces[m.slug];
+            if (!cell) continue;
+            if (cell.state === "missing" || cell.state === "not_connected") {
+              cell.matchInfo = cell.matchInfo ?? {
+                type: mapping.matchType,
+                confidence: mapping.confidence,
+                marketplaceSku: row.sku,
+                reason: "Listing wurde via Cross-Listing hochgeladen.",
+              };
+            }
           }
         }
       }

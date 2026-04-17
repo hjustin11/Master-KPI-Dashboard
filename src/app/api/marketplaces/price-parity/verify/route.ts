@@ -72,13 +72,17 @@ export async function POST(request: Request) {
     ean: body.ean ?? null,
   };
 
+  // WICHTIG: KEIN forceRefresh. Der Verify-Button soll gegen die gecachten
+  // Marktplatz-Daten prüfen — sonst hämmern parallele Klicks die externen APIs
+  // und flooden Supabase mit Cache-Writes (DB-Crash-Risiko).
+  // Fresh-Fetch läuft über den regulären Background-Sync der Produkt-Cache-Schicht.
   let rows: Array<Record<string, unknown>> | null = null;
 
   if (marketplaceSlug === "amazon") {
     try {
       const origin = new URL(request.url).origin;
       const cookie = request.headers.get("cookie") ?? "";
-      const res = await fetch(`${origin}/api/amazon/products?status=all&all=1&refresh=1`, {
+      const res = await fetch(`${origin}/api/amazon/products?status=all&all=1`, {
         cache: "no-store",
         headers: { cookie },
       });
@@ -90,7 +94,7 @@ export async function POST(request: Request) {
       rows = null;
     }
   } else {
-    const cached = await loadMarketplaceProductRowsForPriceParity(marketplaceSlug, true);
+    const cached = await loadMarketplaceProductRowsForPriceParity(marketplaceSlug, false);
     rows = (cached as Array<Record<string, unknown>> | null) ?? null;
   }
 

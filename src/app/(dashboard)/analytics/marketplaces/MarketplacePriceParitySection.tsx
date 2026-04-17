@@ -379,8 +379,14 @@ export function MarketplacePriceParitySection() {
   const [verifyingCells, setVerifyingCells] = useState<Record<string, boolean>>({});
   const [verifyResults, setVerifyResults] = useState<Record<string, { matched: boolean; reason: string }>>({});
 
+  const verifyInFlightRef = useRef(false);
+
   const verifyCell = useCallback(
     async (row: ParityRow, slug: string) => {
+      // Rate-Limit: nur ein Verify gleichzeitig. Schützt Supabase + externe APIs
+      // vor Klick-Spam (vorherige Crash-Ursache: parallele forceRefresh-Calls).
+      if (verifyInFlightRef.current) return;
+      verifyInFlightRef.current = true;
       const key = `${row.sku}::${slug}`;
       setVerifyingCells((prev) => ({ ...prev, [key]: true }));
       try {
@@ -409,6 +415,7 @@ export function MarketplacePriceParitySection() {
         setVerifyResults((prev) => ({ ...prev, [key]: { matched: false, reason: "Fehler" } }));
       } finally {
         setVerifyingCells((prev) => ({ ...prev, [key]: false }));
+        verifyInFlightRef.current = false;
       }
     },
     []
