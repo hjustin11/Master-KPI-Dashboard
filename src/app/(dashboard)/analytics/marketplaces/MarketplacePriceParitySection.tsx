@@ -160,6 +160,8 @@ function formatNumberishInput(v: number | null): string {
   return String(v);
 }
 
+const HIDDEN_MATCH_BADGE_TYPES = new Set(["sku_exact", "sku_partial", "title_fuzzy"]);
+
 const MATCH_TYPE_LABELS: Record<string, string> = {
   sku_exact: "SKU",
   sku_partial: "SKU*",
@@ -249,7 +251,7 @@ function ParityCellValue({
           {t("priceParity.missingListing")}
         </Badge>
         <span className="text-[10px] leading-tight text-muted-foreground">{t("priceParity.noListing")}</span>
-        {matchInfo ? <MatchBadge info={matchInfo} /> : null}
+        {matchInfo && !HIDDEN_MATCH_BADGE_TYPES.has(matchInfo.type) ? <MatchBadge info={matchInfo} /> : null}
         {onVerify ? (
           <Button
             type="button"
@@ -324,10 +326,8 @@ function ParityCellValue({
     </span>
   );
 
-  // SKU*, Titel und SKU-exakt werden nicht als Badge angezeigt — nur starke
-  // Non-SKU-Matches (EAN, ASIN, Modell, Upload) bekommen einen Indikator.
-  const HIDDEN_BADGE_TYPES = new Set(["sku_exact", "sku_partial", "title_fuzzy"]);
-  const showMatchBadge = Boolean(matchInfo && !HIDDEN_BADGE_TYPES.has(matchInfo.type));
+  // Nur starke Non-SKU-Matches (EAN, ASIN, Modell, Upload) bekommen einen Badge.
+  const showMatchBadge = Boolean(matchInfo && !HIDDEN_MATCH_BADGE_TYPES.has(matchInfo.type));
 
   return (
     <div className="flex flex-col gap-1" title={label}>
