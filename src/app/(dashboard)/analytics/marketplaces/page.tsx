@@ -35,6 +35,7 @@ import usePdfReportDialog from "@/shared/hooks/usePdfReportDialog";
 import useMarketplaceTotals from "@/shared/hooks/useMarketplaceTotals";
 import useMarketplaceReportRows from "@/shared/hooks/useMarketplaceReportRows";
 import useMarketplaceSalesLoader from "@/shared/hooks/useMarketplaceSalesLoader";
+import useAmazonCountriesSalesLoader from "@/shared/hooks/useAmazonCountriesSalesLoader";
 
 function AnalyticsMarketplacesPage() {
   const { t, locale } = useTranslation();
@@ -43,6 +44,12 @@ function AnalyticsMarketplacesPage() {
 
   const { period, setPeriod, periodRef, forceUnblockTotalStrip } = useMarketplacePeriod();
   const { states: salesStates } = useMarketplaceSalesLoader({
+    periodFrom: period.from,
+    periodTo: period.to,
+    periodRef,
+    t,
+  });
+  const amazonCountries = useAmazonCountriesSalesLoader({
     periodFrom: period.from,
     periodTo: period.to,
     periodRef,
@@ -434,6 +441,40 @@ function AnalyticsMarketplacesPage() {
           error={amazonError}
           onOpenDetail={() => openDetailAt("amazon")}
         />
+
+        {amazonCountries.marketplaces.map((m) => {
+          const state = amazonCountries.states[m.slug];
+          const countrySummary = state?.data?.summary;
+          const countryPrev = state?.data?.previousSummary;
+          const countryTrend = countrySummary
+            ? formatTrendPct(
+                state?.data?.revenueDeltaPct,
+                countryPrev?.salesAmount ?? 0,
+                countrySummary.salesAmount,
+                intlTag,
+                (key) => t(key)
+              )
+            : { text: PLACEHOLDER, direction: "unknown" as TrendDirection };
+          return (
+            <MarketplaceTile
+              key={m.slug}
+              label={`${m.countryFlag} ${m.shortName}`}
+              logoSrc="/brand/amazon-logo-current.png"
+              logoPreset="amazon"
+              summary={countrySummary}
+              previousSummary={countryPrev}
+              trend={countryTrend}
+              periodKpis={periodKpis}
+              intlTag={intlTag}
+              loading={Boolean(state?.loading)}
+              error={state?.error ?? null}
+              onOpenDetail={() => {
+                // Detail-Dialog unterstützt in Phase 2 noch keine Amazon-Länder-Slugs.
+                // Phase 3 wird das erweitern.
+              }}
+            />
+          );
+        })}
 
         <MarketplaceTile
           label="eBay"

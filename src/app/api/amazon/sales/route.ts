@@ -20,6 +20,10 @@ import {
   sumStatusAmounts,
   type MarketplaceFeePolicy,
 } from "@/shared/lib/marketplace-profitability";
+import {
+  DEFAULT_AMAZON_SLUG,
+  getAmazonMarketplaceBySlug,
+} from "@/shared/config/amazonMarketplaces";
 
 type AmazonOrder = {
   AmazonOrderId?: string;
@@ -730,6 +734,24 @@ export async function GET(request: Request) {
     const compareMode: CompareMode = searchParams.get("compareMode") === "previous" ? "previous" : "yoy";
     const fromYmd = parseYmdParam(searchParams.get("from"));
     const toYmd = parseYmdParam(searchParams.get("to"));
+
+    // Multi-Country: ?amazonSlug=amazon-fr überschreibt den Default-Marketplace.
+    // Ohne Override bleibt die ENV-Liste (heute nur DE) als Basis erhalten.
+    const amazonSlugParam = (searchParams.get("amazonSlug") ?? "").trim();
+    if (amazonSlugParam) {
+      const resolvedMarketplace = getAmazonMarketplaceBySlug(amazonSlugParam);
+      if (!resolvedMarketplace) {
+        return NextResponse.json(
+          { error: `Unbekannter Amazon-Slug: ${amazonSlugParam}` },
+          { status: 400 }
+        );
+      }
+      config.marketplaceIds = [resolvedMarketplace.marketplaceId];
+    } else if (config.marketplaceIds.length > 1) {
+      // Ohne expliziten Slug nur den ersten (historisches Verhalten, DE als Default).
+      config.marketplaceIds = [config.marketplaceIds[0]];
+    }
+    void DEFAULT_AMAZON_SLUG;
 
     const now = Date.now();
     let days: number;

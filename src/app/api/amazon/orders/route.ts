@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 export const maxDuration = 60;
 import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import { getAmazonMarketplaceBySlug } from "@/shared/config/amazonMarketplaces";
 import {
   readIntegrationCacheForDashboard,
   writeIntegrationCache,
@@ -482,6 +483,20 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
+
+    // Multi-Country: ?amazonSlug=amazon-fr überschreibt den Default-Marketplace.
+    const amazonSlugParam = (searchParams.get("amazonSlug") ?? "").trim();
+    if (amazonSlugParam) {
+      const resolvedMarketplace = getAmazonMarketplaceBySlug(amazonSlugParam);
+      if (!resolvedMarketplace) {
+        return NextResponse.json(
+          { error: `Unbekannter Amazon-Slug: ${amazonSlugParam}` },
+          { status: 400 }
+        );
+      }
+      config.marketplaceIds = [resolvedMarketplace.marketplaceId];
+    }
+
     const now = new Date();
     const yesterday = new Date(now);
     yesterday.setDate(now.getDate() - 1);
