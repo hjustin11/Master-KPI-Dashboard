@@ -29,6 +29,9 @@ export type AmazonCountryLoaderState = {
  * Lädt Sales-Daten nur für ADDITIONAL Amazon-Länder (alles außer DE).
  * DE wird vom Haupt-Loader (`useMarketplaceSalesLoader`) geladen unter dem
  * Slug `amazon` — hier würde es doppelt laden. Daher nur `enabled && !amazon-de`.
+ *
+ * Die Liste der aktivierten Länder kommt aus `/api/amazon/marketplace-config`
+ * (DB-backed seit Phase 3). Fallback: static config.enabled.
  */
 export default function useAmazonCountriesSalesLoader(params: {
   periodFrom: string;
@@ -42,9 +45,39 @@ export default function useAmazonCountriesSalesLoader(params: {
 } {
   const { periodFrom, periodTo, periodRef, t } = params;
 
+  const [enabledSlugs, setEnabledSlugs] = useState<Set<string>>(
+    () => new Set(AMAZON_EU_MARKETPLACES.filter((m) => m.enabled).map((m) => m.slug))
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/amazon/marketplace-config", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          marketplaces?: Array<{ slug: string; enabledInDb: boolean }>;
+        };
+        if (cancelled || !json.marketplaces) return;
+        const next = new Set(
+          json.marketplaces.filter((m) => m.enabledInDb).map((m) => m.slug)
+        );
+        setEnabledSlugs(next);
+      } catch {
+        // Fallback auf static config — bereits initialer State.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const extras = useMemo(
-    () => AMAZON_EU_MARKETPLACES.filter((m) => m.enabled && m.slug !== DEFAULT_AMAZON_SLUG),
-    []
+    () =>
+      AMAZON_EU_MARKETPLACES.filter(
+        (m) => enabledSlugs.has(m.slug) && m.slug !== DEFAULT_AMAZON_SLUG
+      ),
+    [enabledSlugs]
   );
 
   const [states, setStates] = useState<Record<string, AmazonCountryLoaderState>>(() => {

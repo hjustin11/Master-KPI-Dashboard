@@ -174,6 +174,7 @@ export const navItems: NavItem[] = [
       { labelKey: "nav.settingsUsers", href: "/settings/users" },
       { labelKey: "nav.settingsProfile", href: "/settings/profile" },
       { labelKey: "nav.settingsTutorials", href: "/settings/tutorials" },
+      { labelKey: "nav.settingsAmazonMarketplaces", href: "/settings/amazon" },
     ],
   },
   {
