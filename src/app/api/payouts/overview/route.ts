@@ -204,9 +204,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "from und to sind Pflicht (YYYY-MM-DD)." }, { status: 400 });
   }
 
-  const marketplaces = marketplacesParam
+  // "amazon" (legacy) expandieren auf "amazon-de" + alle anderen amazon-<country> Slugs,
+  // damit alte UI-Filter weiterhin alle Amazon-Settlements liefern.
+  const parsedMarketplaces = marketplacesParam
     ? marketplacesParam.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
+  const marketplaces = parsedMarketplaces.flatMap((s) => {
+    if (s !== "amazon") return [s];
+    // 'amazon' wird zu allen Amazon-Country-Slugs + legacy 'amazon' expandiert.
+    return [
+      "amazon",
+      "amazon-de",
+      "amazon-fr",
+      "amazon-it",
+      "amazon-es",
+      "amazon-nl",
+      "amazon-pl",
+      "amazon-se",
+      "amazon-be",
+      "amazon-uk",
+    ];
+  });
 
   const fromMs = new Date(from).getTime();
   const toMs = new Date(to).getTime();

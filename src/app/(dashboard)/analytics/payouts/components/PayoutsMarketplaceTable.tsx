@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { ANALYTICS_MARKETPLACES } from "@/shared/lib/analytics-marketplaces";
+import { getAmazonMarketplaceBySlug } from "@/shared/config/amazonMarketplaces";
 import type { PayoutRow } from "@/shared/lib/payouts/payoutTypes";
 import { useTranslation } from "@/i18n/I18nProvider";
 
@@ -14,7 +15,17 @@ function pct(n: number): string {
 }
 
 function resolveMeta(slug: string) {
+  // Legacy-Slug 'amazon' zeigt weiterhin generische Amazon-Karte (falls alte Rows
+  // noch nicht migriert sind).
   if (slug === "amazon") return { label: "Amazon", logo: "/brand/marketplaces/amazon.svg" };
+  // Neue Country-Slugs 'amazon-de', 'amazon-fr', ...
+  const amzCountry = getAmazonMarketplaceBySlug(slug);
+  if (amzCountry) {
+    return {
+      label: `${amzCountry.countryFlag} ${amzCountry.shortName}`,
+      logo: "/brand/marketplaces/amazon.svg",
+    };
+  }
   const m = ANALYTICS_MARKETPLACES.find((x) => x.slug === slug);
   return { label: m?.label ?? slug, logo: m?.logo ?? "" };
 }

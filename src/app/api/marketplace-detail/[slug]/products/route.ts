@@ -59,7 +59,7 @@ export async function GET(
   const { data: rows } = await admin
     .from("marketplace_payouts")
     .select("period_from, period_to, product_breakdown")
-    .eq("marketplace_slug", slug === "amazon" ? "amazon" : slug)
+    .eq("marketplace_slug", slug === "amazon" ? "amazon-de" : slug)
     .gte("period_to", prevFrom)
     .lte("period_from", to)
     .not("product_breakdown", "is", null);

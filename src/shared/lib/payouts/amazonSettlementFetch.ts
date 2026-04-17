@@ -63,23 +63,34 @@ type SettlementReportMeta = {
 
 /**
  * Listet alle verfügbaren Settlement-Reports (DONE) der letzten N Tage.
+ * Optional: nur Reports einer bestimmten Amazon-Marketplace-ID.
+ *
+ * Wichtig: Settlement-Reports sind IMMER pro Marketplace. Ein Report enthält
+ * nur Transaktionen eines einzigen Landes. Der Filter ist also notwendig,
+ * wenn wir pro Country-Slug die richtigen Reports synchronisieren wollen.
  */
 export async function listAvailableSettlements(
-  sinceDaysAgo = 90
+  sinceDaysAgo = 90,
+  marketplaceIdFilter?: string
 ): Promise<SettlementReportMeta[]> {
   const { base } = await buildBaseArgs();
   const since = new Date(Date.now() - sinceDaysAgo * 86_400_000).toISOString();
+
+  const query: Record<string, string> = {
+    reportTypes: "GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2",
+    processingStatuses: "DONE",
+    createdSince: since,
+    pageSize: "25",
+  };
+  if (marketplaceIdFilter) {
+    query.marketplaceIds = marketplaceIdFilter;
+  }
 
   const res = await spApiRequest({
     ...base,
     method: "GET",
     path: "/reports/2021-06-30/reports",
-    query: {
-      reportTypes: "GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2",
-      processingStatuses: "DONE",
-      createdSince: since,
-      pageSize: "25",
-    },
+    query,
   });
 
   if (!res.res.ok) {
