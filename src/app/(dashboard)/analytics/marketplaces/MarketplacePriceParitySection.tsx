@@ -990,7 +990,7 @@ export function MarketplacePriceParitySection() {
                         matchInfo={row.amazon.matchInfo ?? null}
                         editing={Boolean(editMode)}
                         editingMode={editMode}
-                        onVerify={() => verifyCell(row, "amazon")}
+                        onVerify={showApiSourceDebug ? () => verifyCell(row, "amazon") : undefined}
                         verifying={Boolean(verifyingCells[`${row.sku}::amazon`])}
                         verifyResult={verifyResults[`${row.sku}::amazon`] ?? null}
                         onPriceChange={(value) =>
@@ -1038,7 +1038,7 @@ export function MarketplacePriceParitySection() {
                             matchInfo={cell.matchInfo ?? null}
                             editing={Boolean(editMode)}
                             editingMode={editMode}
-                            onVerify={() => verifyCell(row, m.slug)}
+                            onVerify={showApiSourceDebug ? () => verifyCell(row, m.slug) : undefined}
                             verifying={Boolean(verifyingCells[`${row.sku}::${m.slug}`])}
                             verifyResult={verifyResults[`${row.sku}::${m.slug}`] ?? null}
                             onPriceChange={(value) =>

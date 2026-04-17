@@ -7,6 +7,7 @@ import {
   type MatchCandidate,
   type XentralArticle as MatcherArticle,
 } from "@/shared/lib/crossListing/articleMatcher";
+import { isEntwicklerProfileRole } from "@/shared/lib/roles";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -55,6 +56,16 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: "Nicht authentifiziert." }, { status: 401 });
+  }
+
+  // Nur Entwickler dürfen verifizieren (Rate-Limit + externer API-Kontakt).
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!isEntwicklerProfileRole(profile?.role)) {
+    return NextResponse.json({ error: "Keine Berechtigung." }, { status: 403 });
   }
 
   const body = (await request.json().catch(() => null)) as VerifyRequest | null;
