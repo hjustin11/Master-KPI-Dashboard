@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  DEFAULT_AMAZON_SLUG,
+  getAmazonMarketplaceBySlug,
+} from "@/shared/config/amazonMarketplaces";
 
 // --- Types ---
 
@@ -64,8 +68,25 @@ export function getBasePflichtFields(): PflichtField[] {
   return loadRegistry().pflicht_fields_base;
 }
 
-export function getOfferFields() {
-  return loadRegistry().offer_fields;
+/**
+ * Ersetzt `{{marketplaceId}}`-Platzhalter in api_field-Strings gegen eine
+ * konkrete SP-API marketplace_id. Default: amazon-de.
+ */
+function substituteMarketplace<T extends { api_field: string }>(
+  entries: T[],
+  marketplaceId: string
+): T[] {
+  return entries.map((entry) => ({
+    ...entry,
+    api_field: entry.api_field.replace(/\{\{marketplaceId\}\}/g, marketplaceId),
+  }));
+}
+
+export function getOfferFields(options?: { marketplaceId?: string; amazonSlug?: string }) {
+  const slug = options?.amazonSlug ?? DEFAULT_AMAZON_SLUG;
+  const resolvedId =
+    options?.marketplaceId ?? getAmazonMarketplaceBySlug(slug)?.marketplaceId ?? "A1PA6795UKMFR9";
+  return substituteMarketplace(loadRegistry().offer_fields, resolvedId);
 }
 
 // --- Alias Translation ---

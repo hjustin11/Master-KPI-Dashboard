@@ -9,6 +9,7 @@ import {
   parsePaginationParam,
   type AmazonProductsCachedPayload,
 } from "@/shared/lib/amazonProductsSpApiCatalog";
+import { getDefaultAmazonMarketplaceId } from "@/shared/config/amazonMarketplaces";
 
 /** Vercel/Serverless: Listings können viele Seiten haben — genug Budget für Pagination + Reports. */
 export const maxDuration = 120;
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
     const allRows = searchParams.get("all") === "1";
     const limit = parsePaginationParam(searchParams.get("limit"), 50, 1, 250);
     const offset = parsePaginationParam(searchParams.get("offset"), 0, 0, 200_000);
-    const marketplaceId = config.marketplaceIds[0];
+    const marketplaceId = getDefaultAmazonMarketplaceId(config.marketplaceIds);
     const cacheKey = `amazon:products:${marketplaceId}`;
 
     const cached = await readIntegrationCache<AmazonProductsCachedPayload>(cacheKey);

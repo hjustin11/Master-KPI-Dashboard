@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { buildAmazonListingPutBody } from "./amazonListingPayload";
 import { emptyDraftValues, type CrossListingDraftValues } from "./crossListingDraftTypes";
+import { getAmazonMarketplaceBySlug } from "@/shared/config/amazonMarketplaces";
 
-const MID = "A1PA6795UKMFR9";
+const MID = getAmazonMarketplaceBySlug("amazon-de")!.marketplaceId;
 
 function v(overrides: Partial<CrossListingDraftValues> = {}): CrossListingDraftValues {
   return {

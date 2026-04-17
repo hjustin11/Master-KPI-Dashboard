@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { createAdminClient } from "@/shared/lib/supabase/admin";
+import { getDefaultAmazonMarketplaceId } from "@/shared/config/amazonMarketplaces";
 import { readIntegrationCache, writeIntegrationCache } from "@/shared/lib/integrationDataCache";
 import {
   marketplaceIntegrationFreshMs,
@@ -661,7 +662,7 @@ export async function resolveEffectiveAmazonSellerId(
         };
       };
       const participations = sellerPayload.payload?.marketplaceParticipations ?? [];
-      const match = participations.find((entry) => entry.marketplace?.id === config.marketplaceIds[0]);
+      const match = participations.find((entry) => entry.marketplace?.id === getDefaultAmazonMarketplaceId(config.marketplaceIds));
       const resolved = match?.participation?.sellerId ?? "";
       if (resolved) effectiveSellerId = resolved;
     }
@@ -693,7 +694,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
   /** Nächste Seite: `pagination.nextToken` muss als Query `pageToken` gesendet werden (nicht `nextToken`). */
   while (guard < 55) {
     const basePath = `/listings/2021-08-01/items/${encodeURIComponent(effectiveSellerId)}`;
-    const marketplace = config.marketplaceIds[0];
+    const marketplace = getDefaultAmazonMarketplaceId(config.marketplaceIds);
     const withListingsDefaults = (extra: Record<string, string>): Record<string, string> => ({
       marketplaceIds: marketplace,
       includedData: "summaries,offers,fulfillmentAvailability",
@@ -753,7 +754,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
         awsSecretAccessKey: config.awsSecretAccessKey,
         awsSessionToken: config.awsSessionToken,
         lwaAccessToken,
-        marketplaceId: config.marketplaceIds[0],
+        marketplaceId: getDefaultAmazonMarketplaceId(config.marketplaceIds),
       });
       if (fallback.pending) {
         return { outcome: "pending", source: fallback.source };
@@ -795,7 +796,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
           preview: (result?.text ?? "").slice(0, 320),
           attempts,
           sellerId: effectiveSellerId,
-          marketplaceId: config.marketplaceIds[0],
+          marketplaceId: getDefaultAmazonMarketplaceId(config.marketplaceIds),
           fallbackError: fallback.error,
         },
       };
@@ -846,7 +847,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
       awsSecretAccessKey: config.awsSecretAccessKey,
       awsSessionToken: config.awsSessionToken,
       lwaAccessToken,
-      marketplaceId: config.marketplaceIds[0],
+      marketplaceId: getDefaultAmazonMarketplaceId(config.marketplaceIds),
     });
     if (reportFallback.rows.length > 0) {
       dedupedRows = mergeMissingCommerceFieldsBySku(dedupedRows, reportFallback.rows);
@@ -897,7 +898,7 @@ export async function primeAmazonProductsIntegrationCache(): Promise<{
       return { ok: false, skipped: "missing_amazon_sp_api_config" };
     }
 
-    const marketplaceId = config.marketplaceIds[0];
+    const marketplaceId = getDefaultAmazonMarketplaceId(config.marketplaceIds);
     const cacheKey = `amazon:products:${marketplaceId}`;
     const lwaAccessToken = await obtainAmazonLwaAccessToken({
       refreshToken: config.refreshToken,

@@ -6113,7 +6113,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=ALL]#1.our_price#1.schedule#1.value_with_tax",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=ALL]#1.our_price#1.schedule#1.value_with_tax",
       "label": "Ihr Preis EUR (Bei Amazon verkaufen, DE)",
       "description": "Geben Sie den Grundpreis des Artikels an, zu dem er dem vorgesehenen Käufersegment angeboten wird (Bei Amazon verkaufen)",
       "example": "50.00",
@@ -6121,7 +6121,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=ALL]#1.automated_pricing_merchandising_rule_plan#1.merchandising_rule.rule_id",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=ALL]#1.automated_pricing_merchandising_rule_plan#1.merchandising_rule.rule_id",
       "label": "Preisgestaltungsregel (Bei Amazon verkaufen, DE)",
       "description": "Die Preisgestaltungsregel, die den Preis für dieses Angebot automatisiert (Bei Amazon verkaufen)",
       "example": "Wettbewerbsfähige Preisgestaltung bei Amazon",
@@ -6129,7 +6129,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=ALL]#1.minimum_seller_allowed_price#1.schedule#1.value_with_tax",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=ALL]#1.minimum_seller_allowed_price#1.schedule#1.value_with_tax",
       "label": "Zulässiger Mindestpreis für Verkäufer (Bei Amazon verkaufen, DE)",
       "description": "Geben Sie den zulässigen vom Käufer festgelegten Mindestpreis an (Bei Amazon verkaufen)",
       "example": "259.99",
@@ -6137,7 +6137,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=ALL]#1.maximum_seller_allowed_price#1.schedule#1.value_with_tax",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=ALL]#1.maximum_seller_allowed_price#1.schedule#1.value_with_tax",
       "label": "Maximaler Verkäuferpreis (Bei Amazon verkaufen, DE)",
       "description": "Geben Sie den maximal zulässigen Verkäuferpreis an (Bei Amazon verkaufen)",
       "example": "259.99",
@@ -6145,7 +6145,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=ALL]#1.discounted_price#1.schedule#1.end_at",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=ALL]#1.discounted_price#1.schedule#1.end_at",
       "label": "Enddatum für den Angebotspreis (Bei Amazon verkaufen, DE)",
       "description": "Das letzte Datum, an dem der Verkaufspreis den Standardpreis des Artikels überschreibt; der Standardpreis des Produkts wird nach 0:00 Uhr des Verkaufsendtages angezeigt. (Bei Amazon verkaufen)",
       "example": "2017-07-01",
@@ -6153,7 +6153,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=ALL]#1.discounted_price#1.schedule#1.start_at",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=ALL]#1.discounted_price#1.schedule#1.start_at",
       "label": "Startdatum für den Angebotspreis (Bei Amazon verkaufen, DE)",
       "description": "Das Datum, an dem der Verkaufspreis beginnt, den Standardpreis des Produkts zu überschreiben; der Verkaufspreis wird nach 0:00 Uhr des Verkaufsdatums angezeigt. (Bei Amazon verkaufen)",
       "example": "2017-06-30",
@@ -6161,7 +6161,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=ALL]#1.discounted_price#1.schedule#1.value_with_tax",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=ALL]#1.discounted_price#1.schedule#1.value_with_tax",
       "label": "Angebotspreis EUR (Bei Amazon verkaufen, DE)",
       "description": "Der Preis, zu dem Sie das Produkt zum Verkauf anbieten. (Bei Amazon verkaufen)",
       "example": "219.99",
@@ -6169,7 +6169,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=ALL]#1.start_at.value",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=ALL]#1.start_at.value",
       "label": "Erscheinungsdatum des Angebots (Bei Amazon verkaufen, DE)",
       "description": "Beginndatum für Ihren Preis (Bei Amazon verkaufen)",
       "example": "2017-06-30",
@@ -6177,7 +6177,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=ALL]#1.end_at.value",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=ALL]#1.end_at.value",
       "label": "Datum des Verkaufsendes (Bei Amazon verkaufen, DE)",
       "description": "Enddatum für Ihren Preis (Bei Amazon verkaufen)",
       "example": "2017-07-01",
@@ -6185,7 +6185,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=B2B]#1.our_price#1.schedule#1.value_with_tax",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=B2B]#1.our_price#1.schedule#1.value_with_tax",
       "label": "Ihr Preis EUR (Amazon Business (B2B), DE)",
       "description": "Geben Sie den Grundpreis des Artikels an, zu dem er dem vorgesehenen Käufersegment angeboten wird (Amazon Business (B2B))",
       "example": "50.00",
@@ -6193,7 +6193,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=B2B]#1.minimum_seller_allowed_price#1.schedule#1.value_with_tax",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=B2B]#1.minimum_seller_allowed_price#1.schedule#1.value_with_tax",
       "label": "Zulässiger Mindestpreis für Verkäufer (Amazon Business (B2B), DE)",
       "description": "Geben Sie den zulässigen vom Käufer festgelegten Mindestpreis an (Amazon Business (B2B))",
       "example": "259.99",
@@ -6201,7 +6201,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=B2B]#1.maximum_seller_allowed_price#1.schedule#1.value_with_tax",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=B2B]#1.maximum_seller_allowed_price#1.schedule#1.value_with_tax",
       "label": "Maximaler Verkäuferpreis (Amazon Business (B2B), DE)",
       "description": "Geben Sie den maximal zulässigen Verkäuferpreis an (Amazon Business (B2B))",
       "example": "259.99",
@@ -6209,7 +6209,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=B2B]#1.start_at.value",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=B2B]#1.start_at.value",
       "label": "Erscheinungsdatum des Angebots (Amazon Business (B2B), DE)",
       "description": "Beginndatum für Ihren Preis (Amazon Business (B2B))",
       "example": "2017-06-30",
@@ -6217,7 +6217,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=B2B]#1.end_at.value",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=B2B]#1.end_at.value",
       "label": "Datum des Verkaufsendes (Amazon Business (B2B), DE)",
       "description": "Enddatum für Ihren Preis (Amazon Business (B2B))",
       "example": "2017-07-01",
@@ -6225,7 +6225,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=B2B]#1.quantity_discount_plan#1.schedule#1.discount_type",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=B2B]#1.quantity_discount_plan#1.schedule#1.discount_type",
       "label": "Mengenpreisart (Amazon Business (B2B), DE)",
       "description": "Geben Sie an, ob es sich bei der Preisart um einen Festpreis, einen Preis in Landeswährung für jede Mengenschwelle oder einen Prozentsatz des Handelspreises handelt. (Amazon Business (B2B))",
       "example": "Fest, Prozent",
@@ -6233,7 +6233,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=B2B]#1.quantity_discount_plan#1.schedule#1.levels#1.lower_bound",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=B2B]#1.quantity_discount_plan#1.schedule#1.levels#1.lower_bound",
       "label": "Mengenschwellenwert (Untergrenze, Amazon Business (B2B), DE)",
       "description": "Geben Sie die Mindestbestellmenge an, die erforderlich ist, um den Rabatt zu erhalten. Sie gilt für alle Einheiten, wenn der Mengenschwellenwert erreicht ist. (Amazon Business (B2B))",
       "example": "5, 10",
@@ -6241,7 +6241,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "purchasable_offer[marketplace_id=A1PA6795UKMFR9][audience=B2B]#1.quantity_discount_plan#1.schedule#1.levels#1.value",
+      "api_field": "purchasable_offer[marketplace_id={{marketplaceId}}][audience=B2B]#1.quantity_discount_plan#1.schedule#1.levels#1.value",
       "label": "Mengenpreis (Festpreis/prozentualer Rabatt, Amazon Business (B2B), DE)",
       "description": "Geben Sie den Mengenpreis für jeden Mengenschwellenwert oder den Rabattprozentsatz auf den Handelspreis für jeden Mengenschwellenwert an. (Amazon Business (B2B))",
       "example": "10, 20",
@@ -6249,7 +6249,7 @@
     },
     {
       "group": "Angebot (DE) - (Bei Amazon verkaufen), (DE) - (Amazon Business (B2B))",
-      "api_field": "merchant_shipping_group[marketplace_id=A1PA6795UKMFR9]#1.value",
+      "api_field": "merchant_shipping_group[marketplace_id={{marketplaceId}}]#1.value",
       "label": "Versandvorlage (DE)",
       "description": "Versandvorlagen definieren Ihre Versandregionen und -gebühren. Amazon weist eine Standardvorlage zu, die Sie ändern können, oder Sie können zusätzliche Vorlagen in Ihren Versandeinstellungen konfigurieren.",
       "example": "Schwere, sperrige Produkte, NCR-Großgerätelieferung",

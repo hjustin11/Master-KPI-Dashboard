@@ -4,6 +4,7 @@ import { createClient as createServerSupabase } from "@/shared/lib/supabase/serv
 import { amazonSpApiIncompleteJson } from "@/shared/lib/amazonSpApiConfigError";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import { amazonSpApiGetWithQuotaRetry } from "@/shared/lib/amazonSpApiQuotaRetry";
+import { getDefaultAmazonMarketplaceId } from "@/shared/config/amazonMarketplaces";
 
 export const maxDuration = 60;
 
@@ -272,7 +273,7 @@ export async function POST(request: Request) {
       return amazonSpApiIncompleteJson(missing);
     }
 
-    const marketplaceId = config.marketplaceIds[0];
+    const marketplaceId = getDefaultAmazonMarketplaceId(config.marketplaceIds);
     const path = `/solicitations/v1/orders/${encodeURIComponent(orderId)}/solicitations/productReviewAndSellerFeedback`;
 
     const lwaAccessToken = await getLwaAccessToken({

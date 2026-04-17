@@ -20,6 +20,7 @@ import {
   type AmazonSpApiProductsConfig,
 } from "@/shared/lib/amazonProductsSpApiCatalog";
 import { isLikelyAmazonShippingUuid } from "@/shared/lib/amazonMeasureDisplay";
+import { getDefaultAmazonMarketplaceId } from "@/shared/config/amazonMarketplaces";
 
 async function getCurrentUser() {
   const supabase = await createServerSupabase();
@@ -813,7 +814,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
           region: config.region,
           path: `/listings/2021-08-01/items/${encodeURIComponent(sellerId)}/${encodeURIComponent(sku)}`,
           query: {
-            marketplaceIds: config.marketplaceIds[0] ?? "",
+            marketplaceIds: getDefaultAmazonMarketplaceId(config.marketplaceIds),
             includedData: "summaries,attributes,offers,fulfillmentAvailability",
           },
           awsAccessKeyId: config.awsAccessKeyId,

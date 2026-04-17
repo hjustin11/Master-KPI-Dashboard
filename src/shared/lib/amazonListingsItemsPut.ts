@@ -5,6 +5,10 @@ import {
   resolveEffectiveAmazonSellerId,
   type AmazonSpApiProductsConfig,
 } from "@/shared/lib/amazonProductsSpApiCatalog";
+import {
+  getDefaultAmazonMarketplaceId,
+  getIssueLocaleForMarketplaceId,
+} from "@/shared/config/amazonMarketplaces";
 
 const SANDBOX_ENDPOINT = "sandbox.sellingpartnerapi-eu.amazon.com";
 const SANDBOX_PREFIX = "sandbox.";
@@ -209,7 +213,9 @@ export async function submitAmazonListingItem(
   }
   if (!sellerId) throw new Error("Amazon Seller-ID fehlt (AMAZON_SP_API_SELLER_ID).");
 
-  const marketplaceId = (args.marketplaceId || config.marketplaceIds[0] || "").trim();
+  const marketplaceId =
+    (args.marketplaceId && args.marketplaceId.trim()) ||
+    getDefaultAmazonMarketplaceId(config.marketplaceIds);
   if (!marketplaceId) throw new Error("marketplaceId fehlt.");
 
   const sandbox = isSandboxEnabled();
@@ -225,7 +231,7 @@ export async function submitAmazonListingItem(
   const query = {
     marketplaceIds: marketplaceId,
     productType: args.body.productType,
-    issueLocale: "de_DE",
+    issueLocale: getIssueLocaleForMarketplaceId(marketplaceId),
   };
 
   const bodyStr = JSON.stringify(args.body);

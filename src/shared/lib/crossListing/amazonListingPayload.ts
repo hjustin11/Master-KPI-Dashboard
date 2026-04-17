@@ -1,5 +1,6 @@
 import type { CrossListingDraftValues } from "./crossListingDraftTypes";
 import { translateToApiKey, getProductTypes } from "@/shared/lib/amazon/attributeRegistry";
+import { getLanguageTagForMarketplaceId } from "@/shared/config/amazonMarketplaces";
 
 export type BuildAmazonListingPayloadArgs = {
   values: CrossListingDraftValues;
@@ -86,7 +87,7 @@ export function buildAmazonListingPutBody(
 ): BuildResult {
   const { values, marketplaceId, sku } = args;
   const productType = args.productType.trim();
-  const languageTag = args.languageTag ?? "de_DE";
+  const languageTag = args.languageTag ?? getLanguageTagForMarketplaceId(marketplaceId);
   const attrs = values.attributes ?? {};
 
   const errors: ValidationIssue[] = [];

@@ -5,6 +5,7 @@ import {
   resolveEffectiveAmazonSellerId,
   type AmazonSpApiProductsConfig,
 } from "@/shared/lib/amazonProductsSpApiCatalog";
+import { getDefaultAmazonMarketplaceId } from "@/shared/config/amazonMarketplaces";
 
 function env(name: string) {
   return (process.env[name] ?? "").trim();
@@ -318,7 +319,7 @@ export async function syncAmazonMfnStockQuantities(updates: Array<{ sku: string;
     };
   }
 
-  const marketplaceId = config.marketplaceIds[0] ?? "";
+  const marketplaceId = getDefaultAmazonMarketplaceId(config.marketplaceIds);
   const baseArgs = {
     endpoint: normalizeHost(config.endpoint),
     region: config.region,

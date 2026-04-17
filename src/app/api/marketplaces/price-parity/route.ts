@@ -11,6 +11,7 @@ import {
 } from "@/shared/lib/amazonProductsSpApiCatalog";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import { getIntegrationCachedOrLoad, readIntegrationCache } from "@/shared/lib/integrationDataCache";
+import { getDefaultAmazonMarketplaceId } from "@/shared/config/amazonMarketplaces";
 import {
   batchMatchArticles,
   type BatchMatchEntry,
@@ -618,7 +619,7 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
   const articles = xrJson.items ?? [];
 
   const amazonProductsConfig = await loadAmazonSpApiProductsConfig();
-  const amazonMarketplaceId = amazonProductsConfig.marketplaceIds[0];
+  const amazonMarketplaceId = getDefaultAmazonMarketplaceId(amazonProductsConfig.marketplaceIds);
   const amazonPromise = fetchAmazonProductsPriceMap(
     origin,
     authHeaders,
