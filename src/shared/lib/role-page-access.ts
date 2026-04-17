@@ -7,6 +7,7 @@ export type DashboardPageAccessKey =
   | "settings.users"
   | "settings.profile"
   | "settings.tutorials"
+  | "settings.amazon"
   | "analytics.marketplaces"
   | "analytics.payouts"
   | "analytics.articleForecast"
@@ -45,6 +46,7 @@ export const DASHBOARD_PAGE_ACCESS_CONFIG: Array<{
   { key: "settings.users", label: "Administration · Benutzerverwaltung", path: "/settings/users" },
   { key: "settings.profile", label: "Administration · Profil", path: "/settings/profile" },
   { key: "settings.tutorials", label: "Administration · Tutorial-Editor", path: "/settings/tutorials" },
+  { key: "settings.amazon", label: "Administration · Amazon EU-Marktplätze", path: "/settings/amazon" },
   { key: "analytics.marketplaces", label: "Analytics · Marktplätze", path: "/analytics/marketplaces" },
   { key: "analytics.payouts", label: "Analytics · Auszahlungen", path: "/analytics/payouts" },
   { key: "analytics.articleForecast", label: "Analytics · Bedarfsprognose", path: "/analytics/article-forecast" },
@@ -84,13 +86,13 @@ export const INITIAL_ROLE_PAGE_ACCESS: Record<Role, Record<DashboardPageAccessKe
   admin: Object.fromEntries(
     DASHBOARD_PAGE_ACCESS_CONFIG.map((entry) => [
       entry.key,
-      entry.key === "settings.tutorials" ? false : true,
+      entry.key === "settings.tutorials" || entry.key === "settings.amazon" ? false : true,
     ])
   ) as Record<DashboardPageAccessKey, boolean>,
   manager: Object.fromEntries(
     DASHBOARD_PAGE_ACCESS_CONFIG.map((entry) => [
       entry.key,
-      entry.key === "settings.tutorials" ? false : true,
+      entry.key === "settings.tutorials" || entry.key === "settings.amazon" ? false : true,
     ])
   ) as Record<DashboardPageAccessKey, boolean>,
   analyst: Object.fromEntries(
