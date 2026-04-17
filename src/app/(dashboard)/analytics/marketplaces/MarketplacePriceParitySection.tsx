@@ -324,7 +324,10 @@ function ParityCellValue({
     </span>
   );
 
-  const showMatchBadge = Boolean(matchInfo && matchInfo.type !== "sku_exact");
+  // SKU*, Titel und SKU-exakt werden nicht als Badge angezeigt — nur starke
+  // Non-SKU-Matches (EAN, ASIN, Modell, Upload) bekommen einen Indikator.
+  const HIDDEN_BADGE_TYPES = new Set(["sku_exact", "sku_partial", "title_fuzzy"]);
+  const showMatchBadge = Boolean(matchInfo && !HIDDEN_BADGE_TYPES.has(matchInfo.type));
 
   return (
     <div className="flex flex-col gap-1" title={label}>
