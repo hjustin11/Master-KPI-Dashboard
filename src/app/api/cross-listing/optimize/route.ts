@@ -13,6 +13,7 @@ import {
   CROSS_LISTING_TARGET_SLUGS,
   type CrossListingTargetSlug,
 } from "@/shared/lib/crossListing/crossListingDraftTypes";
+import { getAmazonMarketplaceBySlug } from "@/shared/config/amazonMarketplaces";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,8 @@ const BodyZ = z.object({
   ]),
   mergedValues: DraftValuesZ,
   sourceData: z.record(z.string(), SourceRecordZ.nullable()),
+  /** Amazon-Multi-Country: wenn gesetzt, bestimmt Sprache + Label für LLM. */
+  amazonCountrySlug: z.string().optional(),
 });
 
 async function firstExistingPath(candidates: string[]): Promise<string | null> {
@@ -136,6 +139,18 @@ export async function POST(request: Request) {
   const rulebook = await loadRulebook(parsed.data.targetMarketplace);
   const limits = limitsFromConfig(config);
 
+  // Amazon-Multi-Country: Label + language_tag aus Config ableiten.
+  let amazonCountryLabel: string | undefined;
+  let languageTag: string | undefined;
+  if (parsed.data.targetMarketplace === "amazon") {
+    const slug = parsed.data.amazonCountrySlug ?? "amazon-de";
+    const mp = getAmazonMarketplaceBySlug(slug);
+    if (mp) {
+      amazonCountryLabel = `${mp.name} (${mp.domain})`;
+      languageTag = mp.languageTag;
+    }
+  }
+
   const result: CrossListingLlmResult = await runCrossListingClaudeOptimize({
     sku: parsed.data.sku,
     target: parsed.data.targetMarketplace,
@@ -143,6 +158,8 @@ export async function POST(request: Request) {
     mergedValues: parsed.data.mergedValues,
     sourceData: parsed.data.sourceData,
     limits,
+    amazonCountryLabel,
+    languageTag,
   });
 
   return NextResponse.json({

@@ -33,6 +33,7 @@ export default function useCrossListingOptimize(): {
     targetMarketplace: CrossListingTargetSlug;
     mergedValues: CrossListingDraftValues;
     sourceData: CrossListingSourceMap;
+    amazonCountrySlug?: string;
   }) => Promise<void>;
   markApplied: (key: OptimizeFieldKey) => void;
   reset: () => void;
@@ -44,6 +45,7 @@ export default function useCrossListingOptimize(): {
     targetMarketplace: CrossListingTargetSlug;
     mergedValues: CrossListingDraftValues;
     sourceData: CrossListingSourceMap;
+    amazonCountrySlug?: string;
   }) => {
     setState({ ...INITIAL, loading: true, applied: new Set() });
     try {

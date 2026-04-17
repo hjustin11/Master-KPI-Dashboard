@@ -7,6 +7,11 @@ import type {
   CrossListingDraftValues,
   CrossListingTargetSlug,
 } from "@/shared/lib/crossListing/crossListingDraftTypes";
+import {
+  DEFAULT_AMAZON_SLUG,
+  getAmazonMarketplaceBySlug,
+  getLanguageTagForMarketplaceId,
+} from "@/shared/config/amazonMarketplaces";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -47,6 +52,10 @@ export async function POST(request: Request) {
     : "") as CrossListingTargetSlug;
   const productTypeOverride =
     typeof body.productType === "string" ? body.productType.trim() : "";
+  // Amazon-Country-Slug (`amazon-de`, `amazon-fr`, ...) — default DE.
+  const amazonCountrySlug =
+    (typeof body.amazonCountrySlug === "string" && body.amazonCountrySlug.trim()) ||
+    DEFAULT_AMAZON_SLUG;
 
   if (!draftId) return NextResponse.json({ error: "draftId ist erforderlich." }, { status: 400 });
   if (targetSlug !== "amazon") {
@@ -91,13 +100,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const marketplaceId = (process.env.AMAZON_SP_API_MARKETPLACE_ID ?? "").trim();
-  if (!marketplaceId) {
+  // Amazon-Country-Slug → konkrete marketplace_id (z. B. amazon-fr = A13V1IB3VIYZZH).
+  const amazonCountryConfig = getAmazonMarketplaceBySlug(amazonCountrySlug);
+  if (!amazonCountryConfig) {
     return NextResponse.json(
-      { error: "AMAZON_SP_API_MARKETPLACE_ID fehlt im Server-Env." },
-      { status: 500 }
+      { error: `Unbekannter Amazon-Slug: ${amazonCountrySlug}` },
+      { status: 400 }
     );
   }
+  const marketplaceId = amazonCountryConfig.marketplaceId;
+  const languageTag = getLanguageTagForMarketplaceId(marketplaceId);
 
   const productType = productTypeOverride || values.amazonProductType || "PET_SUPPLIES";
   const built = buildAmazonListingPutBody({
@@ -105,6 +117,7 @@ export async function POST(request: Request) {
     marketplaceId,
     productType,
     sku: draft.sku,
+    languageTag,
   });
 
   if (!built.ok) {
@@ -170,11 +183,15 @@ export async function POST(request: Request) {
       (values as unknown as { ean?: string }).ean ??
       (values as unknown as { gtin?: string }).gtin ??
       null;
+    // Für Amazon-Uploads schreiben wir das Mapping unter dem Country-Slug
+    // (z. B. amazon-fr), damit Price-Parity später genau das richtige Land
+    // als "verbunden" erkennt.
+    const mappingSlug = targetSlug === "amazon" ? amazonCountrySlug : targetSlug;
     try {
       await admin.from("marketplace_article_mappings").upsert(
         {
           xentral_sku: draft.sku,
-          marketplace_slug: targetSlug,
+          marketplace_slug: mappingSlug,
           marketplace_sku: draft.sku,
           ean: eanCandidate,
           match_type: "manual",

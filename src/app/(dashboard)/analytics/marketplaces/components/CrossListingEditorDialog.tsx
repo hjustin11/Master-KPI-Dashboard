@@ -42,6 +42,17 @@ import { CrossListingEditorBody } from "./crossListing/CrossListingEditorBody";
 import { CrossListingFooter } from "./crossListing/CrossListingFooter";
 import { detectAmazonProductType, detectBrowseNode } from "@/shared/lib/amazon/productTypeDetection";
 import { validateForAmazonSubmit } from "@/shared/lib/crossListing/amazonPreSubmitValidator";
+import {
+  AMAZON_EU_MARKETPLACES,
+  DEFAULT_AMAZON_SLUG,
+} from "@/shared/config/amazonMarketplaces";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const AMAZON_LOGO = "/brand/marketplaces/amazon.svg";
 
@@ -92,6 +103,8 @@ export default function CrossListingEditorDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [persistedDraftId, setPersistedDraftId] = useState<string | null>(null);
+  /** Amazon-Multi-Country: default DE, wechselt auf aktiviertes Land wenn ausgewählt. */
+  const [amazonCountrySlug, setAmazonCountrySlug] = useState<string>(DEFAULT_AMAZON_SLUG);
 
   const { data: sourceData, loading: sourceLoading, error: sourceError } = useCrossListingSourceData(
     open && sku ? sku : null
@@ -220,6 +233,7 @@ export default function CrossListingEditorDialog({
       targetMarketplace: targetSlug,
       mergedValues: values,
       sourceData: sourceData.sources,
+      ...(targetSlug === "amazon" ? { amazonCountrySlug } : {}),
     });
   }
 
@@ -277,7 +291,12 @@ export default function CrossListingEditorDialog({
       return;
     }
     setError(null);
-    await submit({ draftId, targetMarketplaceSlug: targetSlug, productType: values.amazonProductType || "PET_SUPPLIES" });
+    await submit({
+      draftId,
+      targetMarketplaceSlug: targetSlug,
+      productType: values.amazonProductType || "PET_SUPPLIES",
+      amazonCountrySlug,
+    });
   }
 
   if (!open || !sku || !targetSlug || !config || !meta) {
@@ -346,7 +365,30 @@ export default function CrossListingEditorDialog({
               onApplyAll={handleApplyAll}
             />
             {targetSlug === "amazon" && (
-              <CrossListingAmazonFields values={values} setValues={setValues} sku={sku} />
+              <>
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-gray-200 bg-white p-2 text-xs dark:border-gray-800 dark:bg-card">
+                  <span className="font-semibold text-black dark:text-white">Zielland</span>
+                  <Select
+                    value={amazonCountrySlug}
+                    onValueChange={(value) => setAmazonCountrySlug(value ?? DEFAULT_AMAZON_SLUG)}
+                  >
+                    <SelectTrigger className="h-7 w-56 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AMAZON_EU_MARKETPLACES.map((m) => (
+                        <SelectItem key={m.slug} value={m.slug} className="text-xs">
+                          {m.countryFlag} {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-[10px] text-muted-foreground">
+                    Content wird in der Zielsprache generiert (language_tag der ausgewählten Amazon-Domain).
+                  </span>
+                </div>
+                <CrossListingAmazonFields values={values} setValues={setValues} sku={sku} />
+              </>
             )}
             <CrossListingEditorBody ctx={ctx} />
             {(submitState.result || submitState.error) && (

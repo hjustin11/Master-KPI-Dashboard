@@ -34,13 +34,19 @@ export default function useCrossListingSubmit(): {
     draftId: string;
     targetMarketplaceSlug: string;
     productType?: string;
+    amazonCountrySlug?: string;
   }) => Promise<CrossListingSubmitResult | null>;
   reset: () => void;
 } {
   const [state, setState] = useState<State>(INITIAL);
 
   const submit = useCallback(
-    async (args: { draftId: string; targetMarketplaceSlug: string; productType?: string }) => {
+    async (args: {
+      draftId: string;
+      targetMarketplaceSlug: string;
+      productType?: string;
+      amazonCountrySlug?: string;
+    }) => {
       setState({ loading: true, error: null, result: null });
       try {
         const res = await fetch("/api/cross-listing/submit", {

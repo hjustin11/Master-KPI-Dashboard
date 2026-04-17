@@ -126,9 +126,33 @@ const MARKETPLACE_LABELS: Record<CrossListingTargetSlug, string> = {
   shopify: "Shopify (astropet.de)",
 };
 
-function buildSystemPrompt(target: CrossListingTargetSlug, rulebook: string, limits: FieldLimits): string {
-  const label = MARKETPLACE_LABELS[target];
-  return `Du bist ein spezialisierter E-Commerce Content-Experte für den deutschen Markt, insbesondere für Haustierbedarf. Du erstellst optimierte Produktlistings für verschiedene Online-Marktplätze.
+/**
+ * Mapping language_tag (z. B. "de_DE") → Anweisung an das LLM.
+ * Amazon EU unterstützt mehrere Länder; für FR soll der Content auf Französisch sein.
+ */
+const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
+  de_DE: "Deutsch (DE), keine Fremdwörter außer Markennamen / Fachbegriffen.",
+  fr_FR: "Französisch (FR), keine Fremdwörter außer Markennamen / Fachbegriffen.",
+  fr_BE: "Französisch (BE), keine Fremdwörter außer Markennamen / Fachbegriffen.",
+  it_IT: "Italienisch (IT), keine Fremdwörter außer Markennamen / Fachbegriffen.",
+  es_ES: "Spanisch (ES), keine Fremdwörter außer Markennamen / Fachbegriffen.",
+  nl_NL: "Niederländisch (NL), keine Fremdwörter außer Markennamen / Fachbegriffen.",
+  pl_PL: "Polnisch (PL), keine Fremdwörter außer Markennamen / Fachbegriffen.",
+  sv_SE: "Schwedisch (SE), keine Fremdwörter außer Markennamen / Fachbegriffen.",
+  en_GB: "Englisch (GB), keine Fremdwörter außer Markennamen / Fachbegriffen.",
+};
+
+function buildSystemPrompt(
+  target: CrossListingTargetSlug,
+  rulebook: string,
+  limits: FieldLimits,
+  marketplaceLabelOverride?: string | null,
+  languageTag?: string | null
+): string {
+  const label = marketplaceLabelOverride ?? MARKETPLACE_LABELS[target];
+  const langKey = languageTag && LANGUAGE_INSTRUCTIONS[languageTag] ? languageTag : "de_DE";
+  const langLine = LANGUAGE_INSTRUCTIONS[langKey];
+  return `Du bist ein spezialisierter E-Commerce Content-Experte für den europäischen Markt, insbesondere für Haustierbedarf. Du erstellst optimierte Produktlistings für verschiedene Online-Marktplätze.
 
 Deine Aufgabe: Optimiere ein bereits bestehendes Listing-Entwurf für ${label} basierend auf den vorhandenen Rohdaten von anderen Plattformen und den hinterlegten Marktplatz-Richtlinien.
 
@@ -147,7 +171,7 @@ WICHTIGE PRINZIPIEN:
 - Passe Ton und Stil an den Charakter von ${label} an.
 - Nutze die BESTEN Elemente aus allen Quell-Listings (auch wenn sie von anderen Plattformen stammen).
 - Wenn ein Feld bereits optimal ist, gib null zurück (spart Traffic).
-- Deutsch (DE), keine Fremdwörter außer Markennamen / Fachbegriffen.
+- ${langLine}
 - Keine Emojis. Keine Sonderzeichen wie !, ?, €, ™ im Titel.`;
 }
 
@@ -256,6 +280,9 @@ export async function runCrossListingClaudeOptimize(args: {
   mergedValues: CrossListingDraftValues;
   sourceData: CrossListingSourceMap;
   limits: FieldLimits;
+  /** Amazon-Multi-Country: bestimmt die Zielsprache + den Label-Override. */
+  amazonCountryLabel?: string;
+  languageTag?: string;
 }): Promise<CrossListingLlmResult> {
   const { value: apiKey } = await readIntegrationSecret("ANTHROPIC_API_KEY");
   if (!apiKey) {
@@ -265,7 +292,13 @@ export async function runCrossListingClaudeOptimize(args: {
   }
 
   const model = (process.env.ANTHROPIC_MODEL ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
-  const system = buildSystemPrompt(args.target, args.rulebookMarkdown, args.limits);
+  const system = buildSystemPrompt(
+    args.target,
+    args.rulebookMarkdown,
+    args.limits,
+    args.amazonCountryLabel ?? null,
+    args.languageTag ?? null
+  );
   const userPayload = buildUserPayload({
     sku: args.sku,
     target: args.target,
