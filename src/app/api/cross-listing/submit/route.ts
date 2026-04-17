@@ -163,6 +163,33 @@ export async function POST(request: Request) {
     })
     .eq("id", draftId);
 
+  // AATB-004-Fix: Listing-Mapping schreiben, damit Price-Parity den Artikel
+  // als "verbunden" erkennt — auch bevor die nächste Produkt-Cache-Aktualisierung läuft.
+  if (submission.ok) {
+    const eanCandidate =
+      (values as unknown as { ean?: string }).ean ??
+      (values as unknown as { gtin?: string }).gtin ??
+      null;
+    try {
+      await admin.from("marketplace_article_mappings").upsert(
+        {
+          xentral_sku: draft.sku,
+          marketplace_slug: targetSlug,
+          marketplace_sku: draft.sku,
+          ean: eanCandidate,
+          match_type: "manual",
+          confidence: 1.0,
+          verified_at: nowIso,
+          created_by: user.id,
+          updated_at: nowIso,
+        },
+        { onConflict: "xentral_sku,marketplace_slug" }
+      );
+    } catch {
+      // Mapping-Tabelle kann in alten Envs fehlen — Upload bleibt erfolgreich.
+    }
+  }
+
   return NextResponse.json({
     ok: submission.ok,
     submissionId: submission.submissionId,

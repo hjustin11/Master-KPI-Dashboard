@@ -11,6 +11,11 @@ import {
 } from "@/shared/lib/amazonProductsSpApiCatalog";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
 import { getIntegrationCachedOrLoad, readIntegrationCache } from "@/shared/lib/integrationDataCache";
+import {
+  batchMatchArticles,
+  type BatchMatchEntry,
+} from "@/shared/lib/crossListing/batchArticleMatcher";
+import type { MatchCandidate, MatchType, XentralArticle as MatcherArticle } from "@/shared/lib/crossListing/articleMatcher";
 
 /** Muss unter /api/amazon/products maxDuration (120s) liegen; genug für Kalt-Sync ohne Abort. */
 export const maxDuration = 120;
@@ -39,6 +44,7 @@ type XentralArticle = {
   name: string;
   stock: number;
   price: number | null;
+  ean?: string | null;
 };
 
 type OttoAmount = { amount?: number | string };
@@ -62,11 +68,19 @@ type OttoOrdersPayload = {
 
 export type MarketplaceCellState = "ok" | "missing" | "no_price" | "mismatch" | "not_connected";
 
+export type PriceParityMatchInfo = {
+  type: MatchType;
+  confidence: number;
+  marketplaceSku: string | null;
+  reason: string;
+};
+
 export type PriceParityCell = {
   price: number | null;
   state: MarketplaceCellState;
   stock: number | null;
   stockState: MarketplaceCellState;
+  matchInfo?: PriceParityMatchInfo | null;
 };
 
 export type PriceParityRow = {
@@ -118,7 +132,42 @@ const MP_PRODUCTS_INTEGRATION_CACHE_SLUGS = new Set<AnalyticsMarketplaceSlug>([
   "mediamarkt-saturn",
 ]);
 
-type SkuSnapshot = { price: number | null; stock: number | null };
+type SkuSnapshot = {
+  price: number | null;
+  stock: number | null;
+  title?: string | null;
+  ean?: string | null;
+  secondaryId?: string | null;
+  asin?: string | null;
+};
+
+/** Extrahiert EAN/GTIN aus `extras` oder direkten Feldern einer Marktplatz-Zeile. */
+function extractEan(row: Record<string, unknown>): string | null {
+  const extras = (row.extras as Record<string, unknown> | undefined) ?? {};
+  const candidates = [
+    row.ean,
+    row.gtin,
+    row.barcode,
+    extras.ean,
+    extras.gtin,
+    extras.barcode,
+    extras.productReferences,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+    if (typeof c === "number" && Number.isFinite(c)) return String(c);
+  }
+  return null;
+}
+
+function extractAsin(row: Record<string, unknown>): string | null {
+  const extras = (row.extras as Record<string, unknown> | undefined) ?? {};
+  const candidates = [row.asin, extras.asin];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return null;
+}
 
 function parseNumber(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
@@ -158,24 +207,53 @@ function skuSnapshotMapFromProductItems(
       parseNumber(it.afn_fulfillable_quantity) ??
       parseNumber(it.mfn_fulfillable_quantity) ??
       null;
-    map.set(k, { price: p, stock });
+    const title = typeof it.title === "string" ? it.title : null;
+    const secondaryId = typeof it.secondaryId === "string" ? it.secondaryId : null;
+    map.set(k, {
+      price: p,
+      stock,
+      title,
+      secondaryId,
+      ean: extractEan(it),
+      asin: extractAsin(it),
+    });
   }
   return map;
 }
+
+/** Aus Product-Items → Kandidaten für Multi-Identifier-Matching. */
+function candidatesFromProductItems(items: Array<Record<string, unknown>>): MatchCandidate[] {
+  return items.map((it) => ({
+    marketplaceSku: typeof it.sku === "string" ? it.sku : null,
+    ean: extractEan(it),
+    asin: extractAsin(it),
+    title: typeof it.title === "string" ? it.title : null,
+    secondaryId: typeof it.secondaryId === "string" ? it.secondaryId : null,
+  }));
+}
+
+type MarketplaceCatalog = {
+  map: Map<string, SkuSnapshot>;
+  candidates: MatchCandidate[];
+};
 
 async function fetchSkuPriceMapFromProductsApi(
   origin: string,
   path: string,
   initHeaders: HeadersInit,
   forceRefresh = false
-): Promise<Map<string, SkuSnapshot> | null> {
+): Promise<MarketplaceCatalog | null> {
   try {
     const productsUrl = new URL(path, origin);
     if (forceRefresh) productsUrl.searchParams.set("refresh", "1");
     const res = await fetch(productsUrl.toString(), { cache: "no-store", headers: initHeaders });
     if (!res.ok) return null;
     const json = (await res.json()) as { items?: Array<Record<string, unknown>> };
-    return skuSnapshotMapFromProductItems(json.items ?? [], "priceEur");
+    const items = json.items ?? [];
+    return {
+      map: skuSnapshotMapFromProductItems(items, "priceEur"),
+      candidates: candidatesFromProductItems(items),
+    };
   } catch {
     return null;
   }
@@ -194,6 +272,7 @@ async function fetchAmazonProductsPriceMap(
   forceRefresh = false
 ): Promise<{
   map: Map<string, SkuSnapshot> | null;
+  candidates: MatchCandidate[];
   warning: string | null;
 }> {
   if (!forceRefresh && marketplaceId) {
@@ -201,16 +280,11 @@ async function fetchAmazonProductsPriceMap(
       `amazon:products:${marketplaceId}`
     );
     if (cached.state !== "miss" && Array.isArray(cached.value?.rows)) {
-      const primary = skuSnapshotMapFromProductItems(
-        cached.value.rows as Array<Record<string, unknown>>,
-        "price"
-      );
-      if (primary.size > 0) return { map: primary, warning: null };
-      const fallback = skuSnapshotMapFromProductItems(
-        cached.value.rows as Array<Record<string, unknown>>,
-        "priceEur"
-      );
-      if (fallback.size > 0) return { map: fallback, warning: null };
+      const rows = cached.value.rows as Array<Record<string, unknown>>;
+      const primary = skuSnapshotMapFromProductItems(rows, "price");
+      if (primary.size > 0) return { map: primary, candidates: candidatesFromProductItems(rows), warning: null };
+      const fallback = skuSnapshotMapFromProductItems(rows, "priceEur");
+      if (fallback.size > 0) return { map: fallback, candidates: candidatesFromProductItems(rows), warning: null };
     }
   }
 
@@ -232,25 +306,28 @@ async function fetchAmazonProductsPriceMap(
       await res.json().catch(() => ({}));
       return {
         map: null,
+        candidates: [],
         warning: "Amazon Produkte werden im Hintergrund aktualisiert. Preisabgleich folgt automatisch.",
       };
     }
     if (!res.ok) {
       const err = (await res.json().catch(() => ({}))) as { error?: string };
-      return { map: null, warning: err.error ?? `Amazon Produkte (${res.status})` };
+      return { map: null, candidates: [], warning: err.error ?? `Amazon Produkte (${res.status})` };
     }
     const json = (await res.json()) as { items?: Array<Record<string, unknown>> };
+    const items = json.items ?? [];
     // Amazon liefert je nach Quelle `price` (Listings/Report) oder `priceEur`.
-    const primary = skuSnapshotMapFromProductItems(json.items ?? [], "price");
+    const primary = skuSnapshotMapFromProductItems(items, "price");
     if (primary.size > 0) {
-      return { map: primary, warning: null };
+      return { map: primary, candidates: candidatesFromProductItems(items), warning: null };
     }
-    const fallback = skuSnapshotMapFromProductItems(json.items ?? [], "priceEur");
-    return { map: fallback, warning: null };
+    const fallback = skuSnapshotMapFromProductItems(items, "priceEur");
+    return { map: fallback, candidates: candidatesFromProductItems(items), warning: null };
   } catch (e) {
     const aborted = e instanceof Error && e.name === "AbortError";
     return {
       map: null,
+      candidates: [],
       warning: aborted
         ? "Amazon-Produktliste antwortet zu langsam. Bitte erneut laden oder Cache auf der Amazon-Produktseite aufwärmen."
         : "Amazon Produkte werden im Hintergrund aktualisiert.",
@@ -413,6 +490,103 @@ async function fetchOttoLatestSkuPrices(): Promise<{
   };
 }
 
+/**
+ * Rüstet Zeilen mit `missing`-Zellen nach: EAN/ASIN/Titel-Match gegen Marktplatz-Kandidaten.
+ * Preis/Bestand werden aus dem Snapshot des Matches übernommen; `matchInfo` dokumentiert
+ * die Übereinstimmung für UI/Debug.
+ */
+function applyMultiIdentifierMatching(
+  rows: PriceParityRow[],
+  articles: XentralArticle[],
+  productCandidates: Partial<Record<AnalyticsMarketplaceSlug, MatchCandidate[]>>,
+  amazonCandidates: MatchCandidate[]
+): void {
+  const matcherArticles: MatcherArticle[] = articles.map((a) => ({
+    sku: a.sku,
+    title: a.name,
+    ean: a.ean ?? null,
+  }));
+
+  const upgradeCell = (
+    cell: PriceParityCell,
+    entry: BatchMatchEntry,
+    candidates: MatchCandidate[],
+    items: Array<Record<string, unknown>> | null
+  ): void => {
+    if (!entry.result.matched || !entry.result.candidate) return;
+    if (cell.state !== "missing" && cell.stockState !== "missing") return;
+    const c = entry.result.candidate;
+    const matchedSku = typeof c.marketplaceSku === "string" ? c.marketplaceSku : null;
+
+    // Preis/Bestand aus Rohdaten des Matches ziehen, falls vorhanden.
+    let matchedPrice: number | null = null;
+    let matchedStock: number | null = null;
+    if (items && matchedSku) {
+      const row = items.find((it) => (typeof it.sku === "string" ? it.sku : "") === matchedSku);
+      if (row) {
+        matchedPrice =
+          parseNumber(row.priceEur) ?? parseNumber(row.price) ?? null;
+        matchedStock =
+          parseNumber(row.stockQty) ?? parseNumber(row.stock) ?? parseNumber(row.quantity) ?? null;
+      }
+    }
+
+    const confidence = entry.result.confidence;
+    const shouldTrust = confidence >= 0.8;
+    if (cell.state === "missing") {
+      cell.state = shouldTrust ? (matchedPrice != null ? "ok" : "no_price") : "missing";
+      if (shouldTrust && matchedPrice != null) cell.price = matchedPrice;
+    }
+    if (cell.stockState === "missing") {
+      cell.stockState = shouldTrust ? (matchedStock != null ? "ok" : "no_price") : "missing";
+      if (shouldTrust && matchedStock != null) cell.stock = matchedStock;
+    }
+    cell.matchInfo = {
+      type: entry.result.matchType ?? "manual",
+      confidence,
+      marketplaceSku: matchedSku,
+      reason: entry.result.reason,
+    };
+    void candidates;
+  };
+
+  // Amazon
+  const amazonMissingIdx: number[] = [];
+  rows.forEach((r, i) => {
+    if (r.amazon.state === "missing" || r.amazon.stockState === "missing") amazonMissingIdx.push(i);
+  });
+  if (amazonMissingIdx.length && amazonCandidates.length) {
+    const entries = batchMatchArticles(
+      amazonMissingIdx.map((i) => matcherArticles[i]),
+      amazonCandidates
+    );
+    entries.forEach((entry, j) => {
+      const row = rows[amazonMissingIdx[j]];
+      upgradeCell(row.amazon, entry, amazonCandidates, null);
+    });
+  }
+
+  // Andere Marktplätze
+  for (const m of ANALYTICS_MARKETPLACES) {
+    const candidates = productCandidates[m.slug] ?? [];
+    if (!candidates.length) continue;
+    const missingIdx: number[] = [];
+    rows.forEach((r, i) => {
+      const cell = r.otherMarketplaces[m.slug];
+      if (cell && (cell.state === "missing" || cell.stockState === "missing")) missingIdx.push(i);
+    });
+    if (!missingIdx.length) continue;
+    const entries = batchMatchArticles(
+      missingIdx.map((i) => matcherArticles[i]),
+      candidates
+    );
+    entries.forEach((entry, j) => {
+      const cell = rows[missingIdx[j]].otherMarketplaces[m.slug];
+      if (cell) upgradeCell(cell, entry, candidates, null);
+    });
+  }
+}
+
 async function computePriceParityPayload(request: Request): Promise<Record<string, unknown>> {
   const url = new URL(request.url);
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? "300") || 300, 50), 500);
@@ -453,19 +627,23 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
   );
   const ottoPromise = fetchOttoLatestSkuPrices();
   const productMapEntriesPromise = Promise.all(
-    ANALYTICS_MARKETPLACES.map(async (m) => {
+    ANALYTICS_MARKETPLACES.map(async (m): Promise<readonly [AnalyticsMarketplaceSlug, MarketplaceCatalog | null]> => {
       const path = ANALYTICS_PRODUCTS_API[m.slug];
       if (!path) return [m.slug, null] as const;
       if (MP_PRODUCTS_INTEGRATION_CACHE_SLUGS.has(m.slug)) {
         const rows = await loadMarketplaceProductRowsForPriceParity(m.slug, forceRefresh);
         if (rows === null) return [m.slug, null] as const;
+        const items = rows as Array<Record<string, unknown>>;
         return [
           m.slug,
-          skuSnapshotMapFromProductItems(rows as Array<Record<string, unknown>>, "priceEur"),
+          {
+            map: skuSnapshotMapFromProductItems(items, "priceEur"),
+            candidates: candidatesFromProductItems(items),
+          },
         ] as const;
       }
-      const map = await fetchSkuPriceMapFromProductsApi(origin, path, authHeaders, forceRefresh);
-      return [m.slug, map] as const;
+      const catalog = await fetchSkuPriceMapFromProductsApi(origin, path, authHeaders, forceRefresh);
+      return [m.slug, catalog] as const;
     })
   );
 
@@ -484,10 +662,11 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
   }
 
   const ottoBySku = otto.bySku;
-  const productMaps: Partial<Record<AnalyticsMarketplaceSlug, Map<string, SkuSnapshot> | null>> =
-    {};
-  for (const [slug, map] of productMapEntries) {
-    productMaps[slug] = map;
+  const productMaps: Partial<Record<AnalyticsMarketplaceSlug, Map<string, SkuSnapshot> | null>> = {};
+  const productCandidates: Partial<Record<AnalyticsMarketplaceSlug, MatchCandidate[]>> = {};
+  for (const [slug, catalog] of productMapEntries) {
+    productMaps[slug] = catalog?.map ?? null;
+    productCandidates[slug] = catalog?.candidates ?? [];
   }
   const ottoProductsConnected = productMaps.otto != null;
   const ottoHasAnyStock =
@@ -609,6 +788,62 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
       needsReview,
     };
   });
+
+  // Multi-Identifier-Matching: für Zellen mit "missing" Zustand versuchen
+  // wir EAN/ASIN/Titel-Match gegen die Marktplatz-Kandidaten.
+  applyMultiIdentifierMatching(rows, articles, productCandidates, amazonFetch.candidates);
+
+  // Gespeicherte Listing-Mappings laden (z. B. nach Upload via Cross-Listing).
+  // Damit wird eine Zelle nicht mehr als "missing" angezeigt, sobald wir den Artikel
+  // auf dem Marktplatz hochgeladen haben — auch wenn der Produkt-Cache noch nachhinkt.
+  try {
+    const adminForMappings = createAdminClient();
+    const { data: mappings } = await adminForMappings
+      .from("marketplace_article_mappings")
+      .select("xentral_sku, marketplace_slug, match_type, confidence");
+    if (Array.isArray(mappings) && mappings.length) {
+      const bySkuSlug = new Map<string, { matchType: MatchType; confidence: number }>();
+      for (const m of mappings) {
+        const sku =
+          typeof m.xentral_sku === "string" ? m.xentral_sku.trim().toLowerCase() : "";
+        const slug =
+          typeof m.marketplace_slug === "string" ? m.marketplace_slug.trim() : "";
+        const type = typeof m.match_type === "string" ? (m.match_type as MatchType) : "manual";
+        const conf = typeof m.confidence === "number" ? m.confidence : 1;
+        if (!sku || !slug) continue;
+        bySkuSlug.set(`${sku}::${slug}`, { matchType: type, confidence: conf });
+      }
+      for (const row of rows) {
+        const sku = row.sku.trim().toLowerCase();
+        if (!sku) continue;
+        const amazonMapping = bySkuSlug.get(`${sku}::amazon`);
+        if (amazonMapping && row.amazon.state === "missing") {
+          row.amazon.matchInfo = row.amazon.matchInfo ?? {
+            type: amazonMapping.matchType,
+            confidence: amazonMapping.confidence,
+            marketplaceSku: row.sku,
+            reason: "Listing wurde via Cross-Listing hochgeladen.",
+          };
+        }
+        for (const m of ANALYTICS_MARKETPLACES) {
+          const mapping = bySkuSlug.get(`${sku}::${m.slug}`);
+          if (!mapping) continue;
+          const cell = row.otherMarketplaces[m.slug];
+          if (!cell) continue;
+          if (cell.state === "missing" || cell.state === "not_connected") {
+            cell.matchInfo = cell.matchInfo ?? {
+              type: mapping.matchType,
+              confidence: mapping.confidence,
+              marketplaceSku: row.sku,
+              reason: "Listing wurde via Cross-Listing hochgeladen.",
+            };
+          }
+        }
+      }
+    }
+  } catch {
+    // Tabelle fehlt ggf. in alten Envs.
+  }
 
   try {
     const admin = createAdminClient();

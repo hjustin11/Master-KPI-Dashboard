@@ -60,6 +60,7 @@ type ParityRow = {
     state: CellState;
     stock: number | null;
     stockState: CellState;
+    matchInfo?: MatchInfo | null;
   };
   otherMarketplaces: Record<
     string,
@@ -68,9 +69,17 @@ type ParityRow = {
       state: CellState;
       stock: number | null;
       stockState: CellState;
+      matchInfo?: MatchInfo | null;
     }
   >;
   needsReview: boolean;
+};
+
+type MatchInfo = {
+  type: string;
+  confidence: number;
+  marketplaceSku: string | null;
+  reason: string;
 };
 
 type SortColumnId =
@@ -151,6 +160,38 @@ function formatNumberishInput(v: number | null): string {
   return String(v);
 }
 
+const MATCH_TYPE_LABELS: Record<string, string> = {
+  sku_exact: "SKU",
+  sku_partial: "SKU*",
+  ean_exact: "EAN",
+  asin_exact: "ASIN",
+  model_number: "Modell",
+  title_fuzzy: "Titel",
+  manual: "Upload",
+};
+
+function MatchBadge({ info }: { info: MatchInfo }) {
+  const label = MATCH_TYPE_LABELS[info.type] ?? info.type;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="inline-flex h-3.5 items-center rounded border border-black/20 bg-white px-1 text-[9px] font-semibold uppercase tracking-wide text-black dark:border-white/30 dark:bg-black dark:text-white">
+            {label}
+          </span>
+        }
+      />
+      <TooltipContent side="top" className="max-w-xs text-xs">
+        <div className="font-semibold">{info.reason}</div>
+        <div className="mt-0.5 text-[10px] text-muted-foreground">
+          Konfidenz {(info.confidence * 100).toFixed(0)}%
+          {info.marketplaceSku ? ` · Listing-SKU ${info.marketplaceSku}` : ""}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function ParityCellValue({
   label,
   price,
@@ -163,6 +204,7 @@ function ParityCellValue({
   onStockChange,
   onCreateListing,
   hasDraft,
+  matchInfo,
 }: {
   label: string;
   price: number | null;
@@ -175,6 +217,7 @@ function ParityCellValue({
   onStockChange: (value: string) => void;
   onCreateListing?: () => void;
   hasDraft?: boolean;
+  matchInfo?: MatchInfo | null;
 }) {
   const { t, locale } = useTranslation();
   const intlTag = intlLocaleTag(locale);
@@ -254,11 +297,14 @@ function ParityCellValue({
     </span>
   );
 
+  const showMatchBadge = Boolean(matchInfo && matchInfo.type !== "sku_exact");
+
   return (
     <div className="flex flex-col gap-1" title={label}>
       <div className="flex items-center gap-1">
         <span className="w-3 shrink-0 text-[9px] font-semibold text-muted-foreground">P</span>
         <div className="min-w-0 flex-1">{priceLine}</div>
+        {showMatchBadge && matchInfo ? <MatchBadge info={matchInfo} /> : null}
       </div>
       <div className="flex items-center gap-1">
         <span className="w-3 shrink-0 text-[9px] font-semibold text-muted-foreground">B</span>
@@ -870,6 +916,7 @@ export function MarketplacePriceParitySection() {
                             : row.amazon.stock
                         }
                         stockState={row.amazon.stockState}
+                        matchInfo={row.amazon.matchInfo ?? null}
                         editing={Boolean(editMode)}
                         editingMode={editMode}
                         onPriceChange={(value) =>
@@ -914,6 +961,7 @@ export function MarketplacePriceParitySection() {
                                 : cell.stock
                             }
                             stockState={cell.stockState}
+                            matchInfo={cell.matchInfo ?? null}
                             editing={Boolean(editMode)}
                             editingMode={editMode}
                             onPriceChange={(value) =>
