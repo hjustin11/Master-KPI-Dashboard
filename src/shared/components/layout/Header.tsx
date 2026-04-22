@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { LogoutMenuItem } from "@/shared/components/auth/LogoutMenuItem";
+import { InstallAppButton } from "@/shared/components/layout/InstallAppButton";
 import { useUser } from "@/shared/hooks/useUser";
 import { ROLE_OPTIONS } from "@/shared/lib/access-control";
 import { useAppStore } from "@/shared/stores/useAppStore";
@@ -54,6 +55,7 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-1">
+          <InstallAppButton />
           <LanguageSwitcher />
           <Button variant="ghost" size="icon-sm">
             <Bell className="h-4 w-4" />
