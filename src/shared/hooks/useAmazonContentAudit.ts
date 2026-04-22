@@ -63,6 +63,8 @@ export const emptyAuditChip = (): ContentAuditFieldChip => ({
 
 export function useAmazonContentAudit(args: {
   marketplaceSlug: string;
+  /** Country-spezifischer Amazon-Slug (z. B. "amazon-fr"). Default "amazon-de". */
+  amazonSlug?: string;
   canEditProducts: boolean;
   draftValues: {
     title: string;
@@ -88,7 +90,7 @@ export function useAmazonContentAudit(args: {
   setAuditError: React.Dispatch<React.SetStateAction<string | null>>;
   setAuditLoading: React.Dispatch<React.SetStateAction<boolean>>;
 } {
-  const { marketplaceSlug, canEditProducts, draftValues } = args;
+  const { marketplaceSlug, amazonSlug, canEditProducts, draftValues } = args;
 
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
@@ -415,6 +417,7 @@ export function useAmazonContentAudit(args: {
         const qs = new URLSearchParams();
         qs.set("sku", s);
         if (options?.refresh) qs.set("refresh", "1");
+        if (amazonSlug && amazonSlug !== "amazon-de") qs.set("amazonSlug", amazonSlug);
         const res = await fetch(`/api/amazon/content-audit?${qs.toString()}`, { cache: "no-store" });
         const payload = (await res.json().catch(() => ({}))) as AmazonContentAuditPayload & { error?: string };
         if (!res.ok) throw new Error(payload.error ?? "Content-Prüfung konnte nicht geladen werden.");
@@ -425,7 +428,7 @@ export function useAmazonContentAudit(args: {
         setAuditLoading(false);
       }
     },
-    [canEditProducts, marketplaceSlug]
+    [canEditProducts, marketplaceSlug, amazonSlug]
   );
 
   return {

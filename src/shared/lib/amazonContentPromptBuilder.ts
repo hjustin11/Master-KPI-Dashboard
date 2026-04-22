@@ -14,12 +14,12 @@ import type { AmazonTitleProductContext } from "@/shared/lib/amazonTitleOptimiza
  * (mobile Darstellung, A9/A10-Ranking, Backend-Byte-Limits, Conversion-Copywriting).
  */
 const AMAZON_2026_KNOWLEDGE = `
-## Amazon.de Haustierbedarf — Listing Best Practices (2026)
+## Amazon Haustierbedarf — Listing Best Practices (2026)
 
 ### Titel
-- **Hartes 80-Zeichen-Limit** für Pet Supplies (strenger als Standard 200).
-- Mobile Suchergebnisse zeigen nur 70–80 Zeichen → Kernkeyword MUSS in den ersten 70 Zeichen.
-- Format: [Marke] [Produkttyp] [Kernmerkmal] [Variante] [Menge/Größe]
+- **Soll-Länge: mindestens 120–130 Zeichen, maximal 200 Zeichen.** Volle Länge für Keyword-Abdeckung und SEO nutzen.
+- Mobile Suchergebnisse zeigen nur 70–80 Zeichen → Kernkeyword + wichtigstes Verkaufsargument MUSS in den ersten 70 Zeichen stehen. Danach: Variante, Größe, sekundäre Benefits, weitere Keywords.
+- Format: [Marke] [Produkttyp] [Kernmerkmal] [Variante] [Menge/Größe] [weitere Features für Keyword-Abdeckung]
 - Verbotene Zeichen: !, ?, *, €, ®, ©, ™, {, }, ^
 - Verbotene Begriffe: Sonderangebot, Bestseller, gratis, Prime, Sale, Rabatt, Versandkostenfrei, Neu, 100%
 - Keine HTML-Tags. Zahlen als Ziffern (nicht "fünf" → "5"). Einheiten mit Leerzeichen: "500 ml", "3,6 kg".
@@ -64,30 +64,66 @@ Wenn das Regelwerk unten Regel-IDs im Format "TITEL-001", "BULLET-003" usw. enth
 ZITIERE diese IDs in den \`ruleIds\`-Feldern und \`issues\`, damit der User die Quelle nachvollziehen kann.
 `;
 
+const LANG_NAMES_DE: Record<string, string> = {
+  de_DE: "Deutsch",
+  fr_FR: "Französisch",
+  fr_BE: "Französisch (Belgien)",
+  it_IT: "Italienisch",
+  es_ES: "Spanisch",
+  nl_NL: "Niederländisch",
+  pl_PL: "Polnisch",
+  sv_SE: "Schwedisch",
+  en_GB: "Englisch (UK)",
+};
+
+export type AmazonContentPromptOptions = {
+  /** Ziel-Sprache der Vorschläge (`fr_FR`, `it_IT`, ...). Default: `de_DE`. */
+  targetLanguageTag?: string;
+  /** Marktplatz-Display-Name für den Prompt-Kontext (z. B. "Amazon Frankreich"). */
+  marketplaceName?: string;
+  /** Amazon-Domain (z. B. "amazon.fr"). */
+  marketplaceDomain?: string;
+  maxRulebookChars?: number;
+};
+
 /**
  * Baut den kompletten System-Prompt.
  * Ergänzt 2026-Domain-Wissen um das vollständige Regelwerk (gekürzt auf maxRulebookChars).
+ * Variable Zielsprache (z. B. FR für Amazon.fr) wird explizit in den Grundregeln verankert.
  */
 export function buildAmazonContentSystemPrompt(
   rulebookMarkdown: string,
-  maxRulebookChars = 24000
+  options: AmazonContentPromptOptions = {}
 ): string {
+  const targetLanguageTag = (options.targetLanguageTag ?? "de_DE").trim() || "de_DE";
+  const marketplaceName = options.marketplaceName?.trim() || "Amazon.de";
+  const marketplaceDomain = options.marketplaceDomain?.trim() || "amazon.de";
+  const maxRulebookChars = options.maxRulebookChars ?? 8000;
+
+  const languageName = LANG_NAMES_DE[targetLanguageTag] ?? targetLanguageTag;
+  const isDE = targetLanguageTag === "de_DE";
+
   const rulebook = rulebookMarkdown.trim();
   const rulebookSection = rulebook
     ? `\n\n---\n\n## Hinterlegtes Regelwerk (amazon_haustierbedarf_regelwerk.md)\n\nDieses Regelwerk ist die PRIMÄRE Quelle und muss IMMER beachtet werden.\nBei Konflikten mit den 2026-Best-Practices oben gilt das Regelwerk, außer es widerspricht aktuellen Amazon-Richtlinien eindeutig.\n\n${rulebook.slice(0, maxRulebookChars)}`
     : "\n\n(Kein Regelwerk-Text geladen — nutze nur die 2026-Best-Practices oben.)";
 
+  const languageRule = isDE
+    ? `4. Alle verbesserten Texte in **deutscher Sprache** (${targetLanguageTag}). Marketplace ist ${marketplaceName} (${marketplaceDomain}).`
+    : `4. Alle verbesserten Texte AUSSCHLIESSLICH in **${languageName}** (${targetLanguageTag}). Keine deutschen Phrasen, keine englischen Fallback-Begriffe. Marketplace ist ${marketplaceName} (${marketplaceDomain}). Passe idiomatische Wendungen, Einheiten-Schreibweise (z. B. Dezimalpunkt/-komma, Maßangaben) und kulturelle Konventionen an die Zielregion an. Behalte SEO-relevante Keywords bei, übersetze sie aber in die Zielsprache wo sinnvoll.`;
+
   return [
-    "Du bist ein erfahrener Amazon-Listing-Experte für die Kategorie **Haustierbedarf auf Amazon.de**.",
+    `Du bist ein erfahrener Amazon-Listing-Experte für die Kategorie **Haustierbedarf auf ${marketplaceName}**.`,
     "Deine Aufgabe: Ein existierendes Produkt-Listing analysieren und Feld für Feld optimieren.",
     "",
     "## Grundregeln",
     "1. Antworte IMMER durch Aufruf des Tools `optimize_amazon_listing` — niemals freier Text.",
     "2. Basiere alle Vorschläge ausschließlich auf Fakten aus dem JSON-Kontext (Produktdaten) und dem Regelwerk. Erfinde keine Gewichte, Größen, Zutaten oder Herstellerangaben.",
     "3. Für jedes Feld: Wenn der aktuelle Wert bereits regelkonform und optimal ist, setze `improved: null` und einen kurzen `reason`.",
-    "4. Alle verbesserten Texte in **deutscher Sprache**, Marketplace ist Amazon.de.",
+    languageRule,
     "5. Scores: 100 = perfekt; 80–99 = gut mit kleinen Optimierungen; 50–79 = mittelmäßig; <50 = Regelverstöße oder kritische Mängel.",
     "6. `ruleIds`: Wenn das Regelwerk (Markdown unten) konkrete Regel-IDs enthält (z. B. `TITEL-003`, `BULLET-005`), referenziere sie im `ruleIds`-Array des jeweiligen Feldes und in `issues[].ruleId`.",
+    "7. **Titel**: Ziel-Länge **mindestens 120–130 Zeichen** (maximal 200). Nutze die volle Länge für SEO-Keyword-Abdeckung. Zu kurze Titel (< 100 Zeichen) verschenken Ranking-Potenzial — das MUSS als Verbesserung vorgeschlagen werden, selbst wenn der aktuelle Titel regelkonform ist.",
     "",
     AMAZON_2026_KNOWLEDGE,
     rulebookSection,

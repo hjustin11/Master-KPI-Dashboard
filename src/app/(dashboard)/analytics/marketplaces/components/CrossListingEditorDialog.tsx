@@ -24,6 +24,7 @@ import {
 } from "@/shared/lib/crossListing/crossListingDraftTypes";
 import { getCrossListingFieldConfig } from "@/shared/lib/crossListing/marketplaceFieldConfigs";
 import { mergeForTarget } from "@/shared/lib/crossListing/mergeCrossListingSources";
+import { augmentRequiredAttributes } from "@/shared/lib/crossListing/targetRequiredAttributes";
 import { optimizeForTarget } from "@/shared/lib/crossListing/optimizeForTarget";
 import {
   buildImagePool,
@@ -142,6 +143,35 @@ export default function CrossListingEditorDialog({
     } else {
       return;
     }
+    // Re-seed: Draft-Werte aus bestehendem Draft bleiben, aber LEERE Felder
+    // werden aus dem frischen Merge gefüllt (z. B. wenn der Draft vor einem
+    // Enrichment-Fix angelegt wurde und Felder fehlen).
+    if (merged) {
+      const fresh = merged.values;
+      const isEmptyStr = (s: unknown) => typeof s !== "string" || s.trim().length === 0;
+      const isEmptyArr = (a: unknown) => !Array.isArray(a) || a.length === 0;
+      vals = {
+        ...vals,
+        ean: isEmptyStr(vals.ean) ? fresh.ean : vals.ean,
+        brand: isEmptyStr(vals.brand) ? fresh.brand : vals.brand,
+        priceEur: isEmptyStr(vals.priceEur) ? fresh.priceEur : vals.priceEur,
+        uvpEur: isEmptyStr(vals.uvpEur) ? fresh.uvpEur : vals.uvpEur,
+        stockQty: isEmptyStr(vals.stockQty) ? fresh.stockQty : vals.stockQty,
+        category: isEmptyStr(vals.category) ? fresh.category : vals.category,
+        title: isEmptyStr(vals.title) ? fresh.title : vals.title,
+        description: isEmptyStr(vals.description) ? fresh.description : vals.description,
+        bullets: isEmptyArr(vals.bullets) ? fresh.bullets : vals.bullets,
+        images: isEmptyArr(vals.images) ? fresh.images : vals.images,
+        dimL: isEmptyStr(vals.dimL) ? fresh.dimL : vals.dimL,
+        dimW: isEmptyStr(vals.dimW) ? fresh.dimW : vals.dimW,
+        dimH: isEmptyStr(vals.dimH) ? fresh.dimH : vals.dimH,
+        weight: isEmptyStr(vals.weight) ? fresh.weight : vals.weight,
+        petSpecies: isEmptyStr(vals.petSpecies) ? fresh.petSpecies : vals.petSpecies,
+        tags: isEmptyArr(vals.tags) ? fresh.tags : vals.tags,
+        attributes:
+          Object.keys(vals.attributes ?? {}).length === 0 ? fresh.attributes : vals.attributes,
+      };
+    }
     // Amazon: Produkttyp + Browse-Node + alle Compliance-Defaults automatisch setzen
     if (targetSlug === "amazon") {
       // Produkttyp erkennen
@@ -176,8 +206,22 @@ export default function CrossListingEditorDialog({
       }
       vals = { ...vals, amazonProductType: pt, attributes: seeded };
     }
+    // Fressnapf: Marktplatz-spezifische Pflichtattribute mit Smart-Defaults
+    // (country_of_origin, material, color, net_weight, variant_group_code, ...)
+    // damit Fressnapf.at sie nicht mit dem Markennamen auto-befüllt und ablehnt.
+    if (targetSlug === "fressnapf" && sourceData) {
+      vals = {
+        ...vals,
+        attributes: augmentRequiredAttributes(
+          targetSlug,
+          vals,
+          sourceData.sources,
+          sku ?? ""
+        ),
+      };
+    }
     setValues(vals);
-  }, [open, existingDraft, merged, targetSlug, sku]);
+  }, [open, existingDraft, merged, targetSlug, sku, sourceData]);
 
   // Bilder-Pool aus allen Quellen + eventuelle bestehende Draft-URLs
   useEffect(() => {
@@ -237,44 +281,52 @@ export default function CrossListingEditorDialog({
     });
   }
 
+  async function persistDraft(): Promise<string | null> {
+    if (!sku || !targetSlug || !sourceData) return null;
+    const pickedSource: CrossListingSourceSlug =
+      (merged && Object.values(merged.fieldSources)[0]) || "xentral";
+    const valuesWithImages: CrossListingDraftValues = {
+      ...values,
+      images: selectedImageUrls(imagePool),
+    };
+    const shouldPut = Boolean(existingDraft || persistedDraftId);
+    const putId = existingDraft?.id ?? persistedDraftId ?? null;
+    const res = shouldPut && putId
+      ? await fetch("/api/cross-listing/drafts", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: putId, user_edits: valuesWithImages, status: "reviewing" }),
+        })
+      : await fetch("/api/cross-listing/drafts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            sku,
+            ean: sourceData.ean,
+            target_marketplace_slug: targetSlug,
+            source_marketplace_slug: pickedSource,
+            source_data: sourceData.sources,
+            generated_listing: merged?.values ?? valuesWithImages,
+            user_edits: valuesWithImages,
+            status: "reviewing",
+          }),
+        });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(body?.error ?? `HTTP ${res.status}`);
+    }
+    const body = (await res.json().catch(() => null)) as { draft?: { id?: string } } | null;
+    const newId = body?.draft?.id ?? putId;
+    if (newId) setPersistedDraftId(newId);
+    return newId ?? null;
+  }
+
   async function handleSave() {
     if (!sku || !targetSlug || !sourceData) return;
     setSaving(true);
     setError(null);
     try {
-      const pickedSource: CrossListingSourceSlug =
-        (merged && Object.values(merged.fieldSources)[0]) || "xentral";
-      // Bilder aus Pool: nur ausgewählte URLs landen im Draft.
-      const valuesWithImages: CrossListingDraftValues = {
-        ...values,
-        images: selectedImageUrls(imagePool),
-      };
-      const res = existingDraft
-        ? await fetch("/api/cross-listing/drafts", {
-            method: "PUT",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ id: existingDraft.id, user_edits: valuesWithImages, status: "reviewing" }),
-          })
-        : await fetch("/api/cross-listing/drafts", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              sku,
-              ean: sourceData.ean,
-              target_marketplace_slug: targetSlug,
-              source_marketplace_slug: pickedSource,
-              source_data: sourceData.sources,
-              generated_listing: merged?.values ?? valuesWithImages,
-              user_edits: valuesWithImages,
-              status: "reviewing",
-            }),
-          });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? `HTTP ${res.status}`);
-      }
-      const body = (await res.json().catch(() => null)) as { draft?: { id?: string } } | null;
-      if (body?.draft?.id) setPersistedDraftId(body.draft.id);
+      await persistDraft();
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Speichern fehlgeschlagen.");
@@ -284,18 +336,33 @@ export default function CrossListingEditorDialog({
   }
 
   async function handleUpload() {
-    if (!targetSlug || targetSlug !== "amazon") return;
-    const draftId = persistedDraftId;
+    if (!targetSlug) return;
+    setError(null);
+    // Auto-Save: aktueller Stand wird vor dem Upload persistiert damit der
+    // Submit-Endpoint die neuesten Werte sieht (auch bei unsaved edits).
+    setSaving(true);
+    let draftId: string | null = null;
+    try {
+      draftId = await persistDraft();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Speichern fehlgeschlagen.");
+      setSaving(false);
+      return;
+    }
+    setSaving(false);
     if (!draftId) {
       setError(t("crossListing.upload.saveFirst"));
       return;
     }
-    setError(null);
     await submit({
       draftId,
       targetMarketplaceSlug: targetSlug,
-      productType: values.amazonProductType || "PET_SUPPLIES",
-      amazonCountrySlug,
+      ...(targetSlug === "amazon"
+        ? {
+            productType: values.amazonProductType || "PET_SUPPLIES",
+            amazonCountrySlug,
+          }
+        : {}),
     });
   }
 
@@ -395,7 +462,9 @@ export default function CrossListingEditorDialog({
               <div
                 className={`rounded-md border p-2 text-[11px] ${
                   submitState.result?.ok
-                    ? "border-emerald-400 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30"
+                    ? submitState.result.preparedOnly
+                      ? "border-amber-400 bg-amber-50 text-amber-900 dark:bg-amber-950/30"
+                      : "border-emerald-400 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30"
                     : "border-rose-400 bg-rose-50 text-rose-800 dark:bg-rose-950/30"
                 }`}
               >
@@ -407,6 +476,19 @@ export default function CrossListingEditorDialog({
                       {submitState.result.submissionId && ` · ID ${submitState.result.submissionId}`}
                       {submitState.result.sandbox && " · sandbox"}
                     </p>
+                    {submitState.result.preparedOnly && submitState.result.preparedMessage && (
+                      <p className="mt-1">{submitState.result.preparedMessage}</p>
+                    )}
+                    {submitState.result.aiReport?.ran && (
+                      <p className="mt-1 text-muted-foreground">
+                        {submitState.result.aiReport.changed
+                          ? t("crossListing.submit.aiChanged")
+                          : t("crossListing.submit.aiNoChange")}
+                        {submitState.result.aiReport.summary
+                          ? ` — ${submitState.result.aiReport.summary.slice(0, 200)}`
+                          : ""}
+                      </p>
+                    )}
                     {submitState.result.issues.length > 0 && (
                       <ul className="mt-1 list-disc pl-4">
                         {submitState.result.issues.map((iss, idx) => (
@@ -431,8 +513,14 @@ export default function CrossListingEditorDialog({
           error={error}
           saving={saving}
           canSave={canSave}
-          uploadEnabled={targetSlug === "amazon" && !!persistedDraftId && (targetSlug !== "amazon" || validateForAmazonSubmit(values, values.amazonProductType || "PET_SUPPLIES").valid)}
+          uploadEnabled={
+            missing.length === 0 &&
+            !!sourceData &&
+            (targetSlug !== "amazon" ||
+              validateForAmazonSubmit(values, values.amazonProductType || "PET_SUPPLIES").valid)
+          }
           uploading={submitState.loading}
+          persistedDraftId={persistedDraftId}
           onClose={onClose}
           onSave={() => void handleSave()}
           onUpload={() => void handleUpload()}

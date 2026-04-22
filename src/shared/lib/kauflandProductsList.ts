@@ -71,8 +71,24 @@ function mapKauflandUnit(u: Record<string, unknown>): MarketplaceProductListRow 
   const secondaryId = idProduct || idOffer || idUnit || "—";
   const rawTitle = extractTitleFromUnit(u);
   const title = rawTitle || "—";
-  const status = pickString(u.status ?? u.unit_status ?? "");
-  const isActive = !/inactive|deleted|blocked|cancelled/i.test(status);
+  // Kaufland /v2/units liefert:
+  //   - `status`: Unit-Status ("AVAILABLE" = lieferbar; sonst UNAVAILABLE/OUT_OF_STOCK/...)
+  //   - `product.is_valid` (embedded=products): **primäres** Aktiv-Flag in der Kaufland-UI.
+  //     `true`  = "Aktiv" (Ampel grün)
+  //     `false` = "Ungültig" (Ampel rot, Listing verletzt Pflichtattribute)
+  const status = pickString(u.status ?? "").toUpperCase();
+  const product = u.product;
+  const productIsValid =
+    product && typeof product === "object" && !Array.isArray(product)
+      ? (product as Record<string, unknown>).is_valid
+      : undefined;
+  const isUnitBlocked = /\b(UNAVAILABLE|DELETED|BLOCKED|DEACTIVATED|INACTIVE|INAKTIV|OUT_OF_STOCK)\b/.test(
+    status
+  );
+  let isActive: boolean;
+  if (productIsValid === false) isActive = false;
+  else if (isUnitBlocked) isActive = false;
+  else isActive = true;
   const priceRaw = u.price ?? u.fixed_price;
   const priceNum = pickNumber(priceRaw);
   const priceEur = priceNum > 0 ? Number((priceNum / 100).toFixed(2)) : null;
@@ -92,15 +108,26 @@ function mapKauflandUnit(u: Record<string, unknown>): MarketplaceProductListRow 
   put("id_offer", u.id_offer ?? u.idOffer);
   put("id_unit", u.id_unit ?? u.idUnit);
   put("id_product", u.id_product ?? u.idProduct);
-  put("unit_status", u.unit_status ?? u.unitStatus);
-  put("listing_status", u.listing_status ?? u.listingStatus);
+  put("status", u.status);
+  put("product_is_valid", productIsValid);
   put("fixed_price_raw", u.fixed_price ?? u.price);
+
+  // Status-Label für UI: bildet die Kaufland-UI nach.
+  //   is_valid === false  → "Ungültig"
+  //   status !== AVAILABLE → Unit-Status
+  //   sonst                → "Aktiv"
+  const statusLabel =
+    productIsValid === false
+      ? "Ungültig"
+      : status && status !== "AVAILABLE"
+        ? status
+        : "Aktiv";
 
   return {
     sku,
     secondaryId,
     title,
-    statusLabel: status || "—",
+    statusLabel,
     isActive,
     priceEur,
     stockQty: Number.isFinite(stockNum) ? stockNum : null,
@@ -200,8 +227,9 @@ async function fetchKauflandUnitsPagePayload(
   params.set("limit", String(limit));
   params.set("offset", String(offset));
   params.set("storefront", config.storefront);
-  /** Einige Konten liefern eingebettete Produktdaten (Titel) — nicht alle API-Versionen unterstützen den Parameter. */
-  if (useEmbeddedProduct) params.append("embedded", "product");
+  /** Kaufland erlaubt nur `embedded=products` (Plural). Mit eingebetteten Produktdaten bekommt man
+   * den Titel sowie ggf. weitere Metadaten direkt aus /v2/units und spart die N+1-Title-Lookups. */
+  if (useEmbeddedProduct) params.append("embedded", "products");
   const path = `/v2/units?${params.toString()}`;
   const res = await kauflandSignedFetch(config, path);
   const text = await res.text();

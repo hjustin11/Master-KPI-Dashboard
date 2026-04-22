@@ -9,6 +9,7 @@ export type DashboardPageAccessKey =
   | "settings.tutorials"
   | "settings.amazon"
   | "analytics.marketplaces"
+  | "analytics.weeklyReport"
   | "analytics.payouts"
   | "analytics.articleForecast"
   | "analytics.procurement"
@@ -18,6 +19,8 @@ export type DashboardPageAccessKey =
   | "xentral.orders"
   | "amazon.orders"
   | "amazon.products"
+  | "amazonFr.orders"
+  | "amazonFr.products"
   | "ebay.orders"
   | "ebay.products"
   | "otto.orders"
@@ -48,6 +51,7 @@ export const DASHBOARD_PAGE_ACCESS_CONFIG: Array<{
   { key: "settings.tutorials", label: "Administration · Tutorial-Editor", path: "/settings/tutorials" },
   { key: "settings.amazon", label: "Administration · Amazon EU-Marktplätze", path: "/settings/amazon" },
   { key: "analytics.marketplaces", label: "Analytics · Marktplätze", path: "/analytics/marketplaces" },
+  { key: "analytics.weeklyReport", label: "Analytics · Wochenbericht", path: "/analytics/weekly-report" },
   { key: "analytics.payouts", label: "Analytics · Auszahlungen", path: "/analytics/payouts" },
   { key: "analytics.articleForecast", label: "Analytics · Bedarfsprognose", path: "/analytics/article-forecast" },
   { key: "analytics.procurement", label: "Analytics · Beschaffung", path: "/analytics/procurement" },
@@ -57,6 +61,8 @@ export const DASHBOARD_PAGE_ACCESS_CONFIG: Array<{
   { key: "xentral.orders", label: "Xentral · Aufträge", path: "/xentral/orders" },
   { key: "amazon.orders", label: "Amazon · Bestellungen", path: "/amazon/orders" },
   { key: "amazon.products", label: "Amazon · Produkte", path: "/amazon/products" },
+  { key: "amazonFr.orders", label: "Amazon FR · Bestellungen", path: "/amazon-fr/orders" },
+  { key: "amazonFr.products", label: "Amazon FR · Produkte", path: "/amazon-fr/products" },
   { key: "ebay.orders", label: "eBay · Bestellungen", path: "/ebay/orders" },
   { key: "ebay.products", label: "eBay · Produkte", path: "/ebay/products" },
   { key: "otto.orders", label: "Otto · Bestellungen", path: "/otto/orders" },

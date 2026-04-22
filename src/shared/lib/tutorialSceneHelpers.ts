@@ -5,6 +5,7 @@ export const TUTORIAL_SIDEBAR_I18N_KEY: Record<SidebarItemKey, string> = {
   overview: "sidebarItems.overview",
   myArea: "sidebarItems.myArea",
   amazon: "nav.amazon",
+  "amazon-fr": "nav.amazonFr",
   ebay: "nav.ebay",
   otto: "nav.otto",
   kaufland: "nav.kaufland",

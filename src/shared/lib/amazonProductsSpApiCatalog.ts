@@ -682,7 +682,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
   marketplaceId: string;
   cacheKey: string;
 }): Promise<AmazonProductsCatalogSyncResult> {
-  const { config, lwaAccessToken, effectiveSellerId, marketplaceId: _marketplaceId, cacheKey } = args;
+  const { config, lwaAccessToken, effectiveSellerId, marketplaceId, cacheKey } = args;
   const freshMs = marketplaceIntegrationFreshMs();
   const staleMs = marketplaceIntegrationStaleMs();
   /** SP-API searchListingsItems: Default pageSize 10, Maximum 20. Ohne korrektes Paging nur erste Seite → nach Dedupe wirkt die Liste „kaputt“. */
@@ -694,7 +694,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
   /** Nächste Seite: `pagination.nextToken` muss als Query `pageToken` gesendet werden (nicht `nextToken`). */
   while (guard < 55) {
     const basePath = `/listings/2021-08-01/items/${encodeURIComponent(effectiveSellerId)}`;
-    const marketplace = getDefaultAmazonMarketplaceId(config.marketplaceIds);
+    const marketplace = marketplaceId;
     const withListingsDefaults = (extra: Record<string, string>): Record<string, string> => ({
       marketplaceIds: marketplace,
       includedData: "summaries,offers,fulfillmentAvailability",
@@ -754,7 +754,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
         awsSecretAccessKey: config.awsSecretAccessKey,
         awsSessionToken: config.awsSessionToken,
         lwaAccessToken,
-        marketplaceId: getDefaultAmazonMarketplaceId(config.marketplaceIds),
+        marketplaceId,
       });
       if (fallback.pending) {
         return { outcome: "pending", source: fallback.source };
@@ -796,7 +796,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
           preview: (result?.text ?? "").slice(0, 320),
           attempts,
           sellerId: effectiveSellerId,
-          marketplaceId: getDefaultAmazonMarketplaceId(config.marketplaceIds),
+          marketplaceId,
           fallbackError: fallback.error,
         },
       };
@@ -847,7 +847,7 @@ export async function syncAmazonProductsToIntegrationCache(args: {
       awsSecretAccessKey: config.awsSecretAccessKey,
       awsSessionToken: config.awsSessionToken,
       lwaAccessToken,
-      marketplaceId: getDefaultAmazonMarketplaceId(config.marketplaceIds),
+      marketplaceId,
     });
     if (reportFallback.rows.length > 0) {
       dedupedRows = mergeMissingCommerceFieldsBySku(dedupedRows, reportFallback.rows);
@@ -874,7 +874,9 @@ export async function syncAmazonProductsToIntegrationCache(args: {
   };
 }
 
-export async function primeAmazonProductsIntegrationCache(): Promise<{
+export async function primeAmazonProductsIntegrationCache(
+  opts: { marketplaceId?: string } = {}
+): Promise<{
   ok: boolean;
   skipped?: string;
   pending?: boolean;
@@ -882,6 +884,7 @@ export async function primeAmazonProductsIntegrationCache(): Promise<{
   error?: string;
   rowCount?: number;
   sellerId?: string;
+  marketplaceId?: string;
 }> {
   try {
     const config = await loadAmazonSpApiProductsConfig();
@@ -898,7 +901,9 @@ export async function primeAmazonProductsIntegrationCache(): Promise<{
       return { ok: false, skipped: "missing_amazon_sp_api_config" };
     }
 
-    const marketplaceId = getDefaultAmazonMarketplaceId(config.marketplaceIds);
+    const marketplaceId =
+      (opts.marketplaceId && opts.marketplaceId.trim()) ||
+      getDefaultAmazonMarketplaceId(config.marketplaceIds);
     const cacheKey = `amazon:products:${marketplaceId}`;
     const lwaAccessToken = await obtainAmazonLwaAccessToken({
       refreshToken: config.refreshToken,
@@ -930,6 +935,7 @@ export async function primeAmazonProductsIntegrationCache(): Promise<{
       ok: true,
       rowCount: syncResult.rows.length,
       sellerId: syncResult.sellerId,
+      marketplaceId,
       ...(syncResult.source ? { source: syncResult.source } : {}),
     };
   } catch (e) {

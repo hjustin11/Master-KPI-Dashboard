@@ -8,6 +8,43 @@
     "off": "关",
     "openMarketplaceOrderTitle": "在卖场卖家后台打开订单 ({id})"
   },
+  "marketplaceLanguage": {
+    "contentIn": "{language} 内容",
+    "marketplaceId": "市场 ID",
+    "changesOnlyApplyTo": "所有更改仅应用于 {name}。",
+    "missingHint": "尚未翻译为 {language} ({tag})",
+    "translateWithAi": "用 AI 从德语翻译",
+    "manualEnter": "手动输入",
+    "comingSoonToast": "AI 翻译即将推出 (阶段 5d)。",
+    "popoverTitle": "Amazon 按语言存储内容。",
+    "popoverBody": "Amazon DE 可能有 {sourceLanguage} 版本,但此市场缺少字段 \"{fieldLabel}\" 的 {targetLanguage} 翻译。",
+    "sourceValueLabel": "Amazon DE 中的内容:",
+    "detailsAriaLabel": "详细信息",
+    "lang_de_DE": "德语",
+    "lang_fr_FR": "法语",
+    "lang_fr_BE": "法语(比利时)",
+    "lang_it_IT": "意大利语",
+    "lang_es_ES": "西班牙语",
+    "lang_nl_NL": "荷兰语",
+    "lang_pl_PL": "波兰语",
+    "lang_sv_SE": "瑞典语",
+    "lang_en_GB": "英语 (英国)"
+  },
+  "amazonSubmitPreview": {
+    "title": "上传到 {name} 前的更改预览",
+    "description": "请检查更改。Amazon SP-API PUT 不可撤销。",
+    "language": "语言",
+    "changedFieldsLabel": "已更改字段 ({count})",
+    "noChanges": "与当前 Amazon 内容相比无更改。",
+    "before": "之前",
+    "after": "之后",
+    "emptyBefore": "(空)",
+    "emptyAfter": "(将被清除)",
+    "isolationWarning": "其他 Amazon 市场的内容不会更改。仅更新 {name}。",
+    "cancel": "取消",
+    "confirm": "保存更改",
+    "submitting": "提交中..."
+  },
   "language": {
     "switch": "语言",
     "de": "Deutsch",
@@ -48,6 +85,9 @@
     "amazon": "亚马逊",
     "amazonOrders": "订单",
     "amazonProducts": "商品",
+    "amazonFr": "亚马逊 FR",
+    "amazonFrOrders": "订单",
+    "amazonFrProducts": "商品",
     "otto": "Otto",
     "ottoOrders": "订单",
     "kaufland": "Kaufland",
@@ -77,6 +117,7 @@
     "adPerformance": "成效",
     "analytics": "分析",
     "analyticsMarketplaces": "市场",
+    "analyticsWeeklyReport": "周报",
     "analyticsArticleForecast": "需求预测",
     "analyticsPayouts": "付款",
     "analyticsProcurement": "采购",
@@ -363,6 +404,78 @@
   },
   "analyticsPage": {
     "title": "分析"
+  },
+  "weeklyReport": {
+    "title": "周报",
+    "subtitle": "演示视图",
+    "headerTitle": "第{currentWeek}周 对比 第{previousWeek}周",
+    "headerRange": "{currentRange} · 对比 {previousRange}",
+    "weekDropdownLabel": "日历周",
+    "weekOptionLabel": "第{week}周 / {year}",
+    "exportPdf": "导出 PDF",
+    "exportComingSoon": "PDF 导出将在后续步骤中提供。",
+    "story": {
+      "kernaussage": "核心要点",
+      "fallback": "本周无市场数据。"
+    },
+    "kpi": {
+      "revenue": "营收",
+      "orders": "订单",
+      "aov": "平均订单价值",
+      "returns": "退货",
+      "vsPrevious": "对比上周"
+    },
+    "table": {
+      "marketplace": "市场",
+      "revenue": "营收",
+      "share": "占比",
+      "orders": "订单",
+      "returns": "退货",
+      "trend": "趋势 (7 天)",
+      "noData": "无数据",
+      "errorHint": "数据不可用",
+      "expandAll": "全部展开",
+      "collapseAll": "全部收起",
+      "expandRow": "显示明细",
+      "collapseRow": "隐藏明细",
+      "previousShort": "上周"
+    },
+    "details": {
+      "topGainers": "最大涨幅",
+      "topLosers": "最大跌幅",
+      "priceTrend": "价格趋势",
+      "avgPriceCurrent": "当前平均价格",
+      "avgPricePrevious": "上周",
+      "trend": "趋势",
+      "noGainers": "本周无 SKU 涨幅。",
+      "noLosers": "本周无 SKU 跌幅。",
+      "skuPrefix": "SKU",
+      "showMore": "查看全部 {count}",
+      "dialogTitle": "涨幅与跌幅前列 — {name}",
+      "dialogGainersHeading": "涨幅 ({count})",
+      "dialogLosersHeading": "跌幅 ({count})",
+      "tooltipRevenue": "营收 第{week}周: {current} (上周: {previous})",
+      "tooltipOrders": "订单: {current} vs. {previous}",
+      "rankPrefix": "#{rank}",
+      "noDaily": "无每日数据",
+      "dailyChartLabel": "每日平均价格 (周一–周日)",
+      "revenueShort": "营收",
+      "ordersCurrentShort": "订单 周",
+      "ordersPreviousShort": "订单 上周"
+    },
+    "notes": {
+      "heading": "备注 / 待办",
+      "placeholder": "本周此市场的措施、待办、观察…",
+      "saving": "保存中…",
+      "saved": "已保存",
+      "error": "保存失败",
+      "updatedAt": "更新于 {date}"
+    },
+    "exportFilename": "周报-第{week}周-{year}.pdf",
+    "exportError": "PDF 导出失败。",
+    "exportSuccess": "PDF 下载已开始。",
+    "loading": "正在加载周报…",
+    "loadError": "周报加载失败。"
   },
   "articleForecast": {
     "title": "需求预测",
@@ -1198,6 +1311,10 @@
       "comingSoon": "该市场暂不支持上传。",
       "loading": "上传中…",
       "saveFirst": "请先保存为草稿。"
+    },
+    "submit": {
+      "aiChanged": "AI 已根据市场规则调整了列表。",
+      "aiNoChange": "AI 已审核 — 无需进一步优化。"
     },
     "placeholder": {
       "imageUrl": "输入图片 URL 并按回车",

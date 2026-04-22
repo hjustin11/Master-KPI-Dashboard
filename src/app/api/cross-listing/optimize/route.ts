@@ -1,5 +1,3 @@
-import { access, readFile } from "node:fs/promises";
-import path from "node:path";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient as createServerSupabase } from "@/shared/lib/supabase/server";
@@ -13,6 +11,7 @@ import {
   CROSS_LISTING_TARGET_SLUGS,
   type CrossListingTargetSlug,
 } from "@/shared/lib/crossListing/crossListingDraftTypes";
+import { loadMarketplaceRulebook } from "@/shared/lib/crossListing/loadMarketplaceRulebook";
 import { getAmazonMarketplaceBySlug } from "@/shared/config/amazonMarketplaces";
 
 export const dynamic = "force-dynamic";
@@ -77,40 +76,6 @@ const BodyZ = z.object({
   amazonCountrySlug: z.string().optional(),
 });
 
-async function firstExistingPath(candidates: string[]): Promise<string | null> {
-  for (const c of candidates) {
-    try {
-      await access(c);
-      return c;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
-async function loadRulebook(slug: CrossListingTargetSlug): Promise<string> {
-  const cwd = process.cwd();
-  const candidates = [
-    process.env.CROSS_LISTING_GUIDELINES_DIR
-      ? path.join(process.env.CROSS_LISTING_GUIDELINES_DIR, `${slug}.md`)
-      : null,
-    path.join(cwd, "content", "marketplace_guidelines", `${slug}.md`),
-    path.join(cwd, "master-dashboard", "content", "marketplace_guidelines", `${slug}.md`),
-    slug === "amazon" ? path.join(cwd, "content", "amazon_haustierbedarf_regelwerk.md") : null,
-    slug === "amazon"
-      ? path.join(cwd, "master-dashboard", "content", "amazon_haustierbedarf_regelwerk.md")
-      : null,
-  ].filter((x): x is string => Boolean(x));
-
-  const found = await firstExistingPath(candidates);
-  if (!found) return "";
-  try {
-    return await readFile(found, "utf8");
-  } catch {
-    return "";
-  }
-}
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabase();
@@ -136,7 +101,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unbekannter Ziel-Marktplatz." }, { status: 400 });
   }
 
-  const rulebook = await loadRulebook(parsed.data.targetMarketplace);
+  const rulebook = await loadMarketplaceRulebook(parsed.data.targetMarketplace);
   const limits = limitsFromConfig(config);
 
   // Amazon-Multi-Country: Label + language_tag aus Config ableiten.

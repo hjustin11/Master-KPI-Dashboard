@@ -18,6 +18,15 @@ export type CrossListingSubmitResult = {
   sandbox?: boolean;
   endpointUsed?: string;
   warnings?: { field: string; message: string }[];
+  preparedOnly?: boolean;
+  preparedMessage?: string;
+  aiReport?: {
+    ran: boolean;
+    changed: boolean;
+    summary: string;
+    skippedReason?: string;
+    error?: string;
+  };
 };
 
 type State = {

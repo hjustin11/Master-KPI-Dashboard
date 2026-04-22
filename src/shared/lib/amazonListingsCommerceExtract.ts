@@ -34,6 +34,8 @@ function priceFromOfferObject(offer: Record<string, unknown>): number | null {
     const direct = parsePriceScheduleRow(node);
     if (direct != null) return direct;
     for (const k of [
+      // SP-API v2021-08-01 searchListingsItems shape: offer.price = { currency, amount }
+      "price",
       "ListingPrice",
       "RegularPrice",
       "Price",

@@ -110,7 +110,9 @@ export async function fetchMiraklProductRowsFressnapf(
   const out: MarketplaceProductListRow[] = [];
   let offset = 0;
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const path = `/api/offers?max=${PAGE_SIZE}&offset=${offset}`;
+    // pagination=false → klassisches offset/max Paging (Mirakl-Default ist pagination=true mit next_page_token,
+    // was wir nicht auswerten). Ohne diesen Flag erhalten wir nur die erste Seite.
+    const path = `/api/offers?max=${PAGE_SIZE}&offset=${offset}&pagination=false`;
     const res = await fressnapfGet(config, path);
     const text = await res.text();
     let json: unknown = null;
@@ -141,7 +143,9 @@ export async function fetchMiraklProductRowsFlex(
   const out: MarketplaceProductListRow[] = [];
   let offset = 0;
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const path = `/api/offers?max=${PAGE_SIZE}&offset=${offset}`;
+    // pagination=false → klassisches offset/max Paging (Mirakl-Default ist pagination=true mit next_page_token,
+    // was wir nicht auswerten). Ohne diesen Flag erhalten wir nur die erste Seite.
+    const path = `/api/offers?max=${PAGE_SIZE}&offset=${offset}&pagination=false`;
     const res = await flexGet(config, path);
     const text = await res.text();
     let json: unknown = null;

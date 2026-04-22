@@ -124,7 +124,7 @@ export async function POST(request: Request) {
           const units = await fetchKauflandOrderUnitsAllStatuses({ config: cfg, forceRefresh: true });
           results.orders = { ok: true, count: units.length };
         }
-      } else if (marketplace === "amazon") {
+      } else if (marketplace === "amazon" || marketplace.startsWith("amazon-")) {
         const ar = await primeAmazonOrdersForYmdRange(fromYmd, toYmd);
         results.orders = ar;
       } else {

@@ -7,6 +7,7 @@ import {
   loadAmazonSpApiProductsConfig,
   paginateRows,
   parsePaginationParam,
+  primeAmazonProductsIntegrationCache,
   type AmazonProductsCachedPayload,
 } from "@/shared/lib/amazonProductsSpApiCatalog";
 import {
@@ -38,6 +39,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const statusFilter = (searchParams.get("status") ?? "active").toLowerCase();
     const allRows = searchParams.get("all") === "1";
+    const forceRefresh = searchParams.get("refresh") === "1";
     const limit = parsePaginationParam(searchParams.get("limit"), 50, 1, 250);
     const offset = parsePaginationParam(searchParams.get("offset"), 0, 0, 200_000);
 
@@ -57,6 +59,12 @@ export async function GET(request: Request) {
       marketplaceId = getDefaultAmazonMarketplaceId(config.marketplaceIds);
     }
     const cacheKey = `amazon:products:${marketplaceId}`;
+
+    // `?refresh=1` → Cache neu aufbauen (SP-API Listings erneut ziehen). Anschließend
+    // liest der Code den frisch befüllten Cache unten wie gewohnt.
+    if (forceRefresh) {
+      await primeAmazonProductsIntegrationCache({ marketplaceId });
+    }
 
     const cached = await readIntegrationCache<AmazonProductsCachedPayload>(cacheKey);
     if (cached.state !== "miss") {

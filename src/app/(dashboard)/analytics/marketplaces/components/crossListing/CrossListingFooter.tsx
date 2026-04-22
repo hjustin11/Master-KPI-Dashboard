@@ -12,6 +12,7 @@ export function CrossListingFooter({
   canSave,
   uploadEnabled,
   uploading,
+  persistedDraftId,
   onClose,
   onSave,
   onUpload,
@@ -22,17 +23,27 @@ export function CrossListingFooter({
   canSave: boolean;
   uploadEnabled: boolean;
   uploading: boolean;
+  persistedDraftId?: string | null;
   onClose: () => void;
   onSave: () => void;
   onUpload: () => void;
 }) {
   const { t } = useTranslation();
   const uploadDisabled = !uploadEnabled || uploading || saving;
+
+  let uploadDisabledReason: string | undefined;
+  if (!uploadEnabled) {
+    if (!persistedDraftId) uploadDisabledReason = t("crossListing.upload.saveFirst");
+    else if (missing.length > 0)
+      uploadDisabledReason = `${t("crossListing.missing")}: ${missing.join(", ")}`;
+    else uploadDisabledReason = t("crossListing.upload.comingSoon");
+  }
+
   return (
     <DialogFooter className={MARKETPLACE_PRODUCT_EDITOR_FOOTER_CLASS}>
       <div className="flex items-center gap-2">
         {missing.length > 0 && (
-          <span className="text-[10px] text-amber-600">
+          <span className="text-[11px] font-medium text-amber-600">
             {t("crossListing.missing")}: {missing.join(", ")}
           </span>
         )}
@@ -47,7 +58,7 @@ export function CrossListingFooter({
           variant="outline"
           onClick={onUpload}
           disabled={uploadDisabled}
-          title={uploadEnabled ? undefined : t("crossListing.upload.comingSoon")}
+          title={uploadDisabledReason}
         >
           {uploading ? t("crossListing.upload.loading") : t("crossListing.action.upload")}
         </Button>

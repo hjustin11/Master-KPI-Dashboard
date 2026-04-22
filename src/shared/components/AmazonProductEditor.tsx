@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Loader2, RotateCw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,8 @@ import {
 } from "@/shared/lib/amazonMeasureDisplay";
 import { useTranslation } from "@/i18n/I18nProvider";
 import { AmazonDraftSuggestionTrigger } from "@/shared/components/AmazonDraftSuggestionTrigger";
+import { MarketplaceLanguageBanner } from "@/shared/components/MarketplaceLanguageBanner";
+import { MissingTranslationHint } from "@/shared/components/MissingTranslationHint";
 import type { ContentAuditSuggestions } from "@/shared/hooks/useAmazonContentAudit";
 import type { AmazonProductDraftValues } from "@/shared/lib/amazonProductDraft";
 import { Maximize2, Download, Plus, Trash2 } from "lucide-react";
@@ -203,12 +206,24 @@ export type AmazonProductEditorProps = {
   /** Callbacks */
   onClose: () => void;
   onSave: () => Promise<void>;
+  onSubmitToAmazon?: () => Promise<unknown>;
+  submitSending?: boolean;
+  submitResultSummary?: string | null;
   onSetDraftValues: (updater: (prev: AmazonProductDraftValues) => AmazonProductDraftValues) => void;
   onFetchContentAudit: (sku: string, opts?: { refresh?: boolean }) => Promise<void>;
 
   /** UI state */
   logoSrc: string;
   marketplaceSlug: string;
+  /** Optional Amazon country slug (z. B. "amazon-fr") für Sprach-Banner. */
+  amazonSlug?: string;
+  /** Liste fehlender Übersetzungen aus der Detail-API. */
+  missingTranslations?: string[];
+  /** language_tag für den Ziel-Marktplatz (z. B. "fr_FR"). */
+  targetLanguageTag?: string | null;
+  /** Source-Snapshot für Übersetzungs-Kontext (enthält DE-Werte als Vorlage). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sourceSnapshotForTranslation?: Record<string, any> | null;
   canEditProducts: boolean;
   imageDropActive: boolean;
   onSetImageDropActive: (active: boolean) => void;
@@ -237,10 +252,17 @@ export function AmazonProductEditor({
   displayedContentAuditFindings,
   onClose,
   onSave,
+  onSubmitToAmazon,
+  submitSending = false,
+  submitResultSummary = null,
   onSetDraftValues,
   onFetchContentAudit,
   logoSrc,
   marketplaceSlug,
+  amazonSlug,
+  missingTranslations = [],
+  targetLanguageTag = null,
+  sourceSnapshotForTranslation = null,
   canEditProducts,
   imageDropActive,
   onSetImageDropActive,
@@ -266,6 +288,105 @@ export function AmazonProductEditor({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return getMissingAmazonRequiredFields(draftValues as any);
   }, [draftValues]);
+
+  // --- Phase 5d: KI-Übersetzung (alle Felder in einem Call) ---
+  const [, setTranslating] = useState(false);
+  const handleTranslate = useCallback(async () => {
+    if (!targetLanguageTag) return;
+    const source = sourceSnapshotForTranslation ?? {};
+    const hasAnySource =
+      (typeof source.title === "string" && source.title.trim()) ||
+      (typeof source.description === "string" && source.description.trim()) ||
+      (Array.isArray(source.bulletPoints) && source.bulletPoints.length > 0) ||
+      (typeof source.brand === "string" && source.brand.trim());
+    if (!hasAnySource) {
+      toast.error("Keine Quelldaten zum Übersetzen gefunden.");
+      return;
+    }
+    setTranslating(true);
+    const toastId = toast.loading("Übersetzt Content mit KI...");
+    try {
+      const res = await fetch("/api/amazon/translate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          source: {
+            title: typeof source.title === "string" ? source.title : undefined,
+            description:
+              typeof source.description === "string" ? source.description : undefined,
+            bulletPoints: Array.isArray(source.bulletPoints)
+              ? (source.bulletPoints as string[])
+              : undefined,
+            brand: typeof source.brand === "string" ? source.brand : undefined,
+          },
+          sourceLanguageTag: "de_DE",
+          targetLanguageTag,
+          productContext: {
+            productType: draftValues.productType || undefined,
+            brand: draftValues.brand || undefined,
+          },
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        content?: {
+          title?: string | null;
+          description?: string | null;
+          bulletPoints?: string[] | null;
+          brand?: string | null;
+        };
+        error?: string;
+      };
+      if (!res.ok || !payload.ok || !payload.content) {
+        toast.error(payload.error ?? "Übersetzung fehlgeschlagen.", { id: toastId });
+        return;
+      }
+      const c = payload.content;
+      // Ein Feld wird überschrieben, wenn:
+      //   a) es leer ist (nonDestructive), ODER
+      //   b) es in missingTranslations[] enthalten ist (DE-Content, soll durch FR ersetzt werden).
+      const titleOverride = missingTranslations.includes("title");
+      const descriptionOverride = missingTranslations.includes("description");
+      const brandOverride = missingTranslations.includes("brand");
+      const bulletsOverride = missingTranslations.includes("bulletPoints");
+      onSetDraftValues((prev) => {
+        const nextBullets = [...prev.bulletPoints];
+        if (Array.isArray(c.bulletPoints)) {
+          const translatedBullets = c.bulletPoints;
+          if (bulletsOverride) {
+            // komplett ersetzen durch übersetzte Bullets (leere Slots am Ende auffüllen)
+            for (let i = 0; i < Math.max(nextBullets.length, translatedBullets.length); i++) {
+              nextBullets[i] = translatedBullets[i] ?? "";
+            }
+          } else {
+            // nur leere Slots überschreiben
+            for (let i = 0; i < Math.max(nextBullets.length, translatedBullets.length); i++) {
+              if (!nextBullets[i] || nextBullets[i].trim() === "") {
+                nextBullets[i] = translatedBullets[i] ?? "";
+              }
+            }
+          }
+        }
+        return {
+          ...prev,
+          title:
+            c.title && (titleOverride || !prev.title.trim()) ? c.title : prev.title,
+          description:
+            c.description && (descriptionOverride || !prev.description.trim())
+              ? c.description
+              : prev.description,
+          brand:
+            c.brand && (brandOverride || !prev.brand.trim()) ? c.brand : prev.brand,
+          bulletPoints: nextBullets,
+        };
+      });
+      toast.success("Übersetzung übernommen. Bitte prüfen und ggf. anpassen.", { id: toastId });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Übersetzung fehlgeschlagen.", { id: toastId });
+    } finally {
+      setTranslating(false);
+    }
+  }, [targetLanguageTag, sourceSnapshotForTranslation, missingTranslations, draftValues.productType, draftValues.brand, onSetDraftValues]);
 
   return (
     <MarketplaceProductEditorDialogContent>
@@ -300,6 +421,12 @@ export function AmazonProductEditor({
             draftLoading && "pointer-events-none select-none opacity-[0.35]"
           )}
         >
+          {marketplaceSlug === "amazon" ? (
+            <MarketplaceLanguageBanner
+              marketplaceSlug={amazonSlug ?? "amazon-de"}
+              className="mb-2"
+            />
+          ) : null}
           {detailLoadHint ? (
             <div className="rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-[10px] leading-snug text-amber-950 dark:text-amber-100">
               {detailLoadHint}
@@ -501,6 +628,20 @@ export function AmazonProductEditor({
                         className={cn("min-h-[2.5rem] resize-y py-0.5", AMAZON_EDITOR_FIELD)}
                       />
                     </label>
+                    {targetLanguageTag && missingTranslations.includes("title") ? (
+                      <MissingTranslationHint
+                        fieldName="title"
+                        fieldLabel="Titel"
+                        targetLanguageTag={targetLanguageTag}
+                        sourceValue={
+                          typeof sourceSnapshotForTranslation?.title === "string"
+                            ? sourceSnapshotForTranslation.title
+                            : undefined
+                        }
+                        hasValue={false}
+                        onTranslateClick={handleTranslate}
+                      />
+                    ) : null}
                   </div>
                 </section>
                 <div className="flex min-w-0 flex-col gap-1 lg:flex-row lg:items-stretch">
@@ -573,6 +714,20 @@ export function AmazonProductEditor({
                             onChange={(e) => onSetDraftValues((prev) => ({ ...prev, brand: e.target.value }))}
                             placeholder="z. B. AstroPet"
                           />
+                          {targetLanguageTag && missingTranslations.includes("brand") ? (
+                            <MissingTranslationHint
+                              fieldName="brand"
+                              fieldLabel="Marke"
+                              targetLanguageTag={targetLanguageTag}
+                              sourceValue={
+                                typeof sourceSnapshotForTranslation?.brand === "string"
+                                  ? sourceSnapshotForTranslation.brand
+                                  : undefined
+                              }
+                              hasValue={false}
+                              onTranslateClick={handleTranslate}
+                            />
+                          ) : null}
                         </label>
                         <label className={AMAZON_EDITOR_LABEL}>
                           <span className="text-muted-foreground">UVP (EUR)</span>
@@ -897,12 +1052,40 @@ export function AmazonProductEditor({
                             rows={2}
                             placeholder="Beschreibung"
                           />
+                          {targetLanguageTag && missingTranslations.includes("description") ? (
+                            <MissingTranslationHint
+                              fieldName="description"
+                              fieldLabel="Beschreibung"
+                              targetLanguageTag={targetLanguageTag}
+                              sourceValue={
+                                typeof sourceSnapshotForTranslation?.description === "string"
+                                  ? sourceSnapshotForTranslation.description
+                                  : undefined
+                              }
+                              hasValue={false}
+                              onTranslateClick={handleTranslate}
+                            />
+                          ) : null}
                         </label>
                       </div>
                     </section>
                   </div>
                 </div>
                 <section className={AMAZON_EDITOR_SECTION}>
+                  {targetLanguageTag && missingTranslations.includes("bulletPoints") ? (
+                    <MissingTranslationHint
+                      fieldName="bulletPoints"
+                      fieldLabel="Bullet Points"
+                      targetLanguageTag={targetLanguageTag}
+                      sourceValue={
+                        Array.isArray(sourceSnapshotForTranslation?.bulletPoints)
+                          ? (sourceSnapshotForTranslation.bulletPoints as string[]).join("\n• ")
+                          : undefined
+                      }
+                      hasValue={false}
+                      onTranslateClick={handleTranslate}
+                    />
+                  ) : null}
                   <div className="flex flex-wrap items-center gap-1">
                     <h3 className={AMAZON_EDITOR_H3}>{t("amazonDraft.bulletsSectionTitle")}</h3>
                     {contentAuditSuggestions.bullets.show && auditPayload ? (
@@ -1077,6 +1260,7 @@ export function AmazonProductEditor({
           {editorMode === "create_new" && missingRequiredFields.length > 0
             ? ` • ${missingRequiredFields.length} Pflichtfeld(er) fehlen`
             : ""}
+          {submitResultSummary ? ` • ${submitResultSummary}` : ""}
         </span>
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={onClose}>
@@ -1084,6 +1268,7 @@ export function AmazonProductEditor({
           </Button>
           <Button
             type="button"
+            variant="outline"
             size="sm"
             className="h-6 px-2 text-[10px]"
             onClick={() => void onSave()}
@@ -1091,6 +1276,17 @@ export function AmazonProductEditor({
           >
             {draftSaving ? "Speichert..." : "Entwurf speichern"}
           </Button>
+          {onSubmitToAmazon && editorMode === "edit_existing" ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-6 px-2 text-[10px]"
+              onClick={() => void onSubmitToAmazon()}
+              disabled={submitSending || draftSaving || draftLoading}
+            >
+              {submitSending ? "Überträgt..." : "Auf Amazon übertragen"}
+            </Button>
+          ) : null}
         </div>
       </DialogFooter>
     </MarketplaceProductEditorDialogContent>

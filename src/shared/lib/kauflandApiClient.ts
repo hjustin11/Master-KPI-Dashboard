@@ -121,6 +121,46 @@ export async function kauflandSignedFetch(
   return fetch(uri, { method: "GET", headers, cache: "no-store" });
 }
 
+/**
+ * Signed Write: PUT/POST/PATCH/DELETE mit HMAC-Signatur + optionalen
+ * Partner-Headers. Body als JSON-String übergeben.
+ */
+export async function kauflandSignedWrite(
+  config: KauflandIntegrationConfig,
+  args: { method: "PUT" | "POST" | "PATCH" | "DELETE"; pathAndQuery: string; body: string }
+): Promise<Response> {
+  const path = args.pathAndQuery.startsWith("/") ? args.pathAndQuery : `/${args.pathAndQuery}`;
+  const uri = `${config.baseUrl.replace(/\/+$/, "")}${path}`;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = signKauflandRequest({
+    method: args.method,
+    uri,
+    body: args.body,
+    timestamp,
+    secretKey: config.secretKey,
+  });
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    "Shop-Client-Key": config.clientKey,
+    "Shop-Timestamp": String(timestamp),
+    "Shop-Signature": signature,
+    "User-Agent": config.userAgent,
+  };
+  if (config.partnerClientKey && config.partnerSecretKey) {
+    const partnerSig = signKauflandRequest({
+      method: args.method,
+      uri,
+      body: args.body,
+      timestamp,
+      secretKey: config.partnerSecretKey,
+    });
+    headers["Shop-Partner-Client-Key"] = config.partnerClientKey;
+    headers["Shop-Partner-Signature"] = partnerSig;
+  }
+  return fetch(uri, { method: args.method, headers, body: args.body, cache: "no-store" });
+}
+
 type CollectionResponse<T> = {
   data?: T[];
   pagination?: { offset?: number; limit?: number; total?: number };

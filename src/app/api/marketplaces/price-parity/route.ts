@@ -81,6 +81,8 @@ export type PriceParityCell = {
   state: MarketplaceCellState;
   stock: number | null;
   stockState: MarketplaceCellState;
+  /** true = Listing ist auf dem Marktplatz aktiv, false = inaktiv, null = unbekannt (nicht verbunden / nicht gefunden). */
+  isActive: boolean | null;
   matchInfo?: PriceParityMatchInfo | null;
 };
 
@@ -140,6 +142,7 @@ type SkuSnapshot = {
   ean?: string | null;
   secondaryId?: string | null;
   asin?: string | null;
+  isActive?: boolean | null;
 };
 
 /** Extrahiert EAN/GTIN aus `extras` oder direkten Feldern einer Marktplatz-Zeile. */
@@ -210,6 +213,23 @@ function skuSnapshotMapFromProductItems(
       null;
     const title = typeof it.title === "string" ? it.title : null;
     const secondaryId = typeof it.secondaryId === "string" ? it.secondaryId : null;
+    // Primary: explicit isActive-Flag vom Marktplatz-Loader (bereits mit MP-spezifischer Logik).
+    // Fallback: statusLabel per Regex — negative Treffer schlagen positive (z. B. "active but invalid").
+    const isActiveRaw = it.isActive;
+    let isActive: boolean | null;
+    if (typeof isActiveRaw === "boolean") {
+      isActive = isActiveRaw;
+    } else if (typeof it.statusLabel === "string" && it.statusLabel.trim()) {
+      const s = it.statusLabel.toUpperCase();
+      const inactive =
+        /\b(INACTIVE|INAKTIV|OFFLINE|INCOMPLETE|DEACTIVATED|DELETED|OUT_OF_STOCK|BLOCKED|CANCELLED|INVALID|UNGÜLTIG|UNGUELTIG|REJECTED|DRAFT|PENDING|UNDER_REVIEW|REVIEW|SUSPENDED|ARCHIVED|NEW)\b/.test(
+          s
+        );
+      const active = /\b(ONLINE|ACTIVE|AKTIV|LIVE|PUBLISHED|BUYABLE|ENABLED|VALID|OK)\b/.test(s);
+      isActive = inactive ? false : active ? true : null;
+    } else {
+      isActive = null;
+    }
     map.set(k, {
       price: p,
       stock,
@@ -217,6 +237,7 @@ function skuSnapshotMapFromProductItems(
       secondaryId,
       ean: extractEan(it),
       asin: extractAsin(it),
+      isActive,
     });
   }
   return map;
@@ -752,22 +773,34 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
     }
 
     const afterDeviation = applyMajorityDeviation(flat);
-    const amazon = {
+    const amazon: PriceParityCell = {
       price: (afterDeviation.amazon ?? { price: amazonPrice, state: amazonProv }).price,
       state: (afterDeviation.amazon ?? { price: amazonPrice, state: amazonProv }).state,
       stock: stockFlat.amazon?.stock ?? null,
       stockState: stockFlat.amazon?.state ?? "not_connected",
+      isActive: amz?.isActive ?? null,
     };
     const otherMarketplaces: Record<string, PriceParityCell> =
       {};
     for (const m of ANALYTICS_MARKETPLACES) {
       const p = afterDeviation[m.slug] ?? flat[m.slug] ?? { price: null, state: "not_connected" };
       const s = stockFlat[m.slug] ?? { stock: null, state: "not_connected" };
+      // isActive aus dem Produkt-Snapshot des Marktplatzes ziehen (bei Otto primary: ottoProductSnap,
+      // sonst generic productMaps[m.slug]).
+      let isActive: boolean | null = null;
+      if (m.slug === "otto") {
+        isActive = (ottoProductSnap as { isActive?: boolean | null }).isActive ?? null;
+      } else {
+        const pmap = productMaps[m.slug];
+        const snap = key && pmap ? pmap.get(key) : undefined;
+        isActive = snap?.isActive ?? null;
+      }
       otherMarketplaces[m.slug] = {
         price: p.price,
         state: p.state,
         stock: s.stock,
         stockState: s.state,
+        isActive,
       };
     }
 

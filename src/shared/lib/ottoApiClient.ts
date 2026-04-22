@@ -759,6 +759,7 @@ function ottoExtrasForRow(resource: Record<string, unknown>, vr?: Record<string,
   const put = (k: string, v: unknown) => {
     if (v === undefined || v === null) return;
     if (typeof v === "string" && !v.trim()) return;
+    if (Array.isArray(v) && v.length === 0) return;
     out[k] = v;
   };
   put(
@@ -774,8 +775,41 @@ function ottoExtrasForRow(resource: Record<string, unknown>, vr?: Record<string,
   const pdRaw = resource.productDescription ?? resource.product_description;
   if (pdRaw && typeof pdRaw === "object" && !Array.isArray(pdRaw)) {
     const pd = pdRaw as Record<string, unknown>;
+    put("brand", pd.brand);
     put("brand_hint", pd.brand);
     put("product_line_hint", pd.productLine ?? pd.product_line);
+    put("description", pd.description);
+    put("category", pd.category);
+    if (Array.isArray(pd.bulletPoints ?? pd.bullet_points)) {
+      const arr = (pd.bulletPoints ?? pd.bullet_points) as unknown[];
+      const bullets = arr.filter((b): b is string => typeof b === "string" && b.trim().length > 0);
+      put("bullets", bullets);
+    }
+    if (Array.isArray(pd.attributes)) {
+      const attrMap: Record<string, string> = {};
+      for (const a of pd.attributes as unknown[]) {
+        if (!a || typeof a !== "object") continue;
+        const ar = a as Record<string, unknown>;
+        const name = typeof ar.name === "string" ? ar.name.trim() : "";
+        const values = Array.isArray(ar.values)
+          ? (ar.values as unknown[]).filter((v): v is string => typeof v === "string")
+          : [];
+        if (name && values.length > 0) attrMap[name] = values.join(", ");
+      }
+      if (Object.keys(attrMap).length > 0) put("attributes", attrMap);
+    }
+  }
+  // Otto liefert Bilder unter mediaAssets oder images — beide Varianten akzeptieren
+  const mediaRaw = resource.mediaAssets ?? (vr && vr.mediaAssets);
+  if (Array.isArray(mediaRaw)) {
+    const urls: string[] = [];
+    for (const m of mediaRaw as unknown[]) {
+      if (!m || typeof m !== "object") continue;
+      const mr = m as Record<string, unknown>;
+      const loc = typeof mr.location === "string" ? mr.location.trim() : "";
+      if (loc) urls.push(loc);
+    }
+    if (urls.length > 0) put("image_urls", urls);
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }
@@ -949,4 +983,96 @@ export async function fetchOttoProductsAll(args: {
     staleMs,
   });
   return live;
+}
+
+export type OttoStockPriceSyncResult = {
+  success: Array<{ sku: string }>;
+  failures: Array<{ sku: string; reason: string }>;
+};
+
+/**
+ * Otto Market Partner API — Bestands- und Preis-Updates.
+ * Stock: PATCH /v4/quantities (Bulk, array of {sku, quantity})
+ * Preis: PATCH /v4/products/{sku}/prices (per SKU)
+ * Docs: https://api.otto.market/docs
+ */
+export async function syncOttoStockAndPrice(args: {
+  baseUrl: string;
+  token: string;
+  updates: Array<{ sku: string; stockQty?: number; priceEur?: number }>;
+}): Promise<OttoStockPriceSyncResult> {
+  const success: OttoStockPriceSyncResult["success"] = [];
+  const failures: OttoStockPriceSyncResult["failures"] = [];
+  if (args.updates.length === 0) return { success, failures };
+
+  const base = args.baseUrl.replace(/\/+$/, "");
+  const authHeader = { Authorization: `Bearer ${args.token}` };
+
+  // Bulk-Stock via /v4/quantities (PATCH)
+  const stockUpdates = args.updates.filter(
+    (u) => typeof u.stockQty === "number" && Number.isFinite(u.stockQty)
+  );
+  if (stockUpdates.length > 0) {
+    // Otto limitiert /v4/quantities auf ~50 Einträge pro Request.
+    for (let i = 0; i < stockUpdates.length; i += 50) {
+      const chunk = stockUpdates.slice(i, i + 50);
+      try {
+        const res = await fetch(`${base}/v4/quantities`, {
+          method: "PATCH",
+          headers: { ...authHeader, "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(
+            chunk.map((u) => ({ sku: u.sku, quantity: Math.max(0, Math.trunc(u.stockQty!)) }))
+          ),
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          const preview = text.replace(/\s+/g, " ").trim().slice(0, 200) || `HTTP ${res.status}`;
+          for (const u of chunk) failures.push({ sku: u.sku, reason: `Otto quantities PATCH: ${preview}` });
+          continue;
+        }
+        for (const u of chunk) success.push({ sku: u.sku });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Otto quantities PATCH fehlgeschlagen.";
+        for (const u of chunk) failures.push({ sku: u.sku, reason: msg });
+      }
+    }
+  }
+
+  // Preis per SKU (Otto hat keine Bulk-Price-API).
+  const priceUpdates = args.updates.filter(
+    (u) => typeof u.priceEur === "number" && Number.isFinite(u.priceEur) && u.priceEur > 0
+  );
+  for (const u of priceUpdates) {
+    try {
+      const res = await fetch(`${base}/v4/products/${encodeURIComponent(u.sku)}/prices`, {
+        method: "PATCH",
+        headers: { ...authHeader, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          prices: [
+            {
+              standardPrice: {
+                amount: Number(u.priceEur!.toFixed(2)),
+                currency: "EUR",
+              },
+            },
+          ],
+        }),
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        const preview = text.replace(/\s+/g, " ").trim().slice(0, 200) || `HTTP ${res.status}`;
+        failures.push({ sku: u.sku, reason: `Otto price PATCH: ${preview}` });
+        continue;
+      }
+      // Wenn der SKU auch Stock-Update hatte, ist er ggf. schon im Success.
+      if (!success.some((s) => s.sku === u.sku)) success.push({ sku: u.sku });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Otto price PATCH fehlgeschlagen.";
+      failures.push({ sku: u.sku, reason: msg });
+    }
+  }
+
+  return { success, failures };
 }

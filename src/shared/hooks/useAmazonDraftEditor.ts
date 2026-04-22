@@ -4,6 +4,7 @@ import type {
   AmazonProductDraftRecord,
   AmazonProductDraftValues,
 } from "@/shared/lib/amazonProductDraft";
+import type { AmazonSubmissionIssue } from "@/shared/lib/amazonListingsItemsPut";
 import {
   deriveDraftStatus,
   draftValuesFromSource,
@@ -37,6 +38,8 @@ type AmazonProductDetailPayload = {
   draft?: AmazonProductDraftRecord | null;
   error?: string;
   detailLoadHint?: string;
+  missingTranslations?: string[];
+  targetLanguageTag?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -45,6 +48,11 @@ type AmazonProductDetailPayload = {
 
 export type UseAmazonDraftEditorArgs = {
   marketplaceSlug: string;
+  /**
+   * Optional Amazon country slug (z. B. "amazon-fr"). Wenn gesetzt, lädt der Detail-GET
+   * country-spezifische Inhalte via /api/amazon/[amazonSlug]/products/[sku]. Default: DE.
+   */
+  amazonSlug?: string;
   canEditProducts: boolean;
   locale: Locale;
   fetchContentAudit: (sku: string, opts?: { refresh?: boolean }) => Promise<void>;
@@ -54,6 +62,16 @@ export type UseAmazonDraftEditorArgs = {
   /** Called at the start of openEditorForRow / openCreateEditor to dismiss any open shell dialog. */
   closeShellDialog?: () => void;
   t: (key: string, params?: Record<string, string>) => string;
+};
+
+export type AmazonSubmitResult = {
+  ok: boolean;
+  status: string;
+  submissionId: string | null;
+  issues: AmazonSubmissionIssue[];
+  httpStatus?: number;
+  sandbox?: boolean;
+  error?: string;
 };
 
 export type UseAmazonDraftEditorReturn = {
@@ -71,8 +89,14 @@ export type UseAmazonDraftEditorReturn = {
   setDraftError: (v: string | null) => void;
   draftTableMissing: boolean;
   detailLoadHint: string | null;
+  missingTranslations: string[];
+  targetLanguageTag: string | null;
+  sourceSnapshotForTranslation: ReturnType<typeof sourceSnapshotFromRow> | null;
+  submitSending: boolean;
+  submitResult: AmazonSubmitResult | null;
   loadDraft: (sku: string, mode: AmazonProductDraftMode) => Promise<void>;
   saveDraft: () => Promise<void>;
+  submitToAmazon: () => Promise<AmazonSubmitResult | null>;
   openEditorForRow: (row: MarketplaceProductListRow) => void;
   openCreateEditor: () => void;
 };
@@ -83,6 +107,7 @@ export type UseAmazonDraftEditorReturn = {
 
 export function useAmazonDraftEditor({
   marketplaceSlug,
+  amazonSlug,
   canEditProducts,
   locale,
   fetchContentAudit,
@@ -92,6 +117,15 @@ export function useAmazonDraftEditor({
   closeShellDialog,
   t,
 }: UseAmazonDraftEditorArgs): UseAmazonDraftEditorReturn {
+  const detailEndpoint = useCallback(
+    (sku: string) => {
+      if (amazonSlug && amazonSlug !== "amazon") {
+        return `/api/amazon/${encodeURIComponent(amazonSlug)}/products/${encodeURIComponent(sku)}`;
+      }
+      return `/api/amazon/products/${encodeURIComponent(sku)}`;
+    },
+    [amazonSlug]
+  );
   // ---- Refs for callbacks that may be provided after the initial render ----
   // (avoids stale closures when the parent wires audit hooks after this hook)
   const fetchContentAuditRef = useRef(fetchContentAudit);
@@ -116,6 +150,13 @@ export function useAmazonDraftEditor({
   const [draftError, setDraftError] = useState<string | null>(null);
   const [draftTableMissing, setDraftTableMissing] = useState(false);
   const [detailLoadHint, setDetailLoadHint] = useState<string | null>(null);
+  const [missingTranslations, setMissingTranslations] = useState<string[]>([]);
+  const [targetLanguageTag, setTargetLanguageTag] = useState<string | null>(null);
+  const [sourceSnapshotForTranslation, setSourceSnapshotForTranslation] = useState<
+    ReturnType<typeof sourceSnapshotFromRow> | null
+  >(null);
+  const [submitSending, setSubmitSending] = useState(false);
+  const [submitResult, setSubmitResult] = useState<AmazonSubmitResult | null>(null);
 
   // ---------------------------------------------------------------------------
   // saveDraft
@@ -202,9 +243,12 @@ export function useAmazonDraftEditor({
       setDraftError(null);
       setDraftTableMissing(false);
       setDetailLoadHint(null);
+      setMissingTranslations([]);
+      setTargetLanguageTag(null);
+      setSourceSnapshotForTranslation(null);
       try {
         if (mode === "edit_existing" && sku) {
-          const detailRes = await fetch(`/api/amazon/products/${encodeURIComponent(sku)}`, {
+          const detailRes = await fetch(detailEndpoint(sku), {
             cache: "no-store",
           });
           const detailPayload = (await detailRes.json().catch(() => ({}))) as AmazonProductDetailPayload;
@@ -216,6 +260,15 @@ export function useAmazonDraftEditor({
               ? detailPayload.detailLoadHint.trim()
               : null
           );
+          setMissingTranslations(
+            Array.isArray(detailPayload.missingTranslations) ? detailPayload.missingTranslations : []
+          );
+          setTargetLanguageTag(
+            typeof detailPayload.targetLanguageTag === "string" && detailPayload.targetLanguageTag.trim()
+              ? detailPayload.targetLanguageTag.trim()
+              : null
+          );
+          setSourceSnapshotForTranslation(detailPayload.sourceSnapshot ?? null);
           const localeTag = intlLocaleTag(locale);
           const nextValues = formatDraftValuesPhysicalFieldsForEditor(
             normalizeDraftValues(
@@ -281,7 +334,7 @@ export function useAmazonDraftEditor({
         setDraftLoading(false);
       }
     },
-    [t, locale, marketplaceSlug, canEditProducts]
+    [t, locale, marketplaceSlug, canEditProducts, detailEndpoint]
   );
 
   // ---------------------------------------------------------------------------
@@ -314,6 +367,78 @@ export function useAmazonDraftEditor({
   // openCreateEditor
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // submitToAmazon — PUT an SP-API Listings Items
+  // ---------------------------------------------------------------------------
+
+  const submitEndpoint = useCallback(
+    (sku: string) => {
+      if (amazonSlug && amazonSlug !== "amazon") {
+        return `/api/amazon/${encodeURIComponent(amazonSlug)}/products/${encodeURIComponent(sku)}/submit`;
+      }
+      return `/api/amazon/products/${encodeURIComponent(sku)}/submit`;
+    },
+    [amazonSlug]
+  );
+
+  const submitToAmazon = useCallback(async (): Promise<AmazonSubmitResult | null> => {
+    const sku = draftValues.sku.trim() || editorSource?.sku || "";
+    if (!sku) {
+      setDraftError("SKU fehlt — Upload nicht möglich.");
+      return null;
+    }
+    setSubmitSending(true);
+    setSubmitResult(null);
+    setDraftError(null);
+    try {
+      const res = await fetch(submitEndpoint(sku), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          draftValues,
+          productTypeFallback: draftValues.productType || "PET_SUPPLIES",
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        status?: string;
+        submissionId?: string | null;
+        issues?: AmazonSubmissionIssue[];
+        httpStatus?: number;
+        sandbox?: boolean;
+        error?: string;
+      };
+      const result: AmazonSubmitResult = {
+        ok: Boolean(payload.ok) && res.ok,
+        status: payload.status ?? (res.ok ? "UNKNOWN" : "HTTP_ERROR"),
+        submissionId: payload.submissionId ?? null,
+        issues: Array.isArray(payload.issues) ? payload.issues : [],
+        httpStatus: payload.httpStatus ?? res.status,
+        sandbox: payload.sandbox,
+        error: payload.error,
+      };
+      setSubmitResult(result);
+      if (!res.ok && payload.error) {
+        setDraftError(payload.error);
+      }
+      return result;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : t("commonUi.unknownError");
+      setDraftError(message);
+      const failed: AmazonSubmitResult = {
+        ok: false,
+        status: "NETWORK_ERROR",
+        submissionId: null,
+        issues: [],
+        error: message,
+      };
+      setSubmitResult(failed);
+      return failed;
+    } finally {
+      setSubmitSending(false);
+    }
+  }, [draftValues, editorSource, submitEndpoint, t]);
+
   const openCreateEditor = useCallback(() => {
     closeShellRef.current?.();
     setAuditPayloadRef.current(null);
@@ -328,6 +453,9 @@ export function useAmazonDraftEditor({
     setDraftError(null);
     setDraftTableMissing(false);
     setDetailLoadHint(null);
+    setMissingTranslations([]);
+    setTargetLanguageTag(null);
+    setSourceSnapshotForTranslation(null);
     setEditorOpen(true);
   }, []);
 
@@ -346,8 +474,14 @@ export function useAmazonDraftEditor({
     setDraftError,
     draftTableMissing,
     detailLoadHint,
+    missingTranslations,
+    targetLanguageTag,
+    sourceSnapshotForTranslation,
+    submitSending,
+    submitResult,
     loadDraft,
     saveDraft,
+    submitToAmazon,
     openEditorForRow,
     openCreateEditor,
   };

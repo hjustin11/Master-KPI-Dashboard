@@ -260,10 +260,13 @@ export type AmazonMfnStockSyncResult = {
 };
 
 /**
- * Setzt MFN-Bestand (Kanal DEFAULT) per Listings Items API patchListingsItem.
- * FBA-only Listings werden nicht verändert; Fehler enthält API-Hinweis.
+ * Setzt MFN-Bestand (Kanal DEFAULT) und/oder Preis per Listings Items API patchListingsItem.
+ * FBA-only Listings werden für Bestand nicht verändert; Preis-Updates laufen auch bei FBA.
+ * `stockQty` und `priceEur` sind optional — mindestens eines muss gesetzt sein.
  */
-export async function syncAmazonMfnStockQuantities(updates: Array<{ sku: string; stockQty: number }>): Promise<AmazonMfnStockSyncResult> {
+export async function syncAmazonMfnStockQuantities(
+  updates: Array<{ sku: string; stockQty?: number; priceEur?: number }>
+): Promise<AmazonMfnStockSyncResult> {
   const success: AmazonMfnStockSyncResult["success"] = [];
   const failures: AmazonMfnStockSyncResult["failures"] = [];
 
@@ -335,6 +338,12 @@ export async function syncAmazonMfnStockQuantities(updates: Array<{ sku: string;
       failures.push({ sku: u.sku, reason: "Leere SKU." });
       continue;
     }
+    const wantsStock = typeof u.stockQty === "number" && Number.isFinite(u.stockQty);
+    const wantsPrice = typeof u.priceEur === "number" && Number.isFinite(u.priceEur) && u.priceEur > 0;
+    if (!wantsStock && !wantsPrice) {
+      failures.push({ sku, reason: "Weder stockQty noch priceEur vorhanden." });
+      continue;
+    }
     try {
       const getRes = await spApiGet({
         ...baseArgs,
@@ -352,17 +361,19 @@ export async function syncAmazonMfnStockQuantities(updates: Array<{ sku: string;
         continue;
       }
 
-      const channels = collectFulfillmentChannelCodes(getRes.json);
-      const hasDefault = channels.some((c) => c.toUpperCase() === "DEFAULT");
-      const onlyAmazonChannels =
-        channels.length > 0 && channels.every((c) => /^AMAZON/i.test(c));
-      if (!hasDefault && onlyAmazonChannels) {
-        failures.push({
-          sku,
-          reason:
-            "Nur FBA-Kanäle gefunden (kein MFN DEFAULT). Bestandsänderung für Seller-Fulfilled hier nicht anwendbar.",
-        });
-        continue;
+      if (wantsStock) {
+        const channels = collectFulfillmentChannelCodes(getRes.json);
+        const hasDefault = channels.some((c) => c.toUpperCase() === "DEFAULT");
+        const onlyAmazonChannels =
+          channels.length > 0 && channels.every((c) => /^AMAZON/i.test(c));
+        if (!hasDefault && onlyAmazonChannels) {
+          failures.push({
+            sku,
+            reason:
+              "Nur FBA-Kanäle gefunden (kein MFN DEFAULT). Bestandsänderung für Seller-Fulfilled hier nicht anwendbar.",
+          });
+          continue;
+        }
       }
 
       const productType = extractProductTypeFromListingPayload(getRes.json);
@@ -374,21 +385,38 @@ export async function syncAmazonMfnStockQuantities(updates: Array<{ sku: string;
         continue;
       }
 
-      const patchBody = JSON.stringify({
-        productType,
-        patches: [
-          {
-            op: "merge",
-            path: "/attributes/fulfillment_availability",
-            value: [
-              {
-                fulfillment_channel_code: "DEFAULT",
-                quantity: Math.max(0, Math.trunc(u.stockQty)),
-              },
-            ],
-          },
-        ],
-      });
+      const patches: Array<Record<string, unknown>> = [];
+      if (wantsStock) {
+        patches.push({
+          op: "merge",
+          path: "/attributes/fulfillment_availability",
+          value: [
+            {
+              fulfillment_channel_code: "DEFAULT",
+              quantity: Math.max(0, Math.trunc(u.stockQty!)),
+            },
+          ],
+        });
+      }
+      if (wantsPrice) {
+        patches.push({
+          op: "replace",
+          path: "/attributes/purchasable_offer",
+          value: [
+            {
+              marketplace_id: marketplaceId,
+              audience: "ALL",
+              currency: "EUR",
+              our_price: [
+                {
+                  schedule: [{ value_with_tax: Number(u.priceEur!.toFixed(2)) }],
+                },
+              ],
+            },
+          ],
+        });
+      }
+      const patchBody = JSON.stringify({ productType, patches });
 
       const patchRes = await spApiPatch({
         ...baseArgs,

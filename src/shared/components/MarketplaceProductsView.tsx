@@ -25,6 +25,8 @@ import {
   MarketplaceProductShellDialog,
   type MarketplaceProductShellMode,
 } from "@/shared/components/MarketplaceProductShellDialog";
+import CrossListingEditorDialog from "@/app/(dashboard)/analytics/marketplaces/components/CrossListingEditorDialog";
+import type { CrossListingTargetSlug } from "@/shared/lib/crossListing/crossListingDraftTypes";
 import {
   DASHBOARD_COMPACT_CARD,
   DASHBOARD_MARKETPLACE_LOGO_FRAME,
@@ -61,6 +63,7 @@ import { intlLocaleTag } from "@/i18n/locale-formatting";
 import dynamic from "next/dynamic";
 import { useAmazonContentAudit } from "@/shared/hooks/useAmazonContentAudit";
 import { useAmazonDraftEditor } from "@/shared/hooks/useAmazonDraftEditor";
+import { AmazonSubmitPreviewDialog } from "@/shared/components/AmazonSubmitPreviewDialog";
 
 // Dynamic import: AmazonProductEditor ist ~1.100 Zeilen und nur bei aktivem Editor relevant.
 // Reduziert Initial-Bundle der Produktseiten merklich.
@@ -124,6 +127,11 @@ export type MarketplaceProductsViewProps = {
   /** Vorbereitung Produkteditor (Owner) – aktuell nur für Amazon vorgesehen. */
   enableAmazonEditor?: boolean;
   /**
+   * Amazon-Country-Slug (z. B. "amazon-fr"). Lädt länderspezifische Detail-Inhalte
+   * im Editor. Default: "amazon" (DE).
+   */
+  amazonSlug?: string;
+  /**
    * Zentrales Artikel-Popup (Stammdaten + Platzhalter für marktplatzspezifische Felder).
    * Standard: an, sobald kein `enableAmazonEditor` (Volleditor nur Amazon-Owner).
    */
@@ -172,6 +180,7 @@ export function MarketplaceProductsView({
   dataTablePaginate,
   backgroundSyncIntervalMs = DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
   enableAmazonEditor = false,
+  amazonSlug,
   productShellEnabled: productShellEnabledProp,
 }: MarketplaceProductsViewProps) {
   const { t, locale } = useTranslation();
@@ -194,8 +203,24 @@ export function MarketplaceProductsView({
   const [hasMounted, setHasMounted] = useState(false);
   const [imageDropActive, setImageDropActive] = useState(false);
   const [shellOpen, setShellOpen] = useState(false);
+  const [submitPreviewOpen, setSubmitPreviewOpen] = useState(false);
   const [shellMode, setShellMode] = useState<MarketplaceProductShellMode>("edit");
   const [shellRow, setShellRow] = useState<MarketplaceProductListRow | null>(null);
+  const [crossEditOpen, setCrossEditOpen] = useState(false);
+  const [crossEditSku, setCrossEditSku] = useState<string | null>(null);
+
+  const crossListingEditSlug: CrossListingTargetSlug | null = useMemo(() => {
+    const supported: CrossListingTargetSlug[] = [
+      "otto",
+      "kaufland",
+      "fressnapf",
+      "zooplus",
+      "mediamarkt-saturn",
+    ];
+    return (supported as string[]).includes(marketplaceSlug)
+      ? (marketplaceSlug as CrossListingTargetSlug)
+      : null;
+  }, [marketplaceSlug]);
 
   // --- Draft-editor ↔ Content-audit hook wiring ---
   // The draft-editor hook needs audit callbacks from the content-audit hook,
@@ -234,11 +259,18 @@ export function MarketplaceProductsView({
     setDraftError,
     draftTableMissing,
     detailLoadHint,
+    missingTranslations,
+    targetLanguageTag,
+    sourceSnapshotForTranslation,
+    submitSending,
+    submitResult,
     saveDraft,
+    submitToAmazon,
     openEditorForRow,
     openCreateEditor,
   } = useAmazonDraftEditor({
     marketplaceSlug,
+    amazonSlug,
     canEditProducts,
     locale,
     fetchContentAudit: auditCallbacksRef.current.fetchContentAudit,
@@ -261,6 +293,7 @@ export function MarketplaceProductsView({
     setAuditLoading,
   } = useAmazonContentAudit({
     marketplaceSlug,
+    amazonSlug,
     canEditProducts,
     draftValues: {
       title: draftValues.title,
@@ -351,7 +384,7 @@ export function MarketplaceProductsView({
       const u = new URL(base, origin);
       u.searchParams.delete("limit");
       u.searchParams.delete("offset");
-      if (u.pathname === "/api/amazon/products") {
+      if (u.pathname === "/api/amazon/products" || /^\/api\/amazon\/[^/]+\/products$/.test(u.pathname)) {
         u.searchParams.set("all", "1");
       }
       return `${u.pathname}${u.search}`;
@@ -373,6 +406,17 @@ export function MarketplaceProductsView({
       setShellOpen(true);
     },
     [setEditorOpen, setShellMode, setShellRow, setShellOpen]
+  );
+
+  const openCrossListingEditorForRow = useCallback(
+    (row: MarketplaceProductListRow) => {
+      if (!row.sku) return;
+      setEditorOpen(false);
+      setShellOpen(false);
+      setCrossEditSku(row.sku);
+      setCrossEditOpen(true);
+    },
+    [setEditorOpen]
   );
 
   const openShellCreate = useCallback(
@@ -706,7 +750,7 @@ export function MarketplaceProductsView({
     setIsIntegrationRefresh(true);
     try {
       const json = await postMarketplaceIntegrationCacheRefresh({
-        marketplace: marketplaceSlug,
+        marketplace: amazonSlug && amazonSlug !== "amazon" ? amazonSlug : marketplaceSlug,
         resource: "products",
       });
       const pr = json.products as { ok?: boolean; skipped?: string; error?: string } | undefined;
@@ -724,7 +768,7 @@ export function MarketplaceProductsView({
     } finally {
       setIsIntegrationRefresh(false);
     }
-  }, [load, marketplaceSlug, t]);
+  }, [load, marketplaceSlug, amazonSlug, t]);
 
   useEffect(() => {
     setHasMounted(true);
@@ -877,9 +921,11 @@ export function MarketplaceProductsView({
             onRowClick={
               canEditProducts
                 ? (row) => openEditorForRow(row)
-                : useProductShell
-                  ? (row) => openShellForRow(row)
-                  : undefined
+                : crossListingEditSlug
+                  ? (row) => openCrossListingEditorForRow(row)
+                  : useProductShell
+                    ? (row) => openShellForRow(row)
+                    : undefined
             }
             compact
             className="flex-1 min-h-0"
@@ -918,7 +964,7 @@ export function MarketplaceProductsView({
           ) : null}
         </>
       )}
-      {useProductShell ? (
+      {useProductShell && !crossListingEditSlug ? (
         <MarketplaceProductShellDialog
           open={shellOpen}
           onOpenChange={setShellOpen}
@@ -928,6 +974,16 @@ export function MarketplaceProductsView({
           marketplaceSlug={marketplaceSlug}
           logoSrc={logoSrc}
           productsListApiUrl={useProductShell ? productsShellListUrl : null}
+        />
+      ) : null}
+      {crossListingEditSlug ? (
+        <CrossListingEditorDialog
+          open={crossEditOpen}
+          sku={crossEditSku}
+          targetSlug={crossListingEditSlug}
+          existingDraft={null}
+          onClose={() => setCrossEditOpen(false)}
+          onSaved={() => setCrossEditOpen(false)}
         />
       ) : null}
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
@@ -947,10 +1003,29 @@ export function MarketplaceProductsView({
           displayedContentAuditFindings={displayedContentAuditFindings}
           onClose={() => setEditorOpen(false)}
           onSave={saveDraft}
+          onSubmitToAmazon={
+            canEditProducts
+              ? async () => {
+                  setSubmitPreviewOpen(true);
+                }
+              : undefined
+          }
+          submitSending={submitSending}
+          submitResultSummary={
+            submitResult
+              ? submitResult.ok
+                ? `Auf Amazon übertragen (${submitResult.status}${submitResult.sandbox ? ", Sandbox" : ""})`
+                : `Fehler: ${submitResult.error ?? submitResult.issues[0]?.message ?? submitResult.status}`
+              : null
+          }
           onSetDraftValues={setDraftValues}
           onFetchContentAudit={fetchContentAudit}
           logoSrc={logoSrc}
           marketplaceSlug={marketplaceSlug}
+          amazonSlug={amazonSlug}
+          missingTranslations={missingTranslations}
+          targetLanguageTag={targetLanguageTag}
+          sourceSnapshotForTranslation={sourceSnapshotForTranslation}
           canEditProducts={canEditProducts}
           imageDropActive={imageDropActive}
           onSetImageDropActive={setImageDropActive}
@@ -963,6 +1038,19 @@ export function MarketplaceProductsView({
           onImageFileInputChange={handleImageFileInputChange}
         />
       </Dialog>
+      <AmazonSubmitPreviewDialog
+        open={submitPreviewOpen}
+        onOpenChange={setSubmitPreviewOpen}
+        draftValues={draftValues}
+        originalSnapshot={sourceSnapshotForTranslation}
+        amazonSlug={amazonSlug ?? "amazon-de"}
+        submitting={submitSending}
+        submitResult={submitResult}
+        onConfirm={async () => {
+          const result = await submitToAmazon();
+          if (result?.ok) setSubmitPreviewOpen(false);
+        }}
+      />
     </div>
   );
 }

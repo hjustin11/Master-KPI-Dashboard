@@ -201,6 +201,12 @@ function toArrayField(f: AmazonFieldOptimization | undefined): string[] | null {
 export async function runAmazonContentClaudeReview(args: {
   productContext: AmazonTitleProductContext;
   rulebookMarkdown: string;
+  /** Ziel-Sprache der Vorschläge (`de_DE`, `fr_FR`, `it_IT`, ...). Default: `de_DE`. */
+  targetLanguageTag?: string;
+  /** Display-Name des Ziel-Marktplatzes (z. B. "Amazon Frankreich"). */
+  marketplaceName?: string;
+  /** Domain des Ziel-Marktplatzes (z. B. "amazon.fr"). */
+  marketplaceDomain?: string;
 }): Promise<AmazonTitleOptimizationPayload> {
   const { value: apiKey } = await readIntegrationSecret("ANTHROPIC_API_KEY");
   if (!apiKey) {
@@ -211,36 +217,59 @@ export async function runAmazonContentClaudeReview(args: {
   }
 
   const model = (process.env.ANTHROPIC_MODEL ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
-  const system = buildAmazonContentSystemPrompt(args.rulebookMarkdown);
+  const system = buildAmazonContentSystemPrompt(args.rulebookMarkdown, {
+    targetLanguageTag: args.targetLanguageTag,
+    marketplaceName: args.marketplaceName,
+    marketplaceDomain: args.marketplaceDomain,
+  });
   const userPayload = buildAmazonContentUserPayload(args.productContext);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
   try {
-    const res = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": ANTHROPIC_VERSION,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 4000,
-        system,
-        tools: [TOOL_DEFINITION],
-        tool_choice: { type: "tool", name: "optimize_amazon_listing" },
-        messages: [{ role: "user", content: userPayload }],
-      }),
+    const requestBody = JSON.stringify({
+      model,
+      max_tokens: 4000,
+      system,
+      tools: [TOOL_DEFINITION],
+      tool_choice: { type: "tool", name: "optimize_amazon_listing" },
+      messages: [{ role: "user", content: userPayload }],
     });
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      return emptyPayload("http_error", {
-        llmError: `Anthropic HTTP ${res.status}: ${errText.slice(0, 240)}`,
-        summary: "Claude-Anfrage fehlgeschlagen.",
+    const MAX_ATTEMPTS = 4;
+    let res: Response | null = null;
+    let lastStatus = 0;
+    let lastErrText = "";
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      res = await fetch(ANTHROPIC_URL, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": ANTHROPIC_VERSION,
+          "content-type": "application/json",
+        },
+        body: requestBody,
+      });
+      if (res.ok) break;
+      lastStatus = res.status;
+      lastErrText = await res.text().catch(() => "");
+      const retryable = res.status === 429 || res.status === 529 || (res.status >= 500 && res.status < 600);
+      if (!retryable || attempt === MAX_ATTEMPTS) break;
+      const retryAfterHeader = Number(res.headers.get("retry-after") ?? "0");
+      const baseDelay = retryAfterHeader > 0 ? retryAfterHeader * 1000 : 2_000 * 2 ** (attempt - 1);
+      const jitter = Math.floor(Math.random() * 500);
+      await new Promise((resolve) => setTimeout(resolve, baseDelay + jitter));
+    }
+
+    if (!res || !res.ok) {
+      return emptyPayload(lastStatus === 429 ? "rate_limited" : "http_error", {
+        llmError: `Anthropic HTTP ${lastStatus}: ${lastErrText.slice(0, 240)}`,
+        summary:
+          lastStatus === 429
+            ? "Claude-Ratenlimit überschritten (nach Retries). Bitte Tier erhöhen oder Anfrage später erneut stellen."
+            : "Claude-Anfrage fehlgeschlagen.",
       });
     }
 

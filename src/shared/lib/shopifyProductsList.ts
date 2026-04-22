@@ -122,6 +122,66 @@ function mapShopifyProduct(p: Record<string, unknown>, baseUrlRaw: string): Mark
     put("variant_id", first.id);
     put("variant_title", first.title);
     put("variant_barcode", first.barcode);
+    // Shopify Variant-Gewicht (REST: `grams` sowie `weight` + `weight_unit`).
+    const grams = first.grams;
+    const weightRaw = first.weight;
+    const weightUnit = typeof first.weight_unit === "string" ? first.weight_unit : undefined;
+    let weightKg: number | null = null;
+    if (typeof grams === "number" && Number.isFinite(grams) && grams > 0) {
+      weightKg = grams / 1000;
+    } else if (typeof weightRaw === "number" && Number.isFinite(weightRaw) && weightRaw > 0) {
+      const unit = (weightUnit ?? "").toLowerCase();
+      if (unit === "kg") weightKg = weightRaw;
+      else if (unit === "g") weightKg = weightRaw / 1000;
+      else if (unit === "lb") weightKg = weightRaw * 0.4535924;
+      else if (unit === "oz") weightKg = weightRaw * 0.0283495;
+      else weightKg = weightRaw;
+    } else if (typeof weightRaw === "string") {
+      const n = Number(weightRaw.replace(",", "."));
+      if (Number.isFinite(n) && n > 0) {
+        const unit = (weightUnit ?? "").toLowerCase();
+        if (unit === "kg") weightKg = n;
+        else if (unit === "g") weightKg = n / 1000;
+        else weightKg = n;
+      }
+    }
+    if (weightKg != null && weightKg > 0) put("weight", Number(weightKg.toFixed(3)));
+  }
+  // Shopify-Dimensions liegen meist in Metafields (nicht standardisiert).
+  // Wir prüfen die häufigsten Varianten: metafields.dimensions.* oder Top-Level
+  // Felder length/width/height (von Custom-Apps gesetzt).
+  const metafields = p.metafields;
+  if (Array.isArray(metafields)) {
+    for (const mf of metafields as Array<Record<string, unknown>>) {
+      const namespace = typeof mf?.namespace === "string" ? mf.namespace.toLowerCase() : "";
+      const key = typeof mf?.key === "string" ? mf.key.toLowerCase() : "";
+      const value = mf?.value;
+      if (!value) continue;
+      const strVal = typeof value === "string" ? value : typeof value === "number" ? String(value) : "";
+      if (!strVal) continue;
+      const match = (["length", "width", "height", "depth", "weight", "ean", "gtin", "barcode"] as const).find(
+        (k) => key === k || key.endsWith(`_${k}`) || key.startsWith(`${k}_`)
+      );
+      if (match) {
+        const storeKey =
+          match === "length" ? "length" :
+          match === "width" ? "width" :
+          match === "height" || match === "depth" ? "height" :
+          match;
+        if (!extras[storeKey]) put(storeKey, strVal);
+      }
+      // Shopify-Shipping-Namespace packt Maße oft in ein JSON
+      if (namespace === "shipping" || namespace === "custom") {
+        if (key.includes("length") && !extras.length) put("length", strVal);
+        if (key.includes("width") && !extras.width) put("width", strVal);
+        if ((key.includes("height") || key.includes("depth")) && !extras.height) put("height", strVal);
+      }
+    }
+  }
+  for (const k of ["length", "width", "height"] as const) {
+    if (!extras[k] && typeof (p as Record<string, unknown>)[k] !== "undefined") {
+      put(k, (p as Record<string, unknown>)[k]);
+    }
   }
 
   return {

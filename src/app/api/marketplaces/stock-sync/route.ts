@@ -15,6 +15,11 @@ import {
   signKauflandRequest,
 } from "@/shared/lib/kauflandApiClient";
 import { syncAmazonMfnStockQuantities } from "@/shared/lib/amazonListingsMfnStock";
+import {
+  getOttoAccessToken,
+  getOttoIntegrationConfig,
+  syncOttoStockAndPrice,
+} from "@/shared/lib/ottoApiClient";
 
 type MarketplaceSlug =
   | "amazon"
@@ -567,20 +572,14 @@ export async function PUT(request: Request) {
 
   if (bySlug.has("amazon")) {
     const list = bySlug.get("amazon")!;
-    for (const u of list) {
-      if (u.priceEur != null && u.stockQty == null) {
-        failures.push({
-          marketplaceSlug: "amazon",
-          sku: u.sku,
-          reason:
-            "Amazon: über diese Route wird nur der MFN-Bestand (stockQty) geschrieben; Preis-Updates sind nicht implementiert.",
-        });
-      }
-    }
-    const stockOnly = list.filter((u) => u.stockQty != null);
-    if (stockOnly.length > 0) {
+    const writable = list.filter((u) => u.stockQty != null || u.priceEur != null);
+    if (writable.length > 0) {
       const r = await syncAmazonMfnStockQuantities(
-        stockOnly.map((u) => ({ sku: u.sku, stockQty: u.stockQty! }))
+        writable.map((u) => ({
+          sku: u.sku,
+          ...(u.stockQty != null ? { stockQty: u.stockQty } : {}),
+          ...(u.priceEur != null ? { priceEur: u.priceEur } : {}),
+        }))
       );
       for (const s of r.success) successes.push({ marketplaceSlug: "amazon", sku: s.sku });
       for (const f of r.failures) failures.push({ marketplaceSlug: "amazon", sku: f.sku, reason: f.reason });
@@ -589,13 +588,35 @@ export async function PUT(request: Request) {
   }
 
   if (bySlug.has("otto")) {
-    for (const u of bySlug.get("otto")!) {
-      failures.push({
-        marketplaceSlug: "otto",
-        sku: u.sku,
-        reason:
-          "Otto: Bestand- und Preis-Schreibzugriffe sind über die aktuelle Otto-Anbindung nicht verfügbar (kein mutierender Produkt-/Lager-Endpunkt angebunden).",
-      });
+    const list = bySlug.get("otto")!;
+    try {
+      const cfg = await getOttoIntegrationConfig();
+      if (!cfg.clientId || !cfg.clientSecret) {
+        for (const u of list) {
+          failures.push({ marketplaceSlug: "otto", sku: u.sku, reason: "Otto nicht konfiguriert." });
+        }
+      } else {
+        const token = await getOttoAccessToken({
+          baseUrl: cfg.baseUrl,
+          clientId: cfg.clientId,
+          clientSecret: cfg.clientSecret,
+          scopes: cfg.scopes,
+        });
+        const r = await syncOttoStockAndPrice({
+          baseUrl: cfg.baseUrl,
+          token,
+          updates: list.map((u) => ({
+            sku: u.sku,
+            ...(u.stockQty != null ? { stockQty: u.stockQty } : {}),
+            ...(u.priceEur != null ? { priceEur: u.priceEur } : {}),
+          })),
+        });
+        for (const s of r.success) successes.push({ marketplaceSlug: "otto", sku: s.sku });
+        for (const f of r.failures) failures.push({ marketplaceSlug: "otto", sku: f.sku, reason: f.reason });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Otto sync fehlgeschlagen.";
+      for (const u of list) failures.push({ marketplaceSlug: "otto", sku: u.sku, reason: msg });
     }
     handled.add("otto");
   }

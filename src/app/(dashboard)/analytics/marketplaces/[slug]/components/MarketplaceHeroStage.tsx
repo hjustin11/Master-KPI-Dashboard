@@ -9,9 +9,12 @@ function formatEur(n: number): string {
 }
 
 function CountUp({ target, duration = 800, format }: { target: number; duration?: number; format: (n: number) => string }) {
-  const [current, setCurrent] = useState(0);
+  const [current, setCurrent] = useState(target === 0 ? 0 : 0);
   useEffect(() => {
-    if (target === 0) { setCurrent(0); return; }
+    if (target === 0) {
+      const id = requestAnimationFrame(() => setCurrent(0));
+      return () => cancelAnimationFrame(id);
+    }
     const start = performance.now();
     let raf: number;
     function tick(now: number) {

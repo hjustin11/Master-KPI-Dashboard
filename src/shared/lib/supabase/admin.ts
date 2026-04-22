@@ -3,8 +3,9 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 /**
  * Globaler Supabase-Timeout (ms) für alle Admin-Requests.
  * Verhindert, dass die Seite 99+ Sekunden blockiert wenn Supabase nicht erreichbar ist.
+ * 45s wegen gelegentlich langsamer Supabase-Antworten (Free-Tier / Cold-Start).
  */
-const SUPABASE_GLOBAL_TIMEOUT_MS = 15_000;
+const SUPABASE_GLOBAL_TIMEOUT_MS = 45_000;
 
 /**
  * Singleton: Ein einziger Admin-Client wird wiederverwendet.

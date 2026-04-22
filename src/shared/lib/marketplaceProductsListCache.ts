@@ -91,7 +91,14 @@ export async function loadMarketplaceProductListCached(args: {
     fingerprintParts: args.fingerprintParts,
   });
   if (hit.state !== "miss") return hit.value;
-  return { items: [] };
+  // Cache-Miss: synchron Loader aufrufen und Cache befüllen. Vorher wurde nur `{ items: [] }`
+  // zurückgegeben, was die Seite leer ließ bis der Hintergrund-Sync lief.
+  return syncMarketplaceProductListToCache({
+    marketplaceSlug: args.marketplaceSlug,
+    variant: args.variant,
+    fingerprintParts: args.fingerprintParts,
+    loader: args.loader,
+  });
 }
 
 export function parseProductListForceRefresh(request: Request): boolean {

@@ -60,6 +60,7 @@ type ParityRow = {
     state: CellState;
     stock: number | null;
     stockState: CellState;
+    isActive?: boolean | null;
     matchInfo?: MatchInfo | null;
   };
   otherMarketplaces: Record<
@@ -69,6 +70,7 @@ type ParityRow = {
       state: CellState;
       stock: number | null;
       stockState: CellState;
+      isActive?: boolean | null;
       matchInfo?: MatchInfo | null;
     }
   >;
@@ -200,6 +202,7 @@ function ParityCellValue({
   state,
   stock,
   stockState,
+  isActive,
   editing,
   editingMode,
   onPriceChange,
@@ -216,6 +219,8 @@ function ParityCellValue({
   state: CellState;
   stock: number | null;
   stockState: CellState;
+  /** true=aktiv, false=inaktiv, null=unbekannt/nicht verbunden */
+  isActive?: boolean | null;
   editing: boolean;
   editingMode: "price" | "stock" | null;
   onPriceChange: (value: string) => void;
@@ -329,8 +334,28 @@ function ParityCellValue({
   // Nur starke Non-SKU-Matches (EAN, ASIN, Modell, Upload) bekommen einen Badge.
   const showMatchBadge = Boolean(matchInfo && !HIDDEN_MATCH_BADGE_TYPES.has(matchInfo.type));
 
+  const statusDotClass =
+    isActive === true
+      ? "bg-emerald-500"
+      : isActive === false
+        ? "bg-rose-500"
+        : null;
+  const statusDotTitle =
+    isActive === true
+      ? "Aktiv auf dem Marktplatz"
+      : isActive === false
+        ? "Inaktiv auf dem Marktplatz"
+        : undefined;
+
   return (
     <div className="flex flex-col gap-1" title={label}>
+      {statusDotClass ? (
+        <span
+          className={cn("inline-block size-2 shrink-0 rounded-full", statusDotClass)}
+          title={statusDotTitle}
+          aria-label={statusDotTitle}
+        />
+      ) : null}
       <div className="flex items-center gap-1">
         <span className="w-3 shrink-0 text-[9px] font-semibold text-muted-foreground">P</span>
         <div className="min-w-0 flex-1">{priceLine}</div>
@@ -990,6 +1015,7 @@ export function MarketplacePriceParitySection() {
                             : row.amazon.stock
                         }
                         stockState={row.amazon.stockState}
+                        isActive={row.amazon.isActive ?? null}
                         matchInfo={row.amazon.matchInfo ?? null}
                         editing={Boolean(editMode)}
                         editingMode={editMode}
@@ -1021,6 +1047,7 @@ export function MarketplacePriceParitySection() {
                         state: "not_connected" as const,
                         stock: null,
                         stockState: "not_connected" as const,
+                        isActive: null,
                       };
                       return (
                         <TableCell key={m.slug} className={cn(MARKETPLACE_PRICE_COL, parityCellBg(cell.state))}>
@@ -1038,6 +1065,7 @@ export function MarketplacePriceParitySection() {
                                 : cell.stock
                             }
                             stockState={cell.stockState}
+                            isActive={cell.isActive ?? null}
                             matchInfo={cell.matchInfo ?? null}
                             editing={Boolean(editMode)}
                             editingMode={editMode}

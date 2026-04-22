@@ -43,6 +43,17 @@ export const navItems: NavItem[] = [
     ],
   },
   {
+    key: "amazon-fr",
+    labelKey: "nav.amazonFr",
+    href: "/amazon-fr",
+    icon: ShoppingCart,
+    requiredPermissions: ["manage_integrations"],
+    children: [
+      { labelKey: "nav.amazonFrOrders", href: "/amazon-fr/orders" },
+      { labelKey: "nav.amazonFrProducts", href: "/amazon-fr/products" },
+    ],
+  },
+  {
     key: "ebay",
     labelKey: "nav.ebay",
     href: "/ebay",
@@ -160,6 +171,7 @@ export const navItems: NavItem[] = [
     requiredPermissions: ["export_data"],
     children: [
       { labelKey: "nav.analyticsMarketplaces", href: "/analytics/marketplaces" },
+      { labelKey: "nav.analyticsWeeklyReport", href: "/analytics/weekly-report" },
       { labelKey: "nav.analyticsPayouts", href: "/analytics/payouts" },
       { labelKey: "nav.analyticsArticleForecast", href: "/analytics/article-forecast" },
       { labelKey: "nav.analyticsProcurement", href: "/analytics/procurement" },

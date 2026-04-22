@@ -10,6 +10,8 @@ import {
 } from "@/shared/lib/integrationCacheTtl";
 import {
   computeXentralArticlesPayload,
+  fetchXentralProductDetail,
+  XentralArticlesPayloadError,
   type XentralArticle,
 } from "@/shared/lib/xentralArticlesCompute";
 import { buildXentralArticlesCacheKey } from "@/shared/lib/xentralArticlesCache";
@@ -22,6 +24,7 @@ import {
 } from "@/shared/lib/crossListing/crossListingDraftTypes";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function normSku(s: string): string {
   return s.trim().toLowerCase();
@@ -56,7 +59,15 @@ function extractBullets(extras?: Record<string, unknown>): string[] {
 
 function extractDescription(extras?: Record<string, unknown>): string | null {
   if (!extras) return null;
-  const keys = ["description", "longDescription", "description_html", "body_html", "summary"];
+  const keys = [
+    "description",
+    "description_text",
+    "descriptionText",
+    "longDescription",
+    "description_html",
+    "body_html",
+    "summary",
+  ];
   for (const k of keys) {
     const v = extras[k];
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -160,17 +171,109 @@ function rowToSourceRecord(
   };
 }
 
-async function loadSourceForSlug(
-  slug: CrossListingSourceSlug,
-  sku: string
-): Promise<CrossListingSourceRecord | null> {
+type AmazonDetailEnriched = {
+  title: string;
+  description: string;
+  bullets: string[];
+  images: string[];
+  brand: string;
+  attributes: Record<string, string>;
+};
+
+async function enrichAmazonSourceFromDetail(args: {
+  sku: string;
+  cookieHeader: string;
+  origin: string;
+}): Promise<AmazonDetailEnriched | null> {
   try {
-    const rows = await loadMarketplaceProductRowsForPriceParity(slug, false);
-    if (!rows) return null;
-    const match = rows.find((r) => normSku(r.sku) === sku);
-    if (!match) return null;
-    return rowToSourceRecord(slug, match);
+    const url = `${args.origin}/api/amazon/products/${encodeURIComponent(args.sku)}`;
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: args.cookieHeader ? { cookie: args.cookieHeader } : {},
+    });
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => null)) as
+      | {
+          sourceSnapshot?: {
+            title?: string;
+            description?: string;
+            bulletPoints?: string[];
+            images?: string[];
+            brand?: string;
+            attributes?: Record<string, string>;
+          };
+        }
+      | null;
+    const s = body?.sourceSnapshot;
+    if (!s) return null;
+    return {
+      title: s.title ?? "",
+      description: s.description ?? "",
+      bullets: Array.isArray(s.bulletPoints) ? s.bulletPoints.filter((b) => typeof b === "string" && b.trim()) : [],
+      images: Array.isArray(s.images) ? s.images.filter((u) => typeof u === "string" && u.trim()) : [],
+      brand: s.brand ?? "",
+      attributes: s.attributes ?? {},
+    };
   } catch {
+    return null;
+  }
+}
+
+async function loadSourceForSlug(args: {
+  slug: CrossListingSourceSlug;
+  sku: string;
+  cookieHeader: string;
+  origin: string;
+}): Promise<CrossListingSourceRecord | null> {
+  const LOG_TAG = `[cross-listing source-data slug=${args.slug} sku=${args.sku}]`;
+  try {
+    const rows = await loadMarketplaceProductRowsForPriceParity(args.slug, false);
+    if (!rows) {
+      console.info(`${LOG_TAG} no rows loaded (config missing or cache-miss)`);
+      return null;
+    }
+    const match = rows.find((r) => normSku(r.sku) === args.sku);
+    if (!match) {
+      console.info(`${LOG_TAG} no SKU match in ${rows.length} rows`);
+      return null;
+    }
+    const rec = rowToSourceRecord(args.slug, match);
+    console.info(
+      `${LOG_TAG} matched (original-sku=${match.sku}): title=${Boolean(rec.title)}, desc=${Boolean(rec.description)}, bullets=${rec.bullets.length}, images=${rec.images.length}, ean=${rec.ean ?? "null"}`
+    );
+    // Amazon Listrows enthalten keine Description/Bullets/Images.
+    // Per-SKU-Detail liefert diese Felder (via /api/amazon/products/[sku]).
+    if (args.slug === "amazon") {
+      // Original-SKU (nicht lowercased) an den Amazon-Detail-Endpoint reichen —
+      // Amazon-SKUs sind case-sensitive in der SP-API.
+      const enriched = await enrichAmazonSourceFromDetail({
+        sku: match.sku,
+        cookieHeader: args.cookieHeader,
+        origin: args.origin,
+      });
+      if (enriched) {
+        console.info(
+          `${LOG_TAG} amazon enrichment: desc=${Boolean(enriched.description)}, bullets=${enriched.bullets.length}, images=${enriched.images.length}, attrs=${Object.keys(enriched.attributes).length}`
+        );
+        return {
+          ...rec,
+          title: enriched.title || rec.title,
+          description: enriched.description || rec.description,
+          bullets: enriched.bullets.length > 0 ? enriched.bullets : rec.bullets,
+          images: enriched.images.length > 0 ? enriched.images : rec.images,
+          brand: enriched.brand || rec.brand,
+          attributes:
+            Object.keys(enriched.attributes).length > 0
+              ? enriched.attributes
+              : rec.attributes,
+        };
+      } else {
+        console.warn(`${LOG_TAG} amazon enrichment returned null (per-SKU detail fetch failed)`);
+      }
+    }
+    return rec;
+  } catch (err) {
+    console.error(`${LOG_TAG} loader threw:`, err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -199,8 +302,11 @@ function xentralArticleToSourceRecord(article: XentralArticle): CrossListingSour
   };
 }
 
-async function loadXentralSource(sku: string): Promise<CrossListingSourceRecord | null> {
-  const LOG_TAG = `[cross-listing xentral sku=${sku}]`;
+async function loadXentralSource(
+  skuOriginal: string,
+  skuKey: string
+): Promise<CrossListingSourceRecord | null> {
+  const LOG_TAG = `[cross-listing xentral sku=${skuKey}]`;
   try {
     const baseUrl = await getIntegrationSecretValue("XENTRAL_BASE_URL");
     const token =
@@ -213,50 +319,101 @@ async function loadXentralSource(sku: string): Promise<CrossListingSourceRecord 
       return null;
     }
 
-    const computeArgs = {
-      baseUrl,
-      token,
-      query: sku,
-      fetchAll: false,
-      includePrices: true,
-      includeSales: false,
-      pageSize: 50,
-      pageNumber: 1,
-      salesFromYmd: null,
-      salesToYmd: null,
-    };
-    const cacheKey = buildXentralArticlesCacheKey(computeArgs);
-    const payload = await getIntegrationCachedOrLoad({
-      cacheKey,
-      source: "xentral:articles",
-      freshMs: marketplaceIntegrationFreshMs(),
-      staleMs: marketplaceIntegrationStaleMs(),
-      loader: () => computeXentralArticlesPayload(computeArgs),
-    });
-
-    console.info(
-      `${LOG_TAG} Xentral returned ${payload.items.length} items for query="${sku}"`
-    );
-
-    // 1) Exact SKU match (lowercased). 2) Fallback: any item whose sku ends with the query (trailing -variants).
-    let match = payload.items.find((a) => normSku(a.sku) === sku);
-    if (!match) {
-      match = payload.items.find((a) => normSku(a.sku).endsWith(sku) || sku.endsWith(normSku(a.sku)));
-      if (match) {
-        console.info(`${LOG_TAG} used loose match: xentral-sku="${match.sku}"`);
+    // Zwei Queries: 1) Original-Case, 2) Lowercase — Xentral-Instanzen verhalten
+    // sich unterschiedlich case-sensitive. Wir matchen danach normalisiert.
+    const queries = skuOriginal !== skuKey ? [skuOriginal, skuKey] : [skuOriginal];
+    let match: XentralArticle | null = null;
+    for (const q of queries) {
+      const computeArgs = {
+        baseUrl,
+        token,
+        query: q,
+        fetchAll: false,
+        includePrices: true,
+        includeSales: false,
+        pageSize: 200,
+        pageNumber: 1,
+        salesFromYmd: null,
+        salesToYmd: null,
+      };
+      const cacheKey = buildXentralArticlesCacheKey(computeArgs);
+      const payload = await getIntegrationCachedOrLoad({
+        cacheKey,
+        source: "xentral:articles",
+        freshMs: marketplaceIntegrationFreshMs(),
+        staleMs: marketplaceIntegrationStaleMs(),
+        loader: () => computeXentralArticlesPayload(computeArgs),
+      });
+      console.info(`${LOG_TAG} Xentral returned ${payload.items.length} items for query="${q}"`);
+      let hit = payload.items.find((a) => normSku(a.sku) === skuKey);
+      if (!hit) {
+        hit = payload.items.find(
+          (a) => normSku(a.sku).endsWith(skuKey) || skuKey.endsWith(normSku(a.sku))
+        );
+        if (hit) console.info(`${LOG_TAG} used loose match: xentral-sku="${hit.sku}"`);
+      }
+      if (hit) {
+        match = hit;
+        break;
+      }
+      if (payload.items.length > 0) {
+        const first5 = payload.items.slice(0, 5).map((a) => a.sku).join(", ");
+        console.warn(`${LOG_TAG} query="${q}" no match. First 5 SKUs: [${first5}]`);
       }
     }
-    if (!match) {
-      const first5 = payload.items.slice(0, 5).map((a) => a.sku).join(", ");
-      console.warn(`${LOG_TAG} no match. First 5 SKUs returned: [${first5}]`);
-      return null;
-    }
+    if (!match) return null;
     console.info(
-      `${LOG_TAG} MATCH: ean=${match.ean ?? "(null)"}, brand=${match.brand ?? "(null)"}, dimL=${match.dimL ?? "(null)"}, dimW=${match.dimW ?? "(null)"}, dimH=${match.dimH ?? "(null)"}, weight=${match.weight ?? "(null)"}`
+      `${LOG_TAG} LIST-MATCH: ean=${match.ean ?? "(null)"}, brand=${match.brand ?? "(null)"}, dimL=${match.dimL ?? "(null)"}, dimW=${match.dimW ?? "(null)"}, dimH=${match.dimH ?? "(null)"}, weight=${match.weight ?? "(null)"}`
     );
+
+    // Fallback: Wenn EAN oder Dimensionen in der Listen-Antwort fehlen,
+    // per Detail-Endpoint `/api/v1/products/{id}` nachziehen.
+    const needsDetail =
+      !match.ean ||
+      match.dimL == null ||
+      match.dimW == null ||
+      match.dimH == null ||
+      match.weight == null;
+    if (needsDetail && match.xentralProductId) {
+      try {
+        const detail = await fetchXentralProductDetail({
+          baseUrl,
+          token,
+          productId: match.xentralProductId,
+        });
+        const enriched: XentralArticle = {
+          ...match,
+          ean: match.ean ?? detail.ean,
+          brand: match.brand ?? detail.brand,
+          dimL: match.dimL ?? detail.dimL,
+          dimW: match.dimW ?? detail.dimW,
+          dimH: match.dimH ?? detail.dimH,
+          weight: match.weight ?? detail.weight,
+          category: match.category ?? detail.category,
+        };
+        console.info(
+          `${LOG_TAG} DETAIL-ENRICHED: ean=${enriched.ean ?? "(null)"}, dimL=${enriched.dimL ?? "(null)"}, dimW=${enriched.dimW ?? "(null)"}, dimH=${enriched.dimH ?? "(null)"}, weight=${enriched.weight ?? "(null)"}`
+        );
+        return xentralArticleToSourceRecord(enriched);
+      } catch (detailErr) {
+        console.warn(
+          `${LOG_TAG} detail fetch failed (fallback to list data):`,
+          detailErr instanceof Error ? detailErr.message : detailErr
+        );
+      }
+    }
+
     return xentralArticleToSourceRecord(match);
   } catch (err) {
-    console.error(`${LOG_TAG} FAILED:`, err instanceof Error ? err.message : err);
+    if (err instanceof XentralArticlesPayloadError) {
+      // Body enthält error-message + Preview von Xentral
+      console.error(
+        `${LOG_TAG} FAILED: XentralArticlesPayloadError status=${err.status}`,
+        JSON.stringify(err.body, null, 2)
+      );
+    } else {
+      console.error(`${LOG_TAG} FAILED:`, err instanceof Error ? err.message : err);
+    }
     return null;
   }
 }
@@ -299,16 +456,28 @@ export async function GET(request: Request) {
 
   const skuKey = normSku(sku);
   const slugs = CROSS_LISTING_TARGET_SLUGS;
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  const origin = url.origin;
 
-  // Xentral darf Marktplatz-Loader NIE blockieren: Promise.allSettled + Timeout (6 s).
-  const XENTRAL_TIMEOUT_MS = 6000;
+  // Xentral ist die Single-Source-of-Truth für EAN + Maße + Brand.
+  // Timeout großzügig (20 s), damit EAN auch bei Cache-Miss ausgefüllt ankommt.
+  // WICHTIG: Query mit Original-SKU-Case (nicht lowercased) — Xentral-Search
+  // ist case-sensitive für manche Instanzen.
+  const XENTRAL_TIMEOUT_MS = 20000;
   const xentralWithTimeout: Promise<CrossListingSourceRecord | null> = Promise.race([
-    loadXentralSource(skuKey),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), XENTRAL_TIMEOUT_MS)),
+    loadXentralSource(sku, skuKey),
+    new Promise<null>((resolve) =>
+      setTimeout(() => {
+        console.warn(`[cross-listing source-data sku=${skuKey}] Xentral timeout after ${XENTRAL_TIMEOUT_MS}ms`);
+        resolve(null);
+      }, XENTRAL_TIMEOUT_MS)
+    ),
   ]);
 
   const settled = await Promise.allSettled([
-    runWithConcurrency(slugs, 3, (slug) => loadSourceForSlug(slug, skuKey)),
+    runWithConcurrency(slugs, 3, (slug) =>
+      loadSourceForSlug({ slug, sku: skuKey, cookieHeader, origin })
+    ),
     xentralWithTimeout,
   ]);
 
@@ -324,8 +493,9 @@ export async function GET(request: Request) {
   }
 
   const sources: CrossListingSourceMap = {};
+  // EAN-Top-Level: Xentral bevorzugt, sonst irgend eine Marktplatz-EAN
+  // (wird beim Dialog zum Speichern in cross_listing_drafts.ean geschrieben).
   let ean: string | null = null;
-  // Xentral ZUERST: Single Source of Truth für EAN / Maße / Brand / Preis-Basis
   if (xentralRecord) {
     sources.xentral = xentralRecord;
     if (xentralRecord.ean) ean = xentralRecord.ean;
@@ -334,7 +504,7 @@ export async function GET(request: Request) {
     const slug = slugs[i];
     const rec = marketplaceRecords[i];
     sources[slug] = rec;
-    if (rec?.ean && !ean) ean = rec.ean;
+    if (!ean && rec?.ean) ean = rec.ean;
   }
 
   const payload: CrossListingSourceDataResponse = { sku, ean, sources };

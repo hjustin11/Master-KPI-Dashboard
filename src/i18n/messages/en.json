@@ -8,6 +8,43 @@
     "off": "OFF",
     "openMarketplaceOrderTitle": "Open order in marketplace seller portal ({id})"
   },
+  "marketplaceLanguage": {
+    "contentIn": "Content in {language}",
+    "marketplaceId": "Marketplace ID",
+    "changesOnlyApplyTo": "All changes will be applied ONLY to {name}.",
+    "missingHint": "Not yet translated to {language} ({tag})",
+    "translateWithAi": "Translate from DE with AI",
+    "manualEnter": "Enter manually",
+    "comingSoonToast": "AI translation coming soon (Phase 5d).",
+    "popoverTitle": "Amazon stores content per language.",
+    "popoverBody": "A {sourceLanguage} version may exist on Amazon DE, but the {targetLanguage} translation for the field \"{fieldLabel}\" is missing on this marketplace.",
+    "sourceValueLabel": "On Amazon DE:",
+    "detailsAriaLabel": "Details",
+    "lang_de_DE": "German",
+    "lang_fr_FR": "French",
+    "lang_fr_BE": "French (Belgium)",
+    "lang_it_IT": "Italian",
+    "lang_es_ES": "Spanish",
+    "lang_nl_NL": "Dutch",
+    "lang_pl_PL": "Polish",
+    "lang_sv_SE": "Swedish",
+    "lang_en_GB": "English (UK)"
+  },
+  "amazonSubmitPreview": {
+    "title": "Review changes before upload to {name}",
+    "description": "Check the changes. The Amazon SP-API PUT is not reversible.",
+    "language": "Language",
+    "changedFieldsLabel": "Changed fields ({count})",
+    "noChanges": "No changes compared to the current Amazon content.",
+    "before": "Before",
+    "after": "After",
+    "emptyBefore": "(empty)",
+    "emptyAfter": "(will be cleared)",
+    "isolationWarning": "Content on other Amazon marketplaces will NOT be changed. Only {name} is updated.",
+    "cancel": "Cancel",
+    "confirm": "Save changes",
+    "submitting": "Submitting..."
+  },
   "language": {
     "switch": "Language",
     "de": "Deutsch",
@@ -48,6 +85,9 @@
     "amazon": "Amazon",
     "amazonOrders": "Orders",
     "amazonProducts": "Products",
+    "amazonFr": "Amazon FR",
+    "amazonFrOrders": "Orders",
+    "amazonFrProducts": "Products",
     "otto": "Otto",
     "ottoOrders": "Orders",
     "kaufland": "Kaufland",
@@ -77,6 +117,7 @@
     "adPerformance": "Performance",
     "analytics": "Analytics",
     "analyticsMarketplaces": "Marketplaces",
+    "analyticsWeeklyReport": "Weekly report",
     "analyticsArticleForecast": "Demand forecast",
     "analyticsPayouts": "Payouts",
     "analyticsProcurement": "Procurement",
@@ -363,6 +404,78 @@
   },
   "analyticsPage": {
     "title": "Analytics"
+  },
+  "weeklyReport": {
+    "title": "Weekly report",
+    "subtitle": "Presentation view",
+    "headerTitle": "Week {currentWeek} vs. Week {previousWeek}",
+    "headerRange": "{currentRange} · compared to {previousRange}",
+    "weekDropdownLabel": "Calendar week",
+    "weekOptionLabel": "Week {week} / {year}",
+    "exportPdf": "Export PDF",
+    "exportComingSoon": "PDF export will follow in a later step.",
+    "story": {
+      "kernaussage": "Key insight",
+      "fallback": "No marketplace data this week."
+    },
+    "kpi": {
+      "revenue": "Revenue",
+      "orders": "Orders",
+      "aov": "Avg. order value",
+      "returns": "Returns",
+      "vsPrevious": "vs. previous week"
+    },
+    "table": {
+      "marketplace": "Marketplace",
+      "revenue": "Revenue",
+      "share": "Share",
+      "orders": "Orders",
+      "returns": "Returns",
+      "trend": "Trend (7 days)",
+      "noData": "No data",
+      "errorHint": "Data unavailable",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "expandRow": "Show details",
+      "collapseRow": "Hide details",
+      "previousShort": "Prev. week"
+    },
+    "details": {
+      "topGainers": "Top gainers",
+      "topLosers": "Top losers",
+      "priceTrend": "Price trend",
+      "avgPriceCurrent": "Avg. price current",
+      "avgPricePrevious": "Previous week",
+      "trend": "Trend",
+      "noGainers": "No SKU gainers this week.",
+      "noLosers": "No SKU losers this week.",
+      "skuPrefix": "SKU",
+      "showMore": "Show all {count}",
+      "dialogTitle": "Top gainers and losers — {name}",
+      "dialogGainersHeading": "Gainers ({count})",
+      "dialogLosersHeading": "Losers ({count})",
+      "tooltipRevenue": "Revenue W{week}: {current} (previous: {previous})",
+      "tooltipOrders": "Orders: {current} vs. {previous}",
+      "rankPrefix": "#{rank}",
+      "noDaily": "No daily data available",
+      "dailyChartLabel": "Avg. price per day (Mon–Sun)",
+      "revenueShort": "Revenue",
+      "ordersCurrentShort": "Ord. Wk",
+      "ordersPreviousShort": "Ord. Prev."
+    },
+    "notes": {
+      "heading": "Note / ToDo",
+      "placeholder": "Actions, todos, observations for this marketplace this week…",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "error": "Failed to save",
+      "updatedAt": "Updated {date}"
+    },
+    "exportFilename": "weekly-report-week{week}-{year}.pdf",
+    "exportError": "PDF export failed.",
+    "exportSuccess": "PDF download started.",
+    "loading": "Loading weekly report…",
+    "loadError": "Weekly report could not be loaded."
   },
   "articleForecast": {
     "title": "Demand forecast",
@@ -1222,6 +1335,10 @@
       "comingSoon": "Upload not yet available for this marketplace.",
       "loading": "Uploading…",
       "saveFirst": "Please save as draft first."
+    },
+    "submit": {
+      "aiChanged": "AI adjusted the listing to match marketplace guidelines.",
+      "aiNoChange": "AI reviewed — no further optimization needed."
     },
     "placeholder": {
       "imageUrl": "Enter image URL and press Enter",

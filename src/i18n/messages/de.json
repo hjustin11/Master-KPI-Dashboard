@@ -8,6 +8,43 @@
     "off": "AUS",
     "openMarketplaceOrderTitle": "Bestellung im Marktplatz-Backend öffnen ({id})"
   },
+  "marketplaceLanguage": {
+    "contentIn": "Content auf {language}",
+    "marketplaceId": "Marketplace-ID",
+    "changesOnlyApplyTo": "Alle Änderungen werden NUR auf {name} übernommen.",
+    "missingHint": "Noch nicht auf {language} ({tag}) gepflegt",
+    "translateWithAi": "Mit KI aus DE übersetzen",
+    "manualEnter": "Manuell eingeben",
+    "comingSoonToast": "KI-Übersetzung wird in Kürze verfügbar sein (Phase 5d).",
+    "popoverTitle": "Amazon speichert Content pro Sprache.",
+    "popoverBody": "Eine {sourceLanguage}e Version ist ggf. auf Amazon DE vorhanden, aber für diesen Marktplatz fehlt die {targetLanguage}e Übersetzung für das Feld „{fieldLabel}\".",
+    "sourceValueLabel": "Auf Amazon DE gepflegt:",
+    "detailsAriaLabel": "Details",
+    "lang_de_DE": "Deutsch",
+    "lang_fr_FR": "Französisch",
+    "lang_fr_BE": "Französisch (Belgien)",
+    "lang_it_IT": "Italienisch",
+    "lang_es_ES": "Spanisch",
+    "lang_nl_NL": "Niederländisch",
+    "lang_pl_PL": "Polnisch",
+    "lang_sv_SE": "Schwedisch",
+    "lang_en_GB": "Englisch (UK)"
+  },
+  "amazonSubmitPreview": {
+    "title": "Änderungen vor dem Upload zu {name}",
+    "description": "Prüfe die Änderungen. Amazon SP-API PUT ist nicht reversibel.",
+    "language": "Sprache",
+    "changedFieldsLabel": "Geänderte Felder ({count})",
+    "noChanges": "Keine Änderungen gegenüber dem aktuellen Amazon-Stand.",
+    "before": "Vorher",
+    "after": "Nachher",
+    "emptyBefore": "(leer)",
+    "emptyAfter": "(wird geleert)",
+    "isolationWarning": "Der Content auf anderen Amazon-Marktplätzen wird NICHT verändert. Nur {name} wird aktualisiert.",
+    "cancel": "Abbrechen",
+    "confirm": "Änderungen speichern",
+    "submitting": "Überträgt..."
+  },
   "language": {
     "switch": "Sprache",
     "de": "Deutsch",
@@ -48,6 +85,9 @@
     "amazon": "Amazon",
     "amazonOrders": "Bestellungen",
     "amazonProducts": "Produkte",
+    "amazonFr": "Amazon FR",
+    "amazonFrOrders": "Bestellungen",
+    "amazonFrProducts": "Produkte",
     "otto": "Otto",
     "ottoOrders": "Bestellungen",
     "kaufland": "Kaufland",
@@ -77,6 +117,7 @@
     "adPerformance": "Performance",
     "analytics": "Analytics",
     "analyticsMarketplaces": "Marktplätze",
+    "analyticsWeeklyReport": "Wochenbericht",
     "analyticsArticleForecast": "Bedarfsprognose",
     "analyticsPayouts": "Auszahlungen",
     "analyticsProcurement": "Beschaffung",
@@ -362,6 +403,78 @@
   },
   "analyticsPage": {
     "title": "Analytics"
+  },
+  "weeklyReport": {
+    "title": "Wochenbericht",
+    "subtitle": "Präsentationssicht",
+    "headerTitle": "KW {currentWeek} vs. KW {previousWeek}",
+    "headerRange": "{currentRange} · verglichen mit {previousRange}",
+    "weekDropdownLabel": "Kalenderwoche",
+    "weekOptionLabel": "KW {week} / {year}",
+    "exportPdf": "Export PDF",
+    "exportComingSoon": "PDF-Export folgt in einem späteren Schritt.",
+    "story": {
+      "kernaussage": "Kernaussage",
+      "fallback": "Keine Marktplatz-Daten in dieser Woche."
+    },
+    "kpi": {
+      "revenue": "Umsatz",
+      "orders": "Bestellungen",
+      "aov": "Ø Bestellwert",
+      "returns": "Retouren",
+      "vsPrevious": "vs. Vorwoche"
+    },
+    "table": {
+      "marketplace": "Marktplatz",
+      "revenue": "Umsatz",
+      "share": "Anteil",
+      "orders": "Bestellungen",
+      "returns": "Retouren",
+      "trend": "Trend (7 Tage)",
+      "noData": "Keine Daten",
+      "errorHint": "Daten nicht verfügbar",
+      "expandAll": "Alle aufklappen",
+      "collapseAll": "Alle zuklappen",
+      "expandRow": "Details anzeigen",
+      "collapseRow": "Details ausblenden",
+      "previousShort": "Vorwoche"
+    },
+    "details": {
+      "topGainers": "Top-Gewinner",
+      "topLosers": "Top-Verlierer",
+      "priceTrend": "Preisentwicklung",
+      "avgPriceCurrent": "Ø-Preis aktuell",
+      "avgPricePrevious": "Vorwoche",
+      "trend": "Trend",
+      "noGainers": "Keine SKU-Gewinner in dieser Woche.",
+      "noLosers": "Keine SKU-Verlierer in dieser Woche.",
+      "skuPrefix": "SKU",
+      "showMore": "Alle {count} anzeigen",
+      "dialogTitle": "Top-Gewinner und -Verlierer — {name}",
+      "dialogGainersHeading": "Gewinner ({count})",
+      "dialogLosersHeading": "Verlierer ({count})",
+      "tooltipRevenue": "Umsatz KW {week}: {current} (Vorwoche: {previous})",
+      "tooltipOrders": "Bestellungen: {current} vs. {previous}",
+      "rankPrefix": "#{rank}",
+      "noDaily": "Keine Tageswerte verfügbar",
+      "dailyChartLabel": "Ø-Preis je Tag (Mo–So)",
+      "ordersCurrentShort": "Best. KW",
+      "ordersPreviousShort": "Best. Vw.",
+      "revenueShort": "Umsatz"
+    },
+    "notes": {
+      "heading": "Notiz / ToDo",
+      "placeholder": "Maßnahmen, ToDos, Beobachtungen für diesen Marktplatz in dieser Woche…",
+      "saving": "Speichere…",
+      "saved": "Gespeichert",
+      "error": "Fehler beim Speichern",
+      "updatedAt": "Aktualisiert {date}"
+    },
+    "exportFilename": "wochenbericht-kw{week}-{year}.pdf",
+    "exportError": "PDF-Export fehlgeschlagen.",
+    "exportSuccess": "PDF wird heruntergeladen.",
+    "loading": "Lade Wochenbericht…",
+    "loadError": "Wochenbericht konnte nicht geladen werden."
   },
   "articleForecast": {
     "title": "Bedarfsprognose",
@@ -1287,6 +1400,10 @@
       "comingSoon": "Hochladen für diesen Marktplatz noch nicht verfügbar.",
       "loading": "Lädt hoch…",
       "saveFirst": "Bitte zuerst als Draft speichern."
+    },
+    "submit": {
+      "aiChanged": "KI hat das Listing an die Marktplatz-Richtlinien angepasst.",
+      "aiNoChange": "KI hat geprüft — keine weitere Optimierung nötig."
     },
     "placeholder": {
       "imageUrl": "Bild-URL eingeben und Enter drücken",

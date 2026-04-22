@@ -73,6 +73,7 @@ export function resolveNavLink(
 
 export const MARKETPLACE_NAV_KEYS = new Set<SidebarItemKey>([
   "amazon",
+  "amazon-fr",
   "ebay",
   "otto",
   "kaufland",

@@ -20,7 +20,11 @@ import {
   type AmazonSpApiProductsConfig,
 } from "@/shared/lib/amazonProductsSpApiCatalog";
 import { isLikelyAmazonShippingUuid } from "@/shared/lib/amazonMeasureDisplay";
-import { getDefaultAmazonMarketplaceId } from "@/shared/config/amazonMarketplaces";
+import {
+  DEFAULT_AMAZON_SLUG,
+  getAmazonMarketplaceBySlug,
+  getDefaultAmazonMarketplaceId,
+} from "@/shared/config/amazonMarketplaces";
 
 async function getCurrentUser() {
   const supabase = await createServerSupabase();
@@ -302,18 +306,41 @@ function isNoiseToken(value: string) {
   return false;
 }
 
-function collectAttributeTextValues(input: unknown, out: string[] = []): string[] {
+/**
+ * Wenn `targetLanguageTag` gesetzt ist und der Eintrag ein `language_tag` hat,
+ * muss er matchen. Einträge mit anderer Sprache werden ignoriert.
+ * Einträge ohne `language_tag` (Stammdaten wie Preise, Maße, EAN) werden
+ * immer mitgenommen.
+ */
+function collectAttributeTextValues(
+  input: unknown,
+  out: string[] = [],
+  targetLanguageTag?: string
+): string[] {
   if (typeof input === "string") {
     const trimmed = input.trim();
     if (trimmed && !isNoiseToken(trimmed)) out.push(trimmed);
     return out;
   }
   if (Array.isArray(input)) {
-    for (const item of input) collectAttributeTextValues(item, out);
+    for (const item of input) collectAttributeTextValues(item, out, targetLanguageTag);
     return out;
   }
   if (!input || typeof input !== "object") return out;
   const record = input as Record<string, unknown>;
+
+  if (targetLanguageTag) {
+    const entryLang =
+      typeof record.language_tag === "string"
+        ? record.language_tag.trim()
+        : typeof record.languageTag === "string"
+          ? record.languageTag.trim()
+          : "";
+    if (entryLang && entryLang !== targetLanguageTag) {
+      return out;
+    }
+  }
+
   if (typeof record.value === "string") {
     const value = record.value.trim();
     if (value && !isNoiseToken(value)) out.push(value);
@@ -324,13 +351,13 @@ function collectAttributeTextValues(input: unknown, out: string[] = []): string[
   for (const [key, nested] of Object.entries(record)) {
     if (key === "value") continue;
     if (AMAZON_ATTRIBUTE_META_KEYS.has(key.toLowerCase())) continue;
-    collectAttributeTextValues(nested, out);
+    collectAttributeTextValues(nested, out, targetLanguageTag);
   }
   return out;
 }
 
-function firstAttributeText(input: unknown): string {
-  return dedupe(collectAttributeTextValues(input))[0] ?? "";
+function firstAttributeText(input: unknown, targetLanguageTag?: string): string {
+  return dedupe(collectAttributeTextValues(input, [], targetLanguageTag))[0] ?? "";
 }
 
 function parseNumberishValue(input: unknown): number | null {
@@ -620,29 +647,68 @@ function extractQuantityFromFulfillmentBlocks(input: unknown): number | null {
 
 function extractDetailFromListingsPayload(
   payload: unknown,
-  source: AmazonProductSourceSnapshot
-): AmazonProductSourceSnapshot {
+  source: AmazonProductSourceSnapshot,
+  targetLanguageTag?: string
+): { source: AmazonProductSourceSnapshot; missingTranslations: string[] } {
   const obj = (payload ?? {}) as Record<string, unknown>;
   const summaries = Array.isArray(obj.summaries) ? obj.summaries : [];
   const summary = (summaries[0] ?? {}) as Record<string, unknown>;
   const attributes = (obj.attributes ?? {}) as Record<string, unknown>;
 
+  // Two-Pass-Extraktion für lokalisierte Felder:
+  //   Pass 1 — strikt gefiltert nach targetLanguageTag (leer wenn Listing nicht lokalisiert)
+  //   Pass 2 — unfiltered Fallback (nur wenn Pass 1 leer)
+  // Wenn Pass 2 gebraucht wird → Feld landet in missingTranslations[].
+  const missingTranslationsInternal: string[] = [];
+
+  // Amazon SP-API Listings-Items liefert Bullets in verschiedenen Formaten:
+  //  - JSON-API-Format: Array unter "bullet_point" mit {value, language_tag, marketplace_id}-Einträgen
+  //  - Flat-File-Style: Einzel-Keys "bullet_point1" .. "bullet_point5"
+  // Beide Varianten werden hier gesammelt.
   const bulletCandidates = [
     attributes.bullet_point,
     attributes.bullet_points,
     attributes.key_product_features,
+    (attributes as Record<string, unknown>).bullet_point1,
+    (attributes as Record<string, unknown>).bullet_point2,
+    (attributes as Record<string, unknown>).bullet_point3,
+    (attributes as Record<string, unknown>).bullet_point4,
+    (attributes as Record<string, unknown>).bullet_point5,
   ];
-  const bullets = dedupe(
+  const bulletsFiltered = dedupe(
     bulletCandidates
-      .flatMap((candidate) => collectAttributeTextValues(candidate))
+      .flatMap((candidate) => collectAttributeTextValues(candidate, [], targetLanguageTag))
       .filter((line) => line.length > 2)
       .slice(0, 12)
   );
+  const bullets =
+    bulletsFiltered.length > 0
+      ? bulletsFiltered
+      : dedupe(
+          bulletCandidates
+            .flatMap((candidate) => collectAttributeTextValues(candidate))
+            .filter((line) => line.length > 2)
+            .slice(0, 12)
+        );
+  if (targetLanguageTag && bulletsFiltered.length === 0 && bullets.length > 0) {
+    missingTranslationsInternal.push("bulletPoints");
+  }
 
   const descriptionCandidates = [attributes.product_description, attributes.description];
-  const description = dedupe(descriptionCandidates.flatMap((candidate) => collectAttributeTextValues(candidate))).join(
-    "\n\n"
-  );
+  const descriptionFiltered = dedupe(
+    descriptionCandidates.flatMap((candidate) =>
+      collectAttributeTextValues(candidate, [], targetLanguageTag)
+    )
+  ).join("\n\n");
+  const description =
+    descriptionFiltered.trim().length > 0
+      ? descriptionFiltered
+      : dedupe(
+          descriptionCandidates.flatMap((candidate) => collectAttributeTextValues(candidate))
+        ).join("\n\n");
+  if (targetLanguageTag && !descriptionFiltered.trim() && description.trim()) {
+    missingTranslationsInternal.push("description");
+  }
 
   const imageKeys = [
     "main_product_image_locator",
@@ -661,20 +727,41 @@ function extractDetailFromListingsPayload(
     [...urlsFromAttributes, ...urlsFromSummary].filter((value) => /^https?:\/\//i.test(value))
   ).slice(0, 20);
 
-  const titleFromPayload =
-    (typeof summary.itemName === "string" && summary.itemName.trim()) ||
+  const titleFiltered = firstAttributeText(attributes.item_name, targetLanguageTag);
+  const titleUnfiltered =
+    titleFiltered ||
     firstAttributeText(attributes.item_name) ||
-    source.title;
+    (typeof summary.itemName === "string" && summary.itemName.trim() ? summary.itemName.trim() : "");
+  const titleFromPayload = titleUnfiltered || source.title;
+  if (targetLanguageTag && !titleFiltered && titleUnfiltered) {
+    missingTranslationsInternal.push("title");
+  }
 
+  const productTypeFiltered =
+    firstAttributeText(attributes.product_type, targetLanguageTag) ||
+    firstAttributeText(attributes.item_type_name, targetLanguageTag);
   const productTypeFromPayload =
+    productTypeFiltered ||
     firstAttributeText(attributes.product_type) ||
     firstAttributeText(attributes.item_type_name) ||
     source.productType;
 
-  const brandFromPayload =
+  // Amazon liefert die Marke je nach Marktplatz/API-Version unter "brand", "brand_name"
+  // oder "manufacturer". Wir prüfen alle drei.
+  const brandNameAttr = (attributes as Record<string, unknown>).brand_name;
+  const brandFiltered =
+    firstAttributeText(attributes.brand, targetLanguageTag) ||
+    firstAttributeText(brandNameAttr, targetLanguageTag) ||
+    firstAttributeText(attributes.manufacturer, targetLanguageTag);
+  const brandUnfiltered =
+    brandFiltered ||
     firstAttributeText(attributes.brand) ||
-    firstAttributeText(attributes.manufacturer) ||
-    source.brand;
+    firstAttributeText(brandNameAttr) ||
+    firstAttributeText(attributes.manufacturer);
+  const brandFromPayload = brandUnfiltered || source.brand;
+  if (targetLanguageTag && !brandFiltered && brandUnfiltered) {
+    missingTranslationsInternal.push("brand");
+  }
 
   const topOffers = extractPricesFromTopLevelOffers(obj.offers);
   const offerOur =
@@ -723,25 +810,28 @@ function extractDetailFromListingsPayload(
   const mergedDesc = description || source.description;
 
   return {
-    ...source,
-    title: titleFromPayload || source.title,
-    bulletPoints: sanitizeAmazonBulletPoints(mergedBullets),
-    description: sanitizeAmazonDescription(mergedDesc),
-    images: images.length > 0 ? images : source.images,
-    productType: productTypeFromPayload || source.productType,
-    brand: brandFromPayload || source.brand,
-    conditionType: conditionFromSummary || source.conditionType,
-    listPriceEur,
-    uvpEur,
-    handlingTime,
-    shippingTemplate,
-    quantity: quantityResolved,
-    packageLength,
-    packageWidth,
-    packageHeight,
-    packageWeight,
-    externalProductId: ean || source.externalProductId,
-    externalProductIdType: ean ? "ean" : source.externalProductIdType,
+    source: {
+      ...source,
+      title: titleFromPayload || source.title,
+      bulletPoints: sanitizeAmazonBulletPoints(mergedBullets),
+      description: sanitizeAmazonDescription(mergedDesc),
+      images: images.length > 0 ? images : source.images,
+      productType: productTypeFromPayload || source.productType,
+      brand: brandFromPayload || source.brand,
+      conditionType: conditionFromSummary || source.conditionType,
+      listPriceEur,
+      uvpEur,
+      handlingTime,
+      shippingTemplate,
+      quantity: quantityResolved,
+      packageLength,
+      packageWidth,
+      packageHeight,
+      packageWeight,
+      externalProductId: ean || source.externalProductId,
+      externalProductIdType: ean ? "ean" : source.externalProductIdType,
+    },
+    missingTranslations: missingTranslationsInternal,
   };
 }
 
@@ -770,8 +860,26 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
   const sku = decodeURIComponent(params.sku ?? "").trim();
   if (!sku) return NextResponse.json({ error: "sku ist erforderlich." }, { status: 400 });
 
-  const { origin } = new URL(request.url);
-  const listRes = await fetch(`${origin}/api/amazon/products?status=all&all=1`, {
+  const reqUrl = new URL(request.url);
+  const amazonSlugParam = (reqUrl.searchParams.get("amazonSlug") ?? "").trim();
+  let countryMarketplace: ReturnType<typeof getAmazonMarketplaceBySlug> | undefined;
+  if (amazonSlugParam) {
+    countryMarketplace = getAmazonMarketplaceBySlug(amazonSlugParam);
+    if (!countryMarketplace) {
+      return NextResponse.json(
+        { error: `Unbekannter Amazon-Slug: ${amazonSlugParam}` },
+        { status: 400 }
+      );
+    }
+  }
+  const effectiveAmazonSlug = amazonSlugParam || DEFAULT_AMAZON_SLUG;
+
+  const { origin } = reqUrl;
+  const listBase =
+    amazonSlugParam && amazonSlugParam !== DEFAULT_AMAZON_SLUG
+      ? `${origin}/api/amazon/${encodeURIComponent(amazonSlugParam)}/products?status=all&all=1`
+      : `${origin}/api/amazon/products?status=all&all=1`;
+  const listRes = await fetch(listBase, {
     cache: "no-store",
     headers: {
       cookie: request.headers.get("cookie") ?? "",
@@ -785,6 +893,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
   const source = sourceSnapshotFromRow(row);
   let enrichedSource = source;
   let detailLoadHint: string | null = null;
+  const missingTranslations: string[] = [];
   try {
     const config = await getAmazonConfig();
     if (
@@ -809,12 +918,14 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
         detailLoadHint =
           "Seller-ID fehlt (weder Produktliste noch Umgebung). Amazon-Listings-Details können nicht geladen werden.";
       } else {
+        const resolvedMarketplaceId =
+          countryMarketplace?.marketplaceId ?? getDefaultAmazonMarketplaceId(config.marketplaceIds);
         const detailRes = await spApiGet({
           endpoint: config.endpoint,
           region: config.region,
           path: `/listings/2021-08-01/items/${encodeURIComponent(sellerId)}/${encodeURIComponent(sku)}`,
           query: {
-            marketplaceIds: getDefaultAmazonMarketplaceId(config.marketplaceIds),
+            marketplaceIds: resolvedMarketplaceId,
             includedData: "summaries,attributes,offers,fulfillmentAvailability",
           },
           awsAccessKeyId: config.awsAccessKeyId,
@@ -823,7 +934,101 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
           lwaAccessToken,
         });
         if (detailRes.res.ok && detailRes.json) {
-          enrichedSource = extractDetailFromListingsPayload(detailRes.json, source);
+          const targetLanguageTag =
+            countryMarketplace?.languageTag ?? "de_DE";
+
+          const extractResult = extractDetailFromListingsPayload(
+            detailRes.json,
+            source,
+            targetLanguageTag
+          );
+          enrichedSource = extractResult.source;
+
+          // DE-FALLBACK: Wenn wir auf einem Non-DE-Marktplatz sind und das Listing
+          // keine Content-Attribute hat (nur Offer + Images), laden wir zusätzlich
+          // das DE-Listing als Vorlage. Grund: Amazon liefert für nicht-lokalisierte
+          // Listings über die Listings-Items-API nur `purchasable_offer`, Bilder
+          // und `condition_type` — der sichtbare Content auf amazon.fr stammt aus
+          // dem Catalog-Item der ASIN, nicht aus dem Seller-Listing. Ohne Fallback
+          // bleibt der Editor leer.
+          const defaultMarketplaceId = getDefaultAmazonMarketplaceId(config.marketplaceIds);
+          const isNonDefaultCountry =
+            Boolean(countryMarketplace) && resolvedMarketplaceId !== defaultMarketplaceId;
+          const attrs = (detailRes.json as { attributes?: Record<string, unknown> }).attributes ?? {};
+          const hasContentAttrs = Boolean(
+            attrs.item_name || attrs.product_description || attrs.bullet_point || attrs.brand
+          );
+          if (isNonDefaultCountry && !hasContentAttrs) {
+            try {
+              const fallbackRes = await spApiGet({
+                endpoint: config.endpoint,
+                region: config.region,
+                path: `/listings/2021-08-01/items/${encodeURIComponent(sellerId)}/${encodeURIComponent(sku)}`,
+                query: {
+                  marketplaceIds: defaultMarketplaceId,
+                  includedData: "summaries,attributes,offers,fulfillmentAvailability",
+                },
+                awsAccessKeyId: config.awsAccessKeyId,
+                awsSecretAccessKey: config.awsSecretAccessKey,
+                awsSessionToken: config.awsSessionToken,
+                lwaAccessToken,
+              });
+              if (fallbackRes.res.ok && fallbackRes.json) {
+                // DE-Extract mit de_DE-Filter (Pass 1 matcht, Two-Pass-Fallback auch möglich)
+                const deExtract = extractDetailFromListingsPayload(
+                  fallbackRes.json,
+                  enrichedSource,
+                  "de_DE"
+                );
+                // Felder aus DE übernehmen die in FR leer sind, aber als "nicht lokalisiert" markieren
+                const merged = { ...enrichedSource };
+                const fallbackFields: string[] = [];
+                if (!merged.title.trim() && deExtract.source.title.trim()) {
+                  merged.title = deExtract.source.title;
+                  fallbackFields.push("title");
+                }
+                if (!merged.description.trim() && deExtract.source.description.trim()) {
+                  merged.description = deExtract.source.description;
+                  fallbackFields.push("description");
+                }
+                if (merged.bulletPoints.length === 0 && deExtract.source.bulletPoints.length > 0) {
+                  merged.bulletPoints = deExtract.source.bulletPoints;
+                  fallbackFields.push("bulletPoints");
+                }
+                if (!merged.brand.trim() && deExtract.source.brand.trim()) {
+                  merged.brand = deExtract.source.brand;
+                  fallbackFields.push("brand");
+                }
+                if (!merged.productType.trim() && deExtract.source.productType.trim()) {
+                  merged.productType = deExtract.source.productType;
+                }
+                enrichedSource = merged;
+                for (const f of fallbackFields) {
+                  if (!extractResult.missingTranslations.includes(f)) {
+                    extractResult.missingTranslations.push(f);
+                  }
+                }
+              }
+            } catch (fallbackErr) {
+              console.warn("[amazon:de-fallback-failed]", fallbackErr);
+            }
+          }
+          // missingTranslations aus Two-Pass-Extraktion (Felder die nur via Fallback gefüllt wurden)
+          for (const field of extractResult.missingTranslations) {
+            if (!missingTranslations.includes(field)) missingTranslations.push(field);
+          }
+          // Zusätzlich echte Leer-Fälle (weder FR noch DE vorhanden)
+          if (!enrichedSource.title.trim() && !missingTranslations.includes("title"))
+            missingTranslations.push("title");
+          if (!enrichedSource.description.trim() && !missingTranslations.includes("description"))
+            missingTranslations.push("description");
+          if (enrichedSource.bulletPoints.length === 0 && !missingTranslations.includes("bulletPoints"))
+            missingTranslations.push("bulletPoints");
+          if (!enrichedSource.brand.trim() && !missingTranslations.includes("brand"))
+            missingTranslations.push("brand");
+          if (missingTranslations.length > 0 && amazonSlugParam && amazonSlugParam !== DEFAULT_AMAZON_SLUG) {
+            detailLoadHint = `Für diese Sprache (${targetLanguageTag}) sind ${missingTranslations.length} Feld(er) noch nicht lokalisiert: ${missingTranslations.join(", ")}. Die DE-Vorlage wird angezeigt — bitte via „Mit KI aus DE übersetzen" lokalisieren und speichern.`;
+          }
         } else {
           const st = detailRes.res.status;
           detailLoadHint =
@@ -845,6 +1050,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
       sourceSnapshot: enrichedSource,
       draftValues: freshDraft,
       draft: null,
+      missingTranslations,
+      targetLanguageTag: countryMarketplace?.languageTag ?? "de_DE",
       ...(detailLoadHint ? { detailLoadHint } : {}),
     });
   }
@@ -853,7 +1060,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
   const draftRes = await admin
     .from("amazon_product_drafts")
     .select("*")
-    .eq("marketplace_slug", "amazon")
+    .eq("marketplace_slug", effectiveAmazonSlug === DEFAULT_AMAZON_SLUG ? "amazon" : effectiveAmazonSlug)
     .eq("mode", "edit_existing")
     .eq("sku", sku)
     .order("updated_at", { ascending: false })
@@ -877,6 +1084,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ sku: string
     sourceSnapshot: draft?.source_snapshot ?? enrichedSource,
     draftValues: draftValuesOut ?? emptyDraftValues(),
     draft,
+    missingTranslations,
+    targetLanguageTag: countryMarketplace?.languageTag ?? "de_DE",
     ...(detailLoadHint ? { detailLoadHint } : {}),
   });
 }

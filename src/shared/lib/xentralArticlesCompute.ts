@@ -25,6 +25,8 @@ export type XentralArticle = {
   projectId: string | null;
   /** Aufgelöster Projekt-/Marktplatzname (wie bei Bestellungen). */
   projectDisplay: string;
+  /** JSON:API-ID — benötigt für Detail-Fetch `/api/v1/products/{id}`. */
+  xentralProductId: string | null;
   /** Gesamt verkaufte Menge (API-Felder oder Summe der Projektspalten). */
   totalSold: number;
   /** Verkaufsmengen je Projektname — Basis für dynamische Tabellenspalten. */
@@ -509,7 +511,10 @@ function pickNumericValue(
     if (v != null) return v;
   }
   // 2) Verschachtelte Container (Xentral v2 nested sometimes)
+  // Xentral v1 API nutzt insbesondere `measurements` mit Unterobjekten
+  // `{weight, length, width, height}` und Werten `{value, unit}`.
   const containers = [
+    a.measurements,
     a.dimensions,
     a.abmessungen,
     a.packageDimensions,
@@ -518,6 +523,7 @@ function pickNumericValue(
     a.package,
     (a.weight as unknown) as Record<string, unknown> | undefined,
     (a.gewicht as unknown) as Record<string, unknown> | undefined,
+    raw.measurements,
     raw.dimensions,
     raw.abmessungen,
     raw.packageDimensions,
@@ -812,6 +818,7 @@ function enrichArticles(
       salesPrice,
       projectId: r.projectId,
       projectDisplay,
+      xentralProductId: r.xentralProductId,
       totalSold,
       soldByProject,
       ean: r.ean,
@@ -848,12 +855,19 @@ export async function computeXentralArticlesPayload(
     salesToYmd,
   } = args;
 
+  // Xentral v1 limitiert page[size] auf 10..150 — bei 200 meldet der Server 400.
+  const clampedPageSize = Math.max(10, Math.min(150, pageSize));
+
   async function fetchPage(page: number) {
     const url = new URL(joinUrl(baseUrl, "api/v1/products"));
     url.searchParams.set("page[number]", String(page));
-    url.searchParams.set("page[size]", String(pageSize));
+    url.searchParams.set("page[size]", String(clampedPageSize));
     if (query) {
-      url.searchParams.set("filter[0][key]", "search");
+      // Xentral v1 erlaubt je nach Filter-Key nur bestimmte Operatoren.
+      // `search` akzeptiert kein `equals` (gibt "Operator equals is not supported in filter key of type search").
+      // Wir nutzen deshalb `number` (Artikelnummer/SKU) + `equals` für exakte SKU-Suche.
+      url.searchParams.set("filter[0][key]", "number");
+      url.searchParams.set("filter[0][op]", "equals");
       url.searchParams.set("filter[0][value]", query);
     }
 
@@ -1001,5 +1015,142 @@ export async function computeXentralArticlesPayload(
   const enriched = enrichArticles(rawAccum, projectById, purchasePriceByProductId);
   const { items, meta } = await withOptionalSalesWindow(enriched);
   return { items, totalCount, meta } satisfies XentralArticlesApiPayload;
+}
+
+/**
+ * Detail-Fetch eines einzelnen Xentral-Produkts.
+ * Die Liste `/api/v1/products` liefert oft nur Grunddaten; EAN + Dimensionen
+ * leben im Detail-Payload unter `attributes.*` bzw. in verschachtelten
+ * Ressourcen. Diese Funktion wird als Fallback aufgerufen wenn einzelne
+ * Felder in der Liste fehlen.
+ */
+async function fetchXentralJson(
+  baseUrl: string,
+  token: string,
+  path: string
+): Promise<unknown> {
+  const url = new URL(joinUrl(baseUrl, path));
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const text = await res.text();
+  try {
+    const json = text ? (JSON.parse(text) as unknown) : null;
+    if (json && typeof json === "object") {
+      const root = json as Record<string, unknown>;
+      return root.data ?? root;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/** Iteriert Objekt oder Array; ruft den Extractor auf jedem Eintrag bis ein
+ * nicht-leerer Wert gefunden wird. */
+function firstNonEmpty<T>(
+  input: unknown,
+  extractor: (obj: Record<string, unknown>) => T,
+  isEmpty: (v: T) => boolean
+): T | null {
+  const visit = (v: unknown): T | null => {
+    if (!v) return null;
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        const out = visit(item);
+        if (out != null && !isEmpty(out)) return out;
+      }
+      return null;
+    }
+    if (typeof v === "object") {
+      const r = v as Record<string, unknown>;
+      const out = extractor(r);
+      if (!isEmpty(out)) return out;
+    }
+    return null;
+  };
+  return visit(input);
+}
+
+export async function fetchXentralProductDetail(args: {
+  baseUrl: string;
+  token: string;
+  productId: string;
+}): Promise<{
+  ean: string | null;
+  brand: string | null;
+  dimL: number | null;
+  dimW: number | null;
+  dimH: number | null;
+  weight: number | null;
+  category: string | null;
+}> {
+  // Xentral v1 REST trennt Stammdaten zwischen mehreren Sub-Resources:
+  //   /api/v1/products/{id}                      → Haupt-Attribute (Name, SKU, …)
+  //   /api/v1/products/{id}/stocksettings        → Lager/Abmessungen (Länge, Breite, Höhe, Gewicht)
+  //   /api/v1/products/{id}/manufacturerinformation → Hersteller-Tab (EAN, Marke, Hersteller)
+  // Wir fetchen alle parallel; Fehler in einem Resource-Call bricht nicht das Ganze.
+  const [main, stocksettings, manufacturer] = await Promise.all([
+    fetchXentralJson(args.baseUrl, args.token, `api/v1/products/${encodeURIComponent(args.productId)}`),
+    fetchXentralJson(
+      args.baseUrl,
+      args.token,
+      `api/v1/products/${encodeURIComponent(args.productId)}/stocksettings`
+    ),
+    fetchXentralJson(
+      args.baseUrl,
+      args.token,
+      `api/v1/products/${encodeURIComponent(args.productId)}/manufacturerinformation`
+    ),
+  ]);
+
+  // EAN: zuerst Hersteller-Info (im Xentral-UI „Hersteller"-Tab), dann Main-Attribute.
+  const isEmptyStr = (s: string | null) => !s || !s.trim();
+  const ean =
+    firstNonEmpty<string | null>(
+      manufacturer,
+      (o) => extractEanFromProductAttributes(extractAttributes(o), o),
+      isEmptyStr
+    ) ??
+    firstNonEmpty<string | null>(
+      main,
+      (o) => extractEanFromProductAttributes(extractAttributes(o), o),
+      isEmptyStr
+    );
+  const brand =
+    firstNonEmpty<string | null>(
+      manufacturer,
+      (o) => extractBrandFromArticle(extractAttributes(o), o),
+      isEmptyStr
+    ) ??
+    firstNonEmpty<string | null>(main, (o) => extractBrandFromArticle(extractAttributes(o), o), isEmptyStr);
+  const category = firstNonEmpty<string | null>(
+    main,
+    (o) => extractCategoryFromArticle(extractAttributes(o), o),
+    isEmptyStr
+  );
+  // Dimensionen: zuerst aus stocksettings-Sub-Resource (Xentral „Lager/Abmessungen"-Tab),
+  // dann Main-Attribute. Iteriert über alle Array-Einträge.
+  type Dims = { dimL: number | null; dimW: number | null; dimH: number | null; weight: number | null };
+  const isEmptyDims = (d: Dims) =>
+    d.dimL == null && d.dimW == null && d.dimH == null && d.weight == null;
+  const extractDims = (o: Record<string, unknown>): Dims =>
+    extractDimensionsFromArticle(extractAttributes(o), o);
+  const dims =
+    firstNonEmpty<Dims>(stocksettings, extractDims, isEmptyDims) ??
+    firstNonEmpty<Dims>(main, extractDims, isEmptyDims) ??
+    ({ dimL: null, dimW: null, dimH: null, weight: null } as Dims);
+  return {
+    ean,
+    brand,
+    dimL: dims.dimL,
+    dimW: dims.dimW,
+    dimH: dims.dimH,
+    weight: dims.weight,
+    category,
+  };
 }
 

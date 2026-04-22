@@ -11,6 +11,7 @@ export type SidebarItemKey =
   | "overview"
   | "myArea"
   | "amazon"
+  | "amazon-fr"
   | "ebay"
   | "otto"
   | "kaufland"
@@ -53,6 +54,7 @@ export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey }> = [
   { key: "overview" },
   { key: "myArea" },
   { key: "amazon" },
+  { key: "amazon-fr" },
   { key: "ebay" },
   { key: "otto" },
   { key: "kaufland" },
@@ -71,6 +73,7 @@ export const SIDEBAR_ITEM_CONFIG: Array<{ key: SidebarItemKey }> = [
 export const SIDEBAR_REQUIRED_PERMISSIONS: Partial<Record<SidebarItemKey, PermissionKey[]>> = {
   myArea: ["manage_integrations"],
   amazon: ["manage_integrations"],
+  "amazon-fr": ["manage_integrations"],
   ebay: ["manage_integrations"],
   otto: ["manage_integrations"],
   kaufland: ["manage_integrations"],
@@ -111,6 +114,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     overview: true,
     myArea: true,
     amazon: true,
+    "amazon-fr": true,
     ebay: true,
     otto: true,
     kaufland: true,
@@ -129,6 +133,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     overview: true,
     myArea: true,
     amazon: true,
+    "amazon-fr": true,
     ebay: true,
     otto: true,
     kaufland: true,
@@ -147,6 +152,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     overview: true,
     myArea: true,
     amazon: true,
+    "amazon-fr": true,
     ebay: true,
     otto: true,
     kaufland: true,
@@ -165,6 +171,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     overview: true,
     myArea: false,
     amazon: false,
+    "amazon-fr": false,
     ebay: false,
     otto: false,
     kaufland: false,
@@ -183,6 +190,7 @@ export const INITIAL_ROLE_SIDEBAR_ITEMS: Record<Role, Record<SidebarItemKey, boo
     overview: true,
     myArea: false,
     amazon: false,
+    "amazon-fr": false,
     ebay: false,
     otto: false,
     kaufland: false,

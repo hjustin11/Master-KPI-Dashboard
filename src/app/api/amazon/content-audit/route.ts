@@ -4,6 +4,7 @@ import {
   buildAmazonTitleProductContext,
 } from "@/shared/lib/amazonTitleOptimizationContext";
 import { runAmazonContentOptimization } from "@/shared/lib/amazonTitleLlmReview";
+import { getAmazonMarketplaceBySlug } from "@/shared/config/amazonMarketplaces";
 
 export const maxDuration = 120;
 
@@ -87,14 +88,21 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const sku = str(url.searchParams.get("sku"));
     const forceRefresh = url.searchParams.get("refresh") === "1";
+    const amazonSlug = str(url.searchParams.get("amazonSlug")) || "amazon-de";
     if (!sku) return NextResponse.json({ error: "sku ist erforderlich." }, { status: 400 });
+
+    const marketplaceConfig = getAmazonMarketplaceBySlug(amazonSlug);
+    const targetLanguageTag = marketplaceConfig?.languageTag ?? "de_DE";
+    const marketplaceName = marketplaceConfig?.name ?? "Amazon.de";
+    const marketplaceDomain = marketplaceConfig?.domain ?? "amazon.de";
 
     const origin = url.origin;
     const cookieHeader = request.headers.get("cookie") ?? "";
     const refreshSuffix = forceRefresh ? "&refresh=1" : "";
+    const detailSlugQs = amazonSlug && amazonSlug !== "amazon-de" ? `&amazonSlug=${encodeURIComponent(amazonSlug)}` : "";
 
     const [amazonDetailRaw, shopifyRaw] = await Promise.all([
-      fetchJsonWithAuth(origin, `/api/amazon/products/${encodeURIComponent(sku)}?draft=1`, cookieHeader),
+      fetchJsonWithAuth(origin, `/api/amazon/products/${encodeURIComponent(sku)}?draft=1${detailSlugQs}`, cookieHeader),
       fetchJsonWithAuth(origin, `/api/shopify/products${forceRefresh ? "?refresh=1" : ""}`, cookieHeader),
     ]);
 
@@ -233,6 +241,9 @@ export async function GET(request: Request) {
     const titleOptimization = await runAmazonContentOptimization({
       productContext,
       rulebookMarkdown,
+      targetLanguageTag,
+      marketplaceName,
+      marketplaceDomain,
     });
 
     let recommendations = audit.recommendations;

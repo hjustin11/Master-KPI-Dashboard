@@ -109,15 +109,37 @@ export function extractLinesFromOttoOrder(order: OttoOrder): LineAgg[] {
   const out: LineAgg[] = [];
   for (const item of items) {
     const it = item as Record<string, unknown>;
+    // Otto v4 nested product object: item.product.{sku,title,product_id,name,ean}
+    const productObj = (it.product && typeof it.product === "object"
+      ? (it.product as Record<string, unknown>)
+      : {}) as Record<string, unknown>;
     const sku = pickStr(
-      it.sku ?? it.product_id ?? it.productId ?? it.offer_id ?? it.position_item_id ?? it.variant_id
+      it.sku ??
+        productObj.sku ??
+        it.product_id ??
+        it.productId ??
+        productObj.product_id ??
+        productObj.productId ??
+        it.offer_id ??
+        productObj.ean ??
+        it.position_item_id ??
+        it.variant_id
     );
-    const title = pickStr(it.product_title ?? it.title ?? it.name ?? it.product_name);
+    const title = pickStr(
+      it.product_title ??
+        it.title ??
+        it.name ??
+        it.product_name ??
+        productObj.title ??
+        productObj.name ??
+        productObj.product_title
+    );
     const reduced = it.item_value_reduced_gross_price ?? it.itemValueReducedGrossPrice;
     const gross = it.item_value_gross_price ?? it.itemValueGrossPrice;
     const price = (reduced ?? gross) as Record<string, unknown> | undefined;
     let revenue = toNum(price?.amount ?? 0);
     revenue = Number(revenue.toFixed(2));
+    // Otto: jedes position_item = 1 verkaufte Einheit (kein quantity-Feld).
     const qty = Math.max(1, toNum(it.quantity ?? it.qty) || 1);
     const key = mergeKey(sku, title);
     const label = title || sku || key;

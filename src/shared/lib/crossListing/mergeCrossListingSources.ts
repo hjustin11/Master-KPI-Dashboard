@@ -32,6 +32,9 @@ const FIELD_PRIORITIES: Partial<Record<CrossListingFieldKey, readonly CrossListi
   priceEur: XENTRAL_FIRST,
   uvpEur: XENTRAL_FIRST,
   stockQty: XENTRAL_FIRST,
+  // EAN: Xentral bevorzugt (Single Source of Truth), aber Fallback auf
+  // Marktplatz-Quellen damit der EAN niemals leer bleibt — Kaufland/Otto/etc.
+  // lehnen Uploads ohne EAN ab.
   ean: XENTRAL_FIRST,
   brand: XENTRAL_FIRST,
   category: ["amazon", "otto", "shopify", "ebay", "kaufland", "fressnapf", "zooplus", "mediamarkt-saturn", "tiktok", "xentral"],
@@ -233,20 +236,39 @@ function deriveBrandFromTitle(sources: CrossListingSourceMap): string | null {
   return null;
 }
 
-/** PetSpecies aus Titel/Attributen ableiten, wenn keine Quelle direkt liefert. */
+/** PetSpecies aus Titel/Description/Kategorie/Tags ableiten, wenn keine Quelle direkt liefert. */
 function derivePetSpecies(sources: CrossListingSourceMap): string | null {
   const MAP: Array<[RegExp, string]> = [
-    [/\bhund(?:e|en|ep)?\b/i, "Hund"],
-    [/\bkatze(?:n)?\b/i, "Katze"],
-    [/\b(?:kleintier|nager|hamster|kaninchen|meerschweinchen)\b/i, "Kleintier"],
-    [/\b(?:vogel|vögel|sittich|papagei)\b/i, "Vogel"],
-    [/\b(?:fisch|aquarium)\b/i, "Fisch"],
-    [/\b(?:pferd|pony|equine)\b/i, "Pferd"],
+    // Deutsch
+    [/\bhund(?:e|en|ep|chen|ef)?\b/i, "Hund"],
+    [/\bkatze(?:n)?\b|\bkater\b|\bkätzchen\b/i, "Katze"],
+    [/\b(?:kleintier|nager|hamster|kaninchen|meerschweinchen|ratte|maus|chinchilla|frettchen)\b/i, "Kleintier"],
+    [/\b(?:vogel|vögel|sittich|papagei|kanarien|wellensittich)\b/i, "Vogel"],
+    [/\b(?:fisch|aquarium|aquaristik|garnele|koi)\b/i, "Fisch"],
+    [/\b(?:pferd|pony|equine|reiten)\b/i, "Pferd"],
+    // Englisch
+    [/\b(?:dog|puppy|puppies|canine)\b/i, "Hund"],
+    [/\b(?:cat|kitten|feline)\b/i, "Katze"],
+    [/\b(?:rabbit|hamster|guinea\s*pig|rodent)\b/i, "Kleintier"],
+    [/\b(?:bird|parrot|canary|budgie)\b/i, "Vogel"],
+    [/\b(?:fish|aquarium|tank)\b/i, "Fisch"],
+    [/\b(?:horse|pony|equestrian)\b/i, "Pferd"],
   ];
-  for (const slug of ["amazon", "otto", "shopify", "ebay"] as CrossListingSourceSlug[]) {
+  // Alle Quellen durchsuchen (inkl. xentral für category/brand), nicht nur ausgewählte.
+  for (const slug of Object.keys(sources) as CrossListingSourceSlug[]) {
     const rec = sources[slug];
     if (!rec) continue;
-    const hay = `${rec.title ?? ""} ${rec.description ?? ""} ${Object.values(rec.attributes).join(" ")}`;
+    const hay = [
+      rec.title ?? "",
+      rec.description ?? "",
+      rec.category ?? "",
+      rec.brand ?? "",
+      ...(rec.tags ?? []),
+      ...Object.values(rec.attributes ?? {}),
+      ...(rec.bullets ?? []),
+    ]
+      .join(" ")
+      .toLowerCase();
     for (const [re, label] of MAP) if (re.test(hay)) return label;
   }
   return null;

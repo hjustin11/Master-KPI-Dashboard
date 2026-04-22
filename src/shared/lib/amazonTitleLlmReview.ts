@@ -447,6 +447,9 @@ export async function runAmazonContentLlmReview(args: {
 export async function runAmazonContentOptimization(args: {
   productContext: AmazonTitleProductContext;
   rulebookMarkdown: string;
+  targetLanguageTag?: string;
+  marketplaceName?: string;
+  marketplaceDomain?: string;
 }): Promise<AmazonTitleOptimizationPayload> {
   const provider = (process.env.AMAZON_LLM_PROVIDER ?? "claude").trim().toLowerCase();
 
@@ -462,10 +465,13 @@ export async function runAmazonContentOptimization(args: {
     }
   }
 
-  // Fallback auf OpenAI
+  // Fallback auf OpenAI (nutzt deutschen Default-Prompt — keine Sprach-Parameter unterstützt)
   const { value: openaiKey } = await readIntegrationSecret("OPENAI_API_KEY");
   if (openaiKey) {
-    return runAmazonContentLlmReview(args);
+    return runAmazonContentLlmReview({
+      productContext: args.productContext,
+      rulebookMarkdown: args.rulebookMarkdown,
+    });
   }
 
   // Kein Provider verfügbar

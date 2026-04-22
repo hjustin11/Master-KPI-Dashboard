@@ -37,6 +37,8 @@ import {
   getOttoIntegrationConfig,
 } from "@/shared/lib/ottoApiClient";
 
+export const maxDuration = 120;
+
 function addDaysUtcYmd(ymd: string, deltaDays: number): string {
   const [y, m, d] = ymd.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));

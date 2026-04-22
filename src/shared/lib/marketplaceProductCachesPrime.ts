@@ -1,4 +1,5 @@
 import { primeAmazonProductsIntegrationCache } from "@/shared/lib/amazonProductsSpApiCatalog";
+import { getAmazonMarketplaceBySlug } from "@/shared/config/amazonMarketplaces";
 import { getEbayIntegrationConfig, ebayMissingKeysForConfig } from "@/shared/lib/ebayApiClient";
 import { fetchEbayInventoryProductRows } from "@/shared/lib/ebayInventoryProducts";
 import { getFressnapfIntegrationConfig } from "@/shared/lib/fressnapfApiClient";
@@ -49,6 +50,29 @@ export async function primeMarketplaceProductListFull(slug: string): Promise<Mar
   try {
     if (s === "amazon") {
       const r = await primeAmazonProductsIntegrationCache();
+      return {
+        slug: s,
+        ok: Boolean(r.ok),
+        skipped: r.skipped,
+        error: r.error,
+        itemCount: r.rowCount,
+        durationMs: Date.now() - started,
+      };
+    }
+
+    // Amazon-Country-Slugs (amazon-fr, amazon-de, ...) — prime the per-country cache
+    // mit der entsprechenden marketplaceId aus der Registry.
+    if (s.startsWith("amazon-")) {
+      const country = getAmazonMarketplaceBySlug(s);
+      if (!country) {
+        return {
+          slug: s,
+          ok: false,
+          error: `Unbekannter Amazon-Country-Slug: ${s}`,
+          durationMs: Date.now() - started,
+        };
+      }
+      const r = await primeAmazonProductsIntegrationCache({ marketplaceId: country.marketplaceId });
       return {
         slug: s,
         ok: Boolean(r.ok),
