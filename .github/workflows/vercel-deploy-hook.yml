@@ -9,7 +9,7 @@ jobs:
   trigger-deploy-hook:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Vercel deploy hook
+      - name: Trigger and validate Vercel deploy hook
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: |
@@ -19,5 +19,27 @@ jobs:
             exit 1
           fi
 
-          curl --fail --show-error --silent --request POST "$VERCEL_DEPLOY_HOOK_URL"
-          echo "Vercel deploy hook triggered."
+          response_file="$(mktemp)"
+          http_code="$(curl --show-error --silent --output "$response_file" --write-out "%{http_code}" --request POST "$VERCEL_DEPLOY_HOOK_URL")"
+
+          echo "Vercel hook HTTP status: $http_code"
+          echo "Vercel hook response:"
+          cat "$response_file"
+          echo
+
+          case "$http_code" in
+            200|201|202)
+              ;;
+            *)
+              echo "Deploy hook call failed with HTTP $http_code"
+              exit 1
+              ;;
+          esac
+
+          if grep -Eqi "unauthorized|forbidden|not found|invalid" "$response_file"; then
+            echo "Deploy hook response indicates an invalid/wrong hook URL."
+            exit 1
+          fi
+
+          echo "Vercel deploy hook accepted. If no deployment appears,"
+          echo "the hook likely belongs to a different Vercel project/team."
