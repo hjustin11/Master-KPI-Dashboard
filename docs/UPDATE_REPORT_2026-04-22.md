@@ -1,8 +1,8 @@
 # Update-Bericht — Master-Dashboard
 
 **Stichtag:** 2026-04-22
-**Vergleichsbasis:** Letzter Commit `c4c0e68` (vor 5 Tagen) → aktueller Working-Tree
-**Volumen:** 47 modifizierte Dateien, 29 neue Pfade, +3.067 / −839 LOC
+**Vergleichsbasis:** `c4c0e68` (2026-04-17, „vor 5 Tagen“) → `b625d7a` (`main`, Stand nach Push zu `origin`)
+**Volumen:** 102 geänderte Dateien (52 geändert, 50 neu), +12.478 / −843 LOC
 
 ---
 
