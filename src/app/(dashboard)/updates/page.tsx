@@ -599,7 +599,49 @@ export default function UpdatesPage() {
                               ) : null}
                             </div>
                             <p className="text-sm font-semibold leading-snug text-foreground">{u.title}</p>
-                            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{u.text}</p>
+                            {(() => {
+                              // Konvention: Text kann nach `\n\n— Details —\n` einen
+                              // ausführlichen Block enthalten, der per <details> collapsible
+                              // dargestellt wird. Ohne Marker bleibt alles wie bisher.
+                              const SPLITTER = "\n\n— Details —\n";
+                              const idx = u.text.indexOf(SPLITTER);
+                              if (idx < 0) {
+                                return (
+                                  <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                                    {u.text}
+                                  </p>
+                                );
+                              }
+                              const summary = u.text.slice(0, idx);
+                              const details = u.text.slice(idx + SPLITTER.length);
+                              return (
+                                <>
+                                  <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                                    {summary}
+                                  </p>
+                                  <details className="group mt-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2 [&>summary::-webkit-details-marker]:hidden">
+                                    <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-primary transition-colors hover:text-primary/80">
+                                      <svg
+                                        className="h-3.5 w-3.5 transition-transform group-open:rotate-90"
+                                        viewBox="0 0 16 16"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        aria-hidden
+                                      >
+                                        <polyline points="6 4 10 8 6 12" />
+                                      </svg>
+                                      Details ansehen
+                                    </summary>
+                                    <div className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                                      {details}
+                                    </div>
+                                  </details>
+                                </>
+                              );
+                            })()}
                             {tutorial ? (
                               <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-border/40 pt-2.5">
                                 <button
