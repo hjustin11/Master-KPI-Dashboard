@@ -12,11 +12,30 @@ jobs:
       - name: Trigger and validate Vercel deploy hook
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+          VERCEL_EXPECTED_PROJECT_ID: ${{ secrets.VERCEL_EXPECTED_PROJECT_ID }}
         run: |
           if [ -z "$VERCEL_DEPLOY_HOOK_URL" ]; then
             echo "Missing secret: VERCEL_DEPLOY_HOOK_URL"
             echo "Create a Vercel Deploy Hook and store it in GitHub Actions secrets."
             exit 1
+          fi
+
+          hook_project_id="$(printf '%s\n' "$VERCEL_DEPLOY_HOOK_URL" | sed -nE 's#.*deploy/(prj_[^/]+)/.*#\1#p')"
+          if [ -z "$hook_project_id" ]; then
+            echo "Could not parse Vercel project id from hook URL."
+            exit 1
+          fi
+          echo "Hook target project id: $hook_project_id"
+
+          if [ -n "$VERCEL_EXPECTED_PROJECT_ID" ]; then
+            if [ "$hook_project_id" != "$VERCEL_EXPECTED_PROJECT_ID" ]; then
+              echo "Hook project id mismatch."
+              echo "Expected: $VERCEL_EXPECTED_PROJECT_ID"
+              echo "Actual:   $hook_project_id"
+              exit 1
+            fi
+          else
+            echo "Secret VERCEL_EXPECTED_PROJECT_ID not set; skipping project-id guard."
           fi
 
           response_file="$(mktemp)"
