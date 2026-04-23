@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/integration-cache/warm",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }
