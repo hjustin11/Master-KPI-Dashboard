@@ -739,14 +739,23 @@ async function computePriceParityPayload(request: Request): Promise<Record<strin
         continue;
       }
       const hasSku = Boolean(key && pmap.has(key));
-      const snap = hasSku ? (pmap.get(key) ?? { price: null, stock: null }) : { price: null, stock: null };
+      const snap: SkuSnapshot = hasSku
+        ? (pmap.get(key) ?? { price: null, stock: null })
+        : { price: null, stock: null };
       const price = snap.price;
       const stock = snap.stock;
+      // isActive === false → Listing existiert zwar im Offer-Feed, ist aber inaktiv
+      // (im Katalog deaktiviert). Aus User-Sicht ist das wie „kein Listing" — der
+      // Artikel ist nicht kaufbar. Vorher wurde das übersehen, weil nur SKU-Existenz
+      // + Preis geprüft wurden (Bug: PLSP-003BGE inaktiv → trotzdem „fehlt nicht").
+      const isInactive = snap.isActive === false;
       let ms: MarketplaceCellState = "ok";
       if (!key || !hasSku) ms = "missing";
+      else if (isInactive) ms = "missing";
       else if (price == null) ms = "no_price";
       let mStockState: MarketplaceCellState = "ok";
       if (!key || !hasSku) mStockState = "missing";
+      else if (isInactive) mStockState = "missing";
       else if (stock == null) mStockState = "no_price";
       flat[m.slug] = { price, state: ms };
       stockFlat[m.slug] = { stock, state: mStockState };

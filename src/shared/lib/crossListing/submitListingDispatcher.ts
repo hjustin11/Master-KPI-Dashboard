@@ -678,7 +678,10 @@ async function buildMiraklProductCsv(
   const v = args.values;
   const ean = v.ean.trim();
   const brand = v.brand.trim() || "";
-  const title = v.title.trim() || args.sku;
+  // Fressnapf-PM01 cap (Error 2004): `title (Produktname)` max. 40 Zeichen,
+  // andere Mirakl-Operatoren erlauben Mirakl-Standard 200.
+  const titleMaxLen = slug === "fressnapf" ? 40 : 200;
+  const title = (v.title.trim() || args.sku).slice(0, titleMaxLen);
   const description = (v.description.trim() || title).slice(0, 4000);
   let category = v.category.trim() || (v.attributes.category ?? "").toString().trim();
   let animalCategory: string | null = null;
@@ -969,6 +972,74 @@ async function miraklSampleExistingProductCategories(
   } catch {
     return [];
   }
+}
+
+/**
+ * Holt das Per-Hierarchie-Attribut-Schema von Mirakl (Fressnapf, MMS, etc.).
+ * Wird in der PM01-Fehler-Hint genutzt, wenn `1000|... is required` oder
+ * `2006|... is not in the possible values` auftaucht — dann sehen wir die
+ * **echten** Attribut-Codes, statt sie zu raten. Beweis-Pattern aus der
+ * Fressnapf-PM01-Reihe: Spalten wie `length`, `length_outside`, `data_dummy`
+ * etc. wurden NICHT gelesen, obwohl wir sie geschickt haben — die echten
+ * Codes hat nur das Attribut-Schema des Operators.
+ */
+type MiraklAttrInfo = {
+  code: string;
+  label: string;
+  required: boolean;
+  type: string;
+  valuesList?: string;
+};
+
+async function miraklFetchHierarchyAttributes(
+  auth: MiraklAuthInfo,
+  hierarchy: string
+): Promise<MiraklAttrInfo[]> {
+  const candidates = [
+    `/api/products/attributes?hierarchy=${encodeURIComponent(hierarchy)}`,
+    `/api/products/attributes?category=${encodeURIComponent(hierarchy)}`,
+    `/api/products/attributes`,
+  ];
+  for (const path of candidates) {
+    try {
+      const url = new URL(path, auth.baseUrl).toString();
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { Accept: "application/json", ...miraklAuthHeader(auth) },
+      });
+      if (!res.ok) continue;
+      const json = (await res.json().catch(() => null)) as unknown;
+      if (!json) continue;
+      const list = Array.isArray((json as { attributes?: unknown }).attributes)
+        ? (json as { attributes: unknown[] }).attributes
+        : Array.isArray(json)
+          ? (json as unknown[])
+          : [];
+      const out: MiraklAttrInfo[] = [];
+      for (const item of list) {
+        if (!item || typeof item !== "object") continue;
+        const o = item as Record<string, unknown>;
+        const code = String(o.code ?? o.attribute_code ?? "").trim();
+        if (!code) continue;
+        out.push({
+          code,
+          label: String(o.label ?? o.name ?? code),
+          required: o.required === true || o.is_required === true,
+          type: String(o.type ?? o.attribute_type ?? "?"),
+          valuesList:
+            typeof o.values_list === "string"
+              ? o.values_list
+              : typeof o.values_lists === "string"
+                ? o.values_lists
+                : undefined,
+        });
+      }
+      if (out.length > 0) return out;
+    } catch {
+      continue;
+    }
+  }
+  return [];
 }
 
 /**
@@ -1478,6 +1549,29 @@ async function dispatchMirakl(
           categoryHint = ` → ${hintParts.join(" · ")}`;
         }
 
+        // Wenn Attribut-Errors auftreten (1000 required / 2006 enum-mismatch),
+        // live das Per-Hierarchie-Attribut-Schema fetchen — sonst rät der User
+        // (und ich) blind weiter, welche Spaltennamen Fressnapf erwartet.
+        let attributeHint = "";
+        const hasAttributeError = /\b1000\|.+is required|\b2006\|.+is not in the possible values|\b2030\|/i.test(
+          errorDetail
+        );
+        if (hasAttributeError && categoryInput) {
+          const schema = await miraklFetchHierarchyAttributes(auth, categoryInput);
+          if (schema.length > 0) {
+            const required = schema.filter((a) => a.required);
+            const lines = required.map(
+              (a) =>
+                `${a.code} (${a.label}, ${a.type}${a.valuesList ? `, values_list=${a.valuesList}` : ""})`
+            );
+            const head = lines.slice(0, 30).join(" · ");
+            const tail = lines.length > 30 ? ` …+${lines.length - 30} weitere` : "";
+            attributeHint = ` → **Echtes Fressnapf-Attribut-Schema für \`${categoryInput}\`** (${required.length} Pflicht-Attribute, ${schema.length} insgesamt): ${head}${tail}`;
+          } else {
+            attributeHint = ` → Fressnapf-Attribut-Schema für \`${categoryInput}\` konnte nicht geladen werden (API liefert nichts unter /api/products/attributes?hierarchy=...). Im Backoffice die Attribut-Liste prüfen.`;
+          }
+        }
+
         return {
           ok: false,
           status: "PM01_VALIDATION_FAILED",
@@ -1485,7 +1579,7 @@ async function dispatchMirakl(
           issues: [
             {
               severity: "ERROR",
-              message: `${slug} Katalog-Import (PM01, import_id=${productResult.importId}) abgelehnt: ${errorDetail}.${categoryHint}`,
+              message: `${slug} Katalog-Import (PM01, import_id=${productResult.importId}) abgelehnt: ${errorDetail}.${categoryHint}${attributeHint}`,
             },
           ],
           endpointUsed: productResult.endpointUsed,

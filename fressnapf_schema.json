@@ -1,0 +1,3674 @@
+{
+  "attributes" : [ {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "ProductCategory",
+    "default_value" : null,
+    "description" : "Category of product - Category,Sub Category and Level 3 merged",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Category of product - Category,Sub Category and Level 3 merged"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Produktkategorie",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Produktkategorie"
+    }, {
+      "locale" : "en",
+      "value" : "Product category"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ {
+      "parameters" : [ ],
+      "type" : "CATEGORY"
+    } ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "productIdentifier",
+    "default_value" : null,
+    "description" : "Unique product identifier for the seller",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Unique product identifier for the seller"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Produkt SKU",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Produkt SKU"
+    }, {
+      "locale" : "en",
+      "value" : "Product SKU"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ {
+      "parameters" : [ ],
+      "type" : "SHOP_SKU"
+    } ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "article_name",
+    "default_value" : null,
+    "description" : "Marke + Produktart + Produktname (bei Varianten: mit Ausprägungen) in Mirakl",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Marke + Produktart + Produktname (bei Varianten: mit Ausprägungen) in Mirakl"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Marke + Produktart + Produktname + Ausprägung (Produkttitel in Mirakl) Max. 40 Zeichen!"
+    }, {
+      "locale" : "en_US",
+      "value" : "Brand +  product type + product name (attention in case of variants: incl. variation)"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Produktname",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Produktname"
+    }, {
+      "locale" : "en",
+      "value" : "Article name"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ {
+      "parameters" : [ ],
+      "type" : "TITLE"
+    } ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX_LENGTH|40",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "ean_upc_content_unit",
+    "default_value" : null,
+    "description" : "gleicher Wert wie in Feld GTIN",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "gleicher Wert wie in Feld GTIN"
+    } ],
+    "example" : "=GTIN",
+    "hierarchy_code" : "",
+    "label" : "EAN/UPC-Code der Mengeneinheit",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "EAN/UPC-Code der Mengeneinheit"
+    }, {
+      "locale" : "en",
+      "value" : "EAN/UPC-code content unit"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ {
+      "parameters" : [ {
+        "name" : "code",
+        "value" : "EAN"
+      } ],
+      "type" : "UNIQUE_IDENTIFIER"
+    } ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "GTIN",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "wie EAN Feld setzen"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Global Trade Identification Number",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Global Trade Identification Number"
+    }, {
+      "locale" : "en",
+      "value" : "Global Trade Identification Number"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "seller_article_number",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Lieferanten Artikelnummer",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Lieferanten Artikelnummer"
+    }, {
+      "locale" : "en",
+      "value" : "Seller article number"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "designation_1",
+    "default_value" : null,
+    "description" : "Fressnapf intern (für Bontext) maximal 18 Zeichen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Fressnapf intern (für Bontext) maximal 18 Zeichen"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Fressnapf intern (für Bontext) maximal 18 Zeichen"
+    }, {
+      "locale" : "en_US",
+      "value" : "Fressnapf intern ( for receipttext) maximum of 18 Characters"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "designation_1",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Bezeichnung 1"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Designation 1"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX_LENGTH|18",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "designation_2",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "designation_2",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Bezeichnung 2"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Designation 2"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX_LENGTH|18",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "iln",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Fressnapf Lieferantennummer",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Fressnapf Lieferantennummer"
+    }, {
+      "locale" : "en",
+      "value" : "Fressnapf supplier code"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "brand",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Markenname",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Markenname"
+    }, {
+      "locale" : "en",
+      "value" : "Brand"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ {
+      "parameters" : [ ],
+      "type" : "BRAND"
+    } ],
+    "type" : "LIST",
+    "type_parameter" : "brand",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "brand"
+    } ],
+    "values" : null,
+    "values_list" : "brand",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "subbrand",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "subbrand",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Sub-Marke"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Sub-brand"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "subbrand",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "subbrand"
+    } ],
+    "values" : null,
+    "values_list" : "subbrand",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "supplier",
+    "default_value" : "",
+    "description" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Format: Firmierung, Adresse, PLZ und Stadt"
+    }, {
+      "locale" : "en_US",
+      "value" : "Format: Company, Address, Postal Code and City"
+    } ],
+    "example" : "",
+    "hierarchy_code" : "",
+    "label" : "Inverkehrbringer",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Inverkehrbringer"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Inverkehrbringer"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Supplier"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "supplier",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "supplier"
+    } ],
+    "values" : null,
+    "values_list" : "supplier",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "manufacturer",
+    "default_value" : "",
+    "description" : "Hersteller (GPSR). Bitte das folgende Formular ausfüllen für die Übermittlung der GPSR konformen Daten. https://forms.office.com/e/Kxj6Lh0wPY",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Hersteller (GPSR). Bitte das folgende Formular ausfüllen für die Übermittlung der GPSR konformen Daten. https://forms.office.com/e/Kxj6Lh0wPY"
+    }, {
+      "locale" : "en",
+      "value" : "Manufacturer (GPSR). Please fill the form to provide the GPSR relevant information, if you can't find the correct manufacturer: https://forms.office.com/e/Kxj6Lh0wPY"
+    }, {
+      "locale" : "en_US",
+      "value" : "Manufacturer (GPSR). Please fill the form to provide the GPSR relevant information, if you can't find the correct manufacturer: https://forms.office.com/e/Kxj6Lh0wPY"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Hersteller",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Hersteller"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "manufacturers",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "manufacturers"
+    } ],
+    "values" : null,
+    "values_list" : "manufacturers",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "country_of_origin",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Herkunftsland Drop-Down Liste"
+    }, {
+      "locale" : "en_US",
+      "value" : "dropdownlist"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "country_of_origin",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Ursprungsland"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Country of origin"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "country_of_origin",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "country_of_origin"
+    } ],
+    "values" : null,
+    "values_list" : "country_of_origin",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "packaging_language_de",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "immer auf 1=ja setzen"
+    } ],
+    "example" : "",
+    "hierarchy_code" : "",
+    "label" : "packaging_language_de",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Verpackungssprache DE"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Packaging language DE"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "INTEGER",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX|1",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_de"
+    } ],
+    "code" : "commercial_code",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Zolltarifnummer",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Zolltarifnummer"
+    }, {
+      "locale" : "en",
+      "value" : "Commercial code"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_de"
+    } ],
+    "code" : "tax_class",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Steuerklassifikation",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Steuerklassifikation"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Steuerklassifikation"
+    }, {
+      "locale" : "en",
+      "value" : "Tax class"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "tax_class",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "tax_class"
+    } ],
+    "values" : null,
+    "values_list" : "tax_class",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    } ],
+    "code" : "commercial_code_at",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Zolltarifnummer Österreich",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Zolltarifnummer Österreich"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Zolltarifnummer Österreich"
+    }, {
+      "locale" : "en",
+      "value" : "Commercial Code Austria"
+    }, {
+      "locale" : "en_US",
+      "value" : "Commercial Code Austria"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    } ],
+    "code" : "tax_class_at",
+    "default_value" : null,
+    "description" : "Steuerklassifikation Österreich (tax_class_at)\nVolle Steuer (20%)\nReduzierte Steuer (13%)\nHalber Steuersatz (10%)",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Steuerklassifikation Österreich (tax_class_at)\nVolle Steuer (20%)\nReduzierte Steuer (13%)\nHalber Steuersatz (10%)"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Steuerklassifikation Österreich",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Steuerklassifikation Österreich"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Steuerklassifikation Österreich"
+    }, {
+      "locale" : "en",
+      "value" : "Tax Class Austria"
+    }, {
+      "locale" : "en_US",
+      "value" : "Tax Class Austria"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "tax_class_at",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "tax_class_at"
+    } ],
+    "values" : null,
+    "values_list" : "tax_class_at",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "base_price_required",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Das Attribut \"Grundpreispflicht\" gibt an, ob ein Produkt gesetzlich verpflichtet ist, einen Grundpreis anzugeben. Hier wird der Wert \"JA (1)\" oder \"NEIN (0)\" gesetzt, um zu bestimmen, ob der Grundpreis verpflichtend ist oder nicht."
+    }, {
+      "locale" : "en",
+      "value" : "The attribute \"Base Price Required\" indicates whether a product is legally required to display a base price. The value \"YES (1)\" or \"NO (0)\" is set to determine if the base price is mandatory or not."
+    }, {
+      "locale" : "en_US",
+      "value" : "The attribute \"Base Price Required\" indicates whether a product is legally required to display a base price. The value \"YES (1)\" or \"NO (0)\" is set to determine if the base price is mandatory or not."
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Grundpreispflicht",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Grundpreispflicht"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Grundpreispflicht"
+    }, {
+      "locale" : "en",
+      "value" : "Base price required"
+    }, {
+      "locale" : "en_US",
+      "value" : "Base price required"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "base_price_required",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "base_price_required"
+    } ],
+    "values" : null,
+    "values_list" : "base_price_required",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "base_price_value",
+    "default_value" : null,
+    "description" : "Das Attribut \"Grundpreis Basis Wert\" gibt den gesamten Nettoinhalt der Verpackungseinheit in Kilogramm, Litern oder Metern an. Bei Multipacks muss die Gesamtmenge des Inhalts eingetragen werden, z.B. 2x 5kg = 10kg.",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Das Attribut \"Grundpreis Basis Wert\" gibt den gesamten Nettoinhalt der Verpackungseinheit in Kilogramm, Litern oder Metern an. Bei Multipacks muss die Gesamtmenge des Inhalts eingetragen werden, z.B. 2x 5kg = 10kg."
+    }, {
+      "locale" : "de_DE",
+      "value" : "Das Attribut \"Grundpreis Basis Wert\" gibt den gesamten Nettoinhalt der Verpackungseinheit in Kilogramm, Litern oder Metern an. Bei Multipacks muss die Gesamtmenge des Inhalts eingetragen werden, z.B. 2x 5kg = 10kg."
+    }, {
+      "locale" : "en",
+      "value" : "The attribute \"Base Price Value\" indicates the total net content of the packaging unit in kilograms, liters, or meters. For multipacks, the total content amount must be entered, e.g., 2x 5kg = 10kg."
+    }, {
+      "locale" : "en_US",
+      "value" : "The attribute \"Base Price Value\" indicates the total net content of the packaging unit in kilograms, liters, or meters. For multipacks, the total content amount must be entered, e.g., 2x 5kg = 10kg."
+    } ],
+    "example" : "6 x 800g = 4.8",
+    "hierarchy_code" : "",
+    "label" : "Grundpreis Mengen Wert",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Grundpreis Mengen Wert"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Grundpreis Mengen Wert"
+    }, {
+      "locale" : "en",
+      "value" : "base price value"
+    }, {
+      "locale" : "en_US",
+      "value" : "base price value"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "DECIMAL",
+    "type_parameter" : "4",
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    } ],
+    "validations" : "SCRIPT|\"var bp_required = context.data['base_price_required'];\nvar bp_value = context.data['base_price_value'];\n\nif( bp_value  === '' && bp_required === \"\"1\"\") {\n  result.valid = false;\n  result.message = 'This product has been flagged as requiring base price information. This field cannot be left empty. Please check your input and provide a valid base price value.';\n} else {\n  result.valid = true;\n}\"|true",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "content_unit",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Grundpreisverordnung"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Inhaltsmengeneinheit",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Inhaltsmengeneinheit"
+    }, {
+      "locale" : "en",
+      "value" : "Content unit"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "content_unit",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "content_unit"
+    } ],
+    "values" : null,
+    "values_list" : "content_unit",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "comparable_price_unit",
+    "default_value" : null,
+    "description" : "Grundpreisverordnung",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Grundpreisverordnung"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Vergleichspreiseinheit",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Vergleichspreiseinheit"
+    }, {
+      "locale" : "en",
+      "value" : "Comparable price unit"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "comparable_price_unit",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "comparable_price_unit"
+    } ],
+    "values" : null,
+    "values_list" : "comparable_price_unit",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "sales_unit_of_measure",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "sales_unit_of_measure",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Verkaufsmengeneinheit"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Sales unit of measure"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "sales_unit_of_measure",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "sales_unit_of_measure"
+    } ],
+    "values" : null,
+    "values_list" : "sales_unit_of_measure",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "sap_created",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : "leer lassen",
+    "hierarchy_code" : "",
+    "label" : "sap_created",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "sap_created"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "data_dummy",
+    "default_value" : null,
+    "description" : "Push function to Fressnapf Systems",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Push function to Fressnapf Systems"
+    } ],
+    "example" : "11",
+    "hierarchy_code" : "",
+    "label" : "Data dummy",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Data dummy"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "INTEGER",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "feed",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "ja = 1\nnein = 0"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "feed",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Futtermittel"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Feed"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "INTEGER",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX|1,MIN|0",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "green_point",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "1 = ja\n0 = nein"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "green_point",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Grüner Punkt"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Green point"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "INTEGER",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX|1,MIN|0",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "product_type",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "product_type",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Produkt-Art"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Product Type"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "product_type",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "product_type"
+    } ],
+    "values" : null,
+    "values_list" : "product_type",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "properties",
+    "default_value" : "",
+    "description" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "properties",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Eigenschaften"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Properties"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "properties",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "properties"
+    } ],
+    "values" : null,
+    "values_list" : "properties",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "material_group",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Auswahl aus DropDown. (KF=Katzenfutter, HF=Hundefutter,PF= Teichfutter, HNF= Hund NonFood - siehe Tab \"Reference Data\")"
+    }, {
+      "locale" : "en_US",
+      "value" : "Choose from DropDown. (KF=Cat food, HF=Dog food, PF= Pond food, HNF= Dog non food- see Tab \"Reference Data\")"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "material_group",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Warengruppe"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Material group"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "material_group",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "material_group"
+    } ],
+    "values" : null,
+    "values_list" : "material_group",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "sem_main_category",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "sem_main_category",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "SEM main category"
+    }, {
+      "locale" : "en_GB",
+      "value" : "SEM main category"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX_LENGTH|255",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "model_name",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Marke + Produktart + Produktname (Achtung bei Varianten: keine Ausprägungen)"
+    }, {
+      "locale" : "en_US",
+      "value" : "Brand +  product type + product name (attention in case of variants: no variation needed then)"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Artikelname Shop",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Artikelname Shop"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Artikelname Shop"
+    }, {
+      "locale" : "en_US",
+      "value" : "Article name Shop"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "selling_point_1",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "selling_point_1",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Verkaufsargument 1"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Selling point 1"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LONG_TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "selling_point_2",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "selling_point_2",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Verkaufsargument 2"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Selling point 2"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "LONG_TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "selling_point_3",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "selling_point_3",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Verkaufsargument 3"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Selling point 3"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "LONG_TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "short_description",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "short_description",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Kurzbeschreibung"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Short description"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LONG_TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "detailed_article_description",
+    "default_value" : null,
+    "description" : "Langer Beschreibungstext für das Produkt.\nHTML Tags die nutzbar sind:\n<br> als Zeilenumbruch\n<b> für Bold (fett) Schrift\n<i> für kursive Schrift\n<u> für unterstrichene Schrift",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Langer Beschreibungstext für das Produkt.\nHTML Tags die nutzbar sind:\n<br> als Zeilenumbruch\n<b> für Bold (fett) Schrift\n<i> für kursive Schrift\n<u> für unterstrichene Schrift"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Beschreibungstext",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Beschreibungstext"
+    }, {
+      "locale" : "en",
+      "value" : "Description"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ {
+      "parameters" : [ ],
+      "type" : "DESCRIPTION"
+    } ],
+    "type" : "LONG_TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "warnings",
+    "default_value" : "",
+    "description" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Mehrfachauswahl aus Liste in Tabellenblatt \"Reference Data\".\n\"|\" als Seperator bei mehreren Werten"
+    }, {
+      "locale" : "en_US",
+      "value" : "Multiple data possible, please choose from Tab \"Reference Data\". Use \"|\" as seperator in case of multiple options"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "warnings",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Warnhinweise"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Warnings"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "warnings",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "warnings"
+    } ],
+    "values" : null,
+    "values_list" : "warnings",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "parentproductid",
+    "default_value" : null,
+    "description" : "Parent Product ID should be used to group several variants together",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Parent Product ID should be used to group several variants together"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Parent Produkt ID wird zur Variantenbildung genutzt (frei wählbar)"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Parent Product ID",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Parent Product ID"
+    }, {
+      "locale" : "en",
+      "value" : "Parent Product ID"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ {
+      "parameters" : [ ],
+      "type" : "VARIANT_GROUP_CODE"
+    } ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "article_main_image",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "Hauptbild",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Hauptbild"
+    }, {
+      "locale" : "en",
+      "value" : "Main image"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ {
+      "parameters" : [ ],
+      "type" : "MAIN_IMAGE"
+    } ],
+    "type" : "MEDIA",
+    "type_parameter" : "10240",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "10240"
+    }, {
+      "name" : "TYPE",
+      "value" : "IMAGE"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "videos_movies",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Video URL (Bei Youtube Videos bitte nur den Teil der URL nach dem \"=\" einfügen)"
+    }, {
+      "locale" : "en_US",
+      "value" : "Video URL (For Youtube videos please only fill in the part of the URL after \"=\")"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "videos_movies",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Videos / Bewegtbilder"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Videos / Movies"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "other_images_1",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "other_images_1",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Weiteres Bild 1"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Additional image 1"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "10240",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "10240"
+    }, {
+      "name" : "TYPE",
+      "value" : "IMAGE"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "other_images_2",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "other_images_2",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Weiteres Bild 2"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Additional image 2"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "10240",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "10240"
+    }, {
+      "name" : "TYPE",
+      "value" : "IMAGE"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "other_images_3",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "other_images_3",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Weiteres Bild 3"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Additional image 3"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "10240",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "10240"
+    }, {
+      "name" : "TYPE",
+      "value" : "IMAGE"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "other_images_4",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "other_images_4",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Weiteres Bild 4"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Additional image 4"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "10240",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "10240"
+    }, {
+      "name" : "TYPE",
+      "value" : "IMAGE"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "other_images_5",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "other_images_5",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Weiteres Bild 5"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Additional image 5"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "10240",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "10240"
+    }, {
+      "name" : "TYPE",
+      "value" : "IMAGE"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "other_images_6",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "other_images_6",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Weiteres Bild 6"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Additional image 6"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "10240",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "10240"
+    }, {
+      "name" : "TYPE",
+      "value" : "IMAGE"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "other_images_7",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "other_images_7",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Weiteres Bild 7"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Additional image 7"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "10240",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "10240"
+    }, {
+      "name" : "TYPE",
+      "value" : "IMAGE"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "other_images_8",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "other_images_8",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Weiteres Bild 8"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Additional image 8"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "10240",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "10240"
+    }, {
+      "name" : "TYPE",
+      "value" : "IMAGE"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "other_images_9",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "other_images_9",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Weiteres Bild 9"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Additional image 9"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "10240",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "10240"
+    }, {
+      "name" : "TYPE",
+      "value" : "IMAGE"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "other_images_10",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "other_images_10",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Weiteres Bild 10"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Additional image 10"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "10240",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "10240"
+    }, {
+      "name" : "TYPE",
+      "value" : "IMAGE"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "documents_1",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "documents_1",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Dokumente"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Documents"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "15360",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "15360"
+    }, {
+      "name" : "TYPE",
+      "value" : "DOCUMENT"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "documents_2",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "documents_2",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Dokumente"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Documents"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "15360",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "15360"
+    }, {
+      "name" : "TYPE",
+      "value" : "DOCUMENT"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "documents_3",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "documents_3",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Dokumente"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Documents"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "15360",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "15360"
+    }, {
+      "name" : "TYPE",
+      "value" : "DOCUMENT"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "documents_4",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "documents_4",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Dokumente"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Documents"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "15360",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "15360"
+    }, {
+      "name" : "TYPE",
+      "value" : "DOCUMENT"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "documents_5",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "",
+    "label" : "documents_5",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Dokumente"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Documents"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEDIA",
+    "type_parameter" : "15360",
+    "type_parameters" : [ {
+      "name" : "MAX_SIZE",
+      "value" : "15360"
+    }, {
+      "name" : "TYPE",
+      "value" : "DOCUMENT"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "net_weight",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "net_weight",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Nettogewicht"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Net weight"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "KILOGRAM"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "volume",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Standardisiert in m³ übersetzt"
+    }, {
+      "locale" : "en_US",
+      "value" : "Standard output will be in m³"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "volume",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Volumen"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Volume"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "6"
+    }, {
+      "name" : "UNIT",
+      "value" : "CUBIC_METER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "gross_weight",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "gross_weight",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Bruttogewicht"
+    }, {
+      "locale" : "en",
+      "value" : "Gross Weight"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "KILOGRAM"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "width_outside",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "width_outside",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Breite"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Width"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "width_inside",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "width_inside",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Breite (innen)"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Width (inside)"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "diameter",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "diameter",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Durchmesser"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Diameter"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "height_outside",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "height_outside",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Höhe"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Height"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "height_inside",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "height_inside",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Höhe (innen)"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Height (inside)"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "length_outside",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "length_outside",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Länge"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Length"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "length_inside",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "length_inside",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Länge (innen)"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Length (inside)"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "cleaning_recommendation",
+    "default_value" : "",
+    "description" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    }, {
+      "locale" : "en_US",
+      "value" : "Multiple selection Please use “ | ” as separator"
+    } ],
+    "example" : "",
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "Reinigungsempfehlung",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Reinigungsempfehlung"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Reinigungsempfehlung"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Cleaning recommendation"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "cleaning_recommendation",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "cleaning_recommendation"
+    } ],
+    "values" : null,
+    "values_list" : "cleaning_recommendation",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "depth_inside",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "depth_inside",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Tiefe (innen)"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Depth (inside)"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "depth_outside",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "depth_outside",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Tiefe"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Depth"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "gross_content",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "gross_content",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Bruttoinhalt"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Gross Content"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "KILOGRAM"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "height",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "height",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Höhe (ERP)"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Height (ERP)"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "length",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "length",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Länge (ERP)"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Length (ERP)"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "width",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "width",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Breite (ERP)"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Width (ERP)"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "quantity_pieces",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "quantity_pieces",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Anzahl (Stück)"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Quantity (pieces)"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "transformations" : "CONSTANT|1|true",
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "0"
+    }, {
+      "name" : "UNIT",
+      "value" : "PIECE"
+    } ],
+    "validations" : "SCRIPT|\"var qty_pieces= context.data['quantity_pieces'];\n\nif( !qty_pieces.trim().length || Number(qty_pieces)>0) {\n   result.valid = true;\n} else {\n result.valid = false;\n  result.message = 'Please check your input. This field should be left blank or contain a quantity value >=1 ';\n}\"|true",
+    "values" : null,
+    "values_list" : null,
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "net_quantity",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "net_quantity",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Menge"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Quantity"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "transformations" : "CONSTANT| |true",
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "0"
+    }, {
+      "name" : "UNIT",
+      "value" : "PIECE"
+    } ],
+    "validations" : "SCRIPT|\"var net_quantity = context.data['net_quantity'];\n\nif( !net_quantity.trim().length || Number(net_quantity )>0) {\n   result.valid = true;\n} else {\n result.valid = false;\n  result.message = 'Please check your input. This field should be left blank or contain a quantity value >=1 ';\n}\"|true",
+    "values" : null,
+    "values_list" : null,
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "mixedtrialsaver_pack_type",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "mixedtrialsaver_pack_type",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Mix-/Probier-/Sparpaket-Ausführung"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Mixed/trial/saver pack type"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "mixedtrialsaver_pack_type",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "mixedtrialsaver_pack_type"
+    } ],
+    "values" : null,
+    "values_list" : "mixedtrialsaver_pack_type",
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "spare_scratching_post_design",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "spare_scratching_post_design",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Ersatzkratzstammausführung"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Spare scratching post design"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "spare_scratching_post_design",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "spare_scratching_post_design"
+    } ],
+    "values" : null,
+    "values_list" : "spare_scratching_post_design",
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "application_area",
+    "default_value" : "",
+    "description" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "application_area",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Anwendungsgebiet"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Application area"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "application_area",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "application_area"
+    } ],
+    "values" : null,
+    "values_list" : "application_area",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "fixation_type",
+    "default_value" : "",
+    "description" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "fixation_type",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Befestigungsart"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Fixation type"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "fixation_type",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "fixation_type"
+    } ],
+    "values" : null,
+    "values_list" : "fixation_type",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "floors",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "floors",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Etagen"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Floors"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "floors",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "floors"
+    } ],
+    "values" : null,
+    "values_list" : "floors",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "cat_tree_size",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "cat_tree_size",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Kratzbaumgröße"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Cat tree size"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "cat_tree_size",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "cat_tree_size"
+    } ],
+    "values" : null,
+    "values_list" : "cat_tree_size",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "organic_articles",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "organic_articles",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Bio Artikel"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Organic articles"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "INTEGER",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX|1,MIN|0",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "grain_free",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "1 = ja\n0 = nein"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "grain_free",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Getreidefrei"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Grain free"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "INTEGER",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX|1,MIN|0",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "overthecounter_medicine",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "overthecounter_medicine",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "freiverkäufliches Arzneimittel"
+    }, {
+      "locale" : "en_GB",
+      "value" : "over-the-counter medicine"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "INTEGER",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX|1,MIN|0",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "biocidal_product",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "biocidal_product",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Biozidprodukt"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Biocidal product"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "INTEGER",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX|1,MIN|0",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "electrical_article_eraara",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "1 = ja\n0 = nein"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "electrical_article_eraara",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Elektroartikel  (ERA/ARA)"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Electrical article (ERA/ARA)"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "INTEGER",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX|1,MIN|0",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "size",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "size",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Größe"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Size"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "size",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "size"
+    } ],
+    "values" : null,
+    "values_list" : "size",
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "height_from",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "height_from",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Höhe von"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Height from"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "height_to",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "height_to",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Höhe bis"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Height to"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "length_from",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "length_from",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Länge von"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Length from"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "length_to",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "length_to",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Länge bis"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Length to"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "CENTIMETER"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "pattern",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "pattern",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Muster"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Pattern"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "pattern",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "pattern"
+    } ],
+    "values" : null,
+    "values_list" : "pattern",
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "breed",
+    "default_value" : "",
+    "description" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "breed",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Rasse"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Breed"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "breed",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "breed"
+    } ],
+    "values" : null,
+    "values_list" : "breed",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "animal_species",
+    "default_value" : "",
+    "description" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "animal_species",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Tierart"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Animal species"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "animal_species",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "animal_species"
+    } ],
+    "values" : null,
+    "values_list" : "animal_species",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "content",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "content",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Inhalt"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Content"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX_LENGTH|255",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "load_capacity_to",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "load_capacity_to",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Belastbarkeit bis"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Load capacity to"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "KILOGRAM"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "load_capacity_from",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "load_capacity_from",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Belastbarkeit von"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Load capacity from"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "MEASUREMENT",
+    "type_parameter" : null,
+    "type_parameters" : [ {
+      "name" : "PRECISION",
+      "value" : "4"
+    }, {
+      "name" : "UNIT",
+      "value" : "KILOGRAM"
+    } ],
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "marketing_content",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "marketing_content",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Marketinginhalt"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Marketing content"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LONG_TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "variant_axis_animal_scratch_accessory",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "variant_axis_animal_scratch_accessory",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Variantenachse Tier-Kratzzubehör"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Variant axis animal scratch accessory"
+    } ],
+    "required" : false,
+    "requirement_level" : "RECOMMENDED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "variant_axis_animal_scratch_accessory",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "variant_axis_animal_scratch_accessory"
+    } ],
+    "values" : null,
+    "values_list" : "variant_axis_animal_scratch_accessory",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "marketplace_product_group_id",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "marketplace_product_group_id",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Marktplatz Produktgruppen-ID"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Marketplace Product Group ID"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX_LENGTH|255",
+    "values" : null,
+    "values_list" : null,
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "sku",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "sku",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Artikel Nummer"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Article number"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "TEXT",
+    "type_parameter" : null,
+    "type_parameters" : null,
+    "validations" : "MAX_LENGTH|255",
+    "values" : null,
+    "values_list" : null,
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "material",
+    "default_value" : "",
+    "description" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "material",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Material"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Material"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "material",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "material"
+    } ],
+    "values" : null,
+    "values_list" : "material",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "color",
+    "default_value" : null,
+    "description" : null,
+    "description_translations" : [ ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "Farbe",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Farbe"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Farbe"
+    }, {
+      "locale" : "en",
+      "value" : "Color"
+    }, {
+      "locale" : "en_GB",
+      "value" : "color"
+    }, {
+      "locale" : "en_US",
+      "value" : "Color"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST",
+    "type_parameter" : "color",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "color"
+    } ],
+    "values" : null,
+    "values_list" : "color",
+    "variant" : true
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "animal_categories",
+    "default_value" : "",
+    "description" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Mehrfachauswahl aus Liste in \"Reference Data\""
+    }, {
+      "locale" : "en_US",
+      "value" : "Choose from \"Reference Data\" List"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "Tierkategorie",
+    "label_translations" : [ {
+      "locale" : "de",
+      "value" : "Tierkategorie"
+    }, {
+      "locale" : "de_DE",
+      "value" : "Tier-Kategorie"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Animal categories"
+    } ],
+    "required" : true,
+    "requirement_level" : "REQUIRED",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "animal_categories",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "animal_categories"
+    } ],
+    "values" : null,
+    "values_list" : "animal_categories",
+    "variant" : false
+  }, {
+    "channels" : [ {
+      "code" : "fn_at"
+    }, {
+      "code" : "fn_de"
+    } ],
+    "code" : "life_phase",
+    "default_value" : "",
+    "description" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen",
+    "description_translations" : [ {
+      "locale" : "de",
+      "value" : "Mehrfachauswahl Bitte \" | \" als Trennzeichen nutzen"
+    } ],
+    "example" : null,
+    "hierarchy_code" : "marketplace_animal_scratch_accessory",
+    "label" : "life_phase",
+    "label_translations" : [ {
+      "locale" : "de_DE",
+      "value" : "Lebensphase"
+    }, {
+      "locale" : "en_GB",
+      "value" : "Life phase"
+    } ],
+    "required" : false,
+    "requirement_level" : "OPTIONAL",
+    "roles" : [ ],
+    "type" : "LIST_MULTIPLE_VALUES",
+    "type_parameter" : "life_phase",
+    "type_parameters" : [ {
+      "name" : "LIST_CODE",
+      "value" : "life_phase"
+    } ],
+    "values" : null,
+    "values_list" : "life_phase",
+    "variant" : false
+  } ]
+}
