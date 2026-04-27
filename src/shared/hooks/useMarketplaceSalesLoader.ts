@@ -248,27 +248,24 @@ export default function useMarketplaceSalesLoader(params: {
 
       const { from, to } = periodRef.current;
       const cacheKey = `${cfg.storagePrefix}:${from}:${to}`;
-      let hadCache = false;
 
-      if (!forceRefresh && !silent) {
-        const parsed = readLocalJsonCache<{ savedAt: number } & SalesCompareResponse>(cacheKey);
-        if (parsed?.summary && !parsed.error) {
-          patch(cfg.slug, { data: parsed, loading: false });
-          hadCache = true;
-        }
-      }
-
-      if ((forceRefresh || !hadCache) && !silent) {
-        patch(cfg.slug, { loading: true });
-      }
-
+      // Phase 1 (Sync, vor dem Fetch): alle init-Felder in EINEM patch().
+      // Vorher: bis zu 4 separate patch()-Calls → 4 setState → 9 marketplaces × 4 =
+      // 36 setStates pro Page-Load nur in dieser Phase. Mit React 19 concurrent
+      // rendering führte das zu spürbarem Render-Storm in MarketplaceTile-Liste.
+      const cached = !forceRefresh && !silent
+        ? readLocalJsonCache<{ savedAt: number } & SalesCompareResponse>(cacheKey)
+        : null;
+      const hadCache = !!(cached?.summary && !cached.error);
       const showBackgroundIndicator = silent || (!forceRefresh && hadCache);
-      if (showBackgroundIndicator) {
-        patch(cfg.slug, { backgroundSyncing: true });
-      }
+      const phase1Patch: Partial<LoaderState> = {};
+      if (hadCache) phase1Patch.data = cached;
       if (!silent) {
-        patch(cfg.slug, { error: null });
+        phase1Patch.loading = forceRefresh || !hadCache;
+        phase1Patch.error = null;
       }
+      if (showBackgroundIndicator) phase1Patch.backgroundSyncing = true;
+      if (Object.keys(phase1Patch).length > 0) patch(cfg.slug, phase1Patch);
 
       try {
         const qs = new URLSearchParams({ compare: "true", compareMode: "yoy", from, to });
@@ -277,19 +274,27 @@ export default function useMarketplaceSalesLoader(params: {
           t(cfg.errorKey),
           cfg.timeoutMs
         );
-        patch(cfg.slug, { data: payload });
+        // Phase 2 (success): data + finish in EINEM patch().
+        const successPatch: Partial<LoaderState> = { data: payload };
+        if (!silent) successPatch.loading = false;
+        if (showBackgroundIndicator) successPatch.backgroundSyncing = false;
+        patch(cfg.slug, successPatch);
         writeLocalJsonCache(cacheKey, { savedAt: Date.now(), ...payload });
       } catch (e) {
         if (silent) {
           console.warn(`[Analytics ${cfg.warnTag}] Hintergrund-Abgleich fehlgeschlagen:`, e);
+          // Im silent-Mode nur den Background-Indikator zurücknehmen.
+          if (showBackgroundIndicator) patch(cfg.slug, { backgroundSyncing: false });
         } else {
-          patch(cfg.slug, {
+          // Phase 2 (error): error + finish in EINEM patch().
+          const errorPatch: Partial<LoaderState> = {
             error: e instanceof Error ? e.message : t("commonUi.unknownError"),
-          });
+            loading: false,
+          };
+          if (showBackgroundIndicator) errorPatch.backgroundSyncing = false;
+          patch(cfg.slug, errorPatch);
         }
       } finally {
-        if (!silent) patch(cfg.slug, { loading: false });
-        if (showBackgroundIndicator) patch(cfg.slug, { backgroundSyncing: false });
         if (cfg.useInFlightRef) amazonInFlightRef.current = false;
       }
     },
