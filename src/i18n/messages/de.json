@@ -660,7 +660,19 @@
     "noTag": "Kein Tag",
     "removeTagDefAria": "Tag-Vorlage „{label}“ löschen",
     "createNewTag": "Neues Tag anlegen",
-    "colorPalette": "Farbpalette"
+    "colorPalette": "Farbpalette",
+    "salesPrice": "Verkauf: Preis",
+    "export": "Exportieren",
+    "exportWithCount": "Exportieren ({count})",
+    "exporting": "Exportiere…",
+    "exportFormatCsv": "CSV (vollständig)",
+    "exportFormatXlsx": "Excel/XLSX (vollständig)",
+    "exportSheetName": "Xentral Artikel",
+    "exportFilename": "xentral-artikel",
+    "exportError": "Export fehlgeschlagen.",
+    "exportNoIds": "Keine Produkt-IDs in Auswahl gefunden. Bitte Daten neu laden.",
+    "selectRowAria": "Zeile auswählen",
+    "selectAllAria": "Alle sichtbaren auswählen"
   },
   "amazonProducts": {
     "title": "Amazon-Produkte",

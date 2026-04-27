@@ -609,7 +609,19 @@
     "noTag": "无标签",
     "removeTagDefAria": "删除标签模板「{label}」",
     "createNewTag": "新建标签",
-    "colorPalette": "调色板"
+    "colorPalette": "调色板",
+    "salesPrice": "销售价",
+    "export": "导出",
+    "exportWithCount": "导出 ({count})",
+    "exporting": "导出中…",
+    "exportFormatCsv": "CSV（完整）",
+    "exportFormatXlsx": "Excel/XLSX（完整）",
+    "exportSheetName": "Xentral 商品",
+    "exportFilename": "xentral-articles",
+    "exportError": "导出失败。",
+    "exportNoIds": "所选行中未找到产品 ID，请先刷新数据。",
+    "selectRowAria": "选择行",
+    "selectAllAria": "全选当前可见行"
   },
   "amazonProducts": {
     "title": "亚马逊商品",

@@ -2,10 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { ChevronDown, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronDown, Download, Loader2 } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/shared/components/DataTable";
+import {
+  downloadFullCsv,
+  downloadFullXlsx,
+  type ExportRow,
+} from "@/shared/lib/xentralArticlesExport";
 import { DASHBOARD_PAGE_SHELL, DASHBOARD_PAGE_TITLE } from "@/shared/lib/dashboardUi";
 import {
   DASHBOARD_CLIENT_BACKGROUND_SYNC_MS,
@@ -41,6 +46,7 @@ type XentralArticleRow = {
   stock: number;
   price?: number | null;
   salesPrice?: number | null;
+  xentralProductId?: string | null;
 };
 
 type XentralArticleTableRow = XentralArticleRow & {
@@ -145,6 +151,34 @@ function clearLegacyLocalTagKeys() {
   } catch {
     /* ignore */
   }
+}
+
+function RowSelectCheckbox({
+  checked,
+  indeterminate = false,
+  onChange,
+  ariaLabel,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  onChange: () => void;
+  ariaLabel: string;
+}) {
+  const ref = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate && !checked;
+  }, [indeterminate, checked]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      aria-label={ariaLabel}
+      className="h-4 w-4 cursor-pointer rounded border-border/80 text-primary accent-primary"
+      onClick={(e) => e.stopPropagation()}
+    />
+  );
 }
 
 function ProductTagPicker({
@@ -352,6 +386,9 @@ export default function XentralProductsPage() {
 
   const [tagDefs, setTagDefs] = useState<TagDef[]>(DEFAULT_TAG_DEFS);
   const [tagBySku, setTagBySku] = useState<Record<string, string | null>>({});
+  const [selectedSkus, setSelectedSkus] = useState<Set<string>>(() => new Set());
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   /** Laufende SKU-PATCHes — verhindert, dass `loadTags` den optimistischen Stand überschreibt. */
   const pendingSkuTagWritesRef = useRef(new Set<string>());
@@ -610,6 +647,151 @@ export default function XentralProductsPage() {
     [persistTagDefs]
   );
 
+  const toggleSelectSku = useCallback((sku: string) => {
+    const k = sku.trim();
+    if (!k) return;
+    setSelectedSkus((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }, []);
+
+  const visibleSkuKeys = useMemo(
+    () =>
+      displayedRows
+        .map((r) => (r.sku ?? "").trim())
+        .filter((s): s is string => Boolean(s)),
+    [displayedRows]
+  );
+
+  const allVisibleSelected = useMemo(
+    () =>
+      visibleSkuKeys.length > 0 &&
+      visibleSkuKeys.every((s) => selectedSkus.has(s)),
+    [visibleSkuKeys, selectedSkus]
+  );
+
+  const someVisibleSelected = useMemo(
+    () =>
+      !allVisibleSelected &&
+      visibleSkuKeys.some((s) => selectedSkus.has(s)),
+    [allVisibleSelected, visibleSkuKeys, selectedSkus]
+  );
+
+  const toggleSelectAllVisible = useCallback(() => {
+    setSelectedSkus((prev) => {
+      const next = new Set(prev);
+      const everyVisibleInside = visibleSkuKeys.every((s) => next.has(s));
+      if (everyVisibleInside && visibleSkuKeys.length > 0) {
+        for (const s of visibleSkuKeys) next.delete(s);
+      } else {
+        for (const s of visibleSkuKeys) next.add(s);
+      }
+      return next;
+    });
+  }, [visibleSkuKeys]);
+
+  const handleExport = useCallback(
+    async (format: "csv" | "xlsx") => {
+      const source =
+        selectedSkus.size > 0
+          ? displayedRows.filter((r) => selectedSkus.has((r.sku ?? "").trim()))
+          : displayedRows;
+      if (source.length === 0) return;
+
+      const ids = source
+        .map((r) => (r.xentralProductId ?? "").trim())
+        .filter((s): s is string => s.length > 0);
+      if (ids.length === 0) {
+        setExportError(t("xentralProducts.exportNoIds"));
+        return;
+      }
+
+      const skuByProductId = new Map<string, string>();
+      const stockBySku = new Map<string, number>();
+      const priceBySku = new Map<string, number | null>();
+      const salesPriceBySku = new Map<string, number | null>();
+      for (const r of source) {
+        const id = (r.xentralProductId ?? "").trim();
+        const sku = (r.sku ?? "").trim();
+        if (id && sku) skuByProductId.set(id, sku);
+        if (sku) {
+          stockBySku.set(sku, r.stock ?? 0);
+          priceBySku.set(sku, r.price ?? null);
+          salesPriceBySku.set(sku, r.salesPrice ?? null);
+        }
+      }
+
+      setIsExporting(true);
+      setExportError(null);
+      try {
+        const res = await fetch("/api/xentral/articles/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ ids }),
+        });
+        const payload = (await res.json()) as {
+          columns?: string[];
+          rows?: ExportRow[];
+          error?: string;
+        };
+        if (!res.ok) {
+          throw new Error(payload.error ?? t("xentralProducts.exportError"));
+        }
+        const rawColumns = payload.columns ?? [];
+        const rawRows = payload.rows ?? [];
+
+        const enrichedRows: ExportRow[] = rawRows.map((row) => {
+          const id = String(row.xentral_product_id ?? "").trim();
+          const sku = id ? skuByProductId.get(id) ?? "" : "";
+          const tag = sku ? getTagForSku(sku) ?? "" : "";
+          const stock = sku ? stockBySku.get(sku) ?? null : null;
+          const price = sku ? priceBySku.get(sku) ?? null : null;
+          const salesPrice = sku ? salesPriceBySku.get(sku) ?? null : null;
+          return {
+            ...row,
+            sku,
+            tag,
+            stock,
+            price,
+            sales_price: salesPrice,
+          };
+        });
+        const prepended = ["sku", "tag", "stock", "price", "sales_price"];
+        const seen = new Set<string>(prepended);
+        const columns = [
+          ...prepended,
+          ...rawColumns.filter((c) => {
+            if (seen.has(c)) return false;
+            seen.add(c);
+            return true;
+          }),
+        ];
+
+        const stamp = new Date().toISOString().slice(0, 10);
+        const baseName = `${t("xentralProducts.exportFilename")}_${stamp}`;
+        if (format === "csv") {
+          downloadFullCsv(columns, enrichedRows, baseName);
+        } else {
+          await downloadFullXlsx(
+            columns,
+            enrichedRows,
+            baseName,
+            t("xentralProducts.exportSheetName")
+          );
+        }
+      } catch (e) {
+        setExportError(e instanceof Error ? e.message : t("xentralProducts.exportError"));
+      } finally {
+        setIsExporting(false);
+      }
+    },
+    [selectedSkus, displayedRows, getTagForSku, t]
+  );
+
   const load = useCallback(async (options?: { bustServerCache?: boolean; silent?: boolean }) => {
     const bustServerCache = options?.bustServerCache ?? false;
     const silent = options?.silent ?? false;
@@ -709,6 +891,34 @@ export default function XentralProductsPage() {
   const columns = useMemo<Array<ColumnDef<XentralArticleTableRow>>>(
     () => [
       {
+        id: "__select",
+        enableSorting: false,
+        meta: {
+          align: "center" as const,
+          thClassName: "w-9",
+          tdClassName: "w-9",
+        },
+        header: () => (
+          <RowSelectCheckbox
+            checked={allVisibleSelected}
+            indeterminate={someVisibleSelected}
+            onChange={toggleSelectAllVisible}
+            ariaLabel={t("xentralProducts.selectAllAria")}
+          />
+        ),
+        cell: ({ row }) => {
+          const sku = (row.original.sku ?? "").trim();
+          if (!sku) return null;
+          return (
+            <RowSelectCheckbox
+              checked={selectedSkus.has(sku)}
+              onChange={() => toggleSelectSku(sku)}
+              ariaLabel={t("xentralProducts.selectRowAria")}
+            />
+          );
+        },
+      },
+      {
         accessorKey: "sku",
         header: t("xentralProducts.sku"),
         meta: { align: "left" as const },
@@ -789,7 +999,20 @@ export default function XentralProductsPage() {
         },
       },
     ],
-    [t, formatEkPrice, tagDefs, getTagForSku, setTagOverride, addTagDef, removeTagDef]
+    [
+      t,
+      formatEkPrice,
+      tagDefs,
+      getTagForSku,
+      setTagOverride,
+      addTagDef,
+      removeTagDef,
+      selectedSkus,
+      allVisibleSelected,
+      someVisibleSelected,
+      toggleSelectAllVisible,
+      toggleSelectSku,
+    ]
   );
 
   return (
@@ -798,6 +1021,38 @@ export default function XentralProductsPage() {
         <div className="flex flex-wrap items-end justify-between gap-2">
           <h1 className={DASHBOARD_PAGE_TITLE}>{t("xentralProducts.title")}</h1>
           <div className="flex items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                nativeButton
+                disabled={displayedRows.length === 0 || isExporting}
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "inline-flex items-center"
+                )}
+              >
+                {isExporting ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                )}
+                {isExporting
+                  ? t("xentralProducts.exporting")
+                  : selectedSkus.size > 0
+                    ? t("xentralProducts.exportWithCount", {
+                        count: selectedSkus.size,
+                      })
+                    : t("xentralProducts.export")}
+                <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-60" aria-hidden />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" sideOffset={6}>
+                <DropdownMenuItem onClick={() => void handleExport("csv")}>
+                  {t("xentralProducts.exportFormatCsv")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => void handleExport("xlsx")}>
+                  {t("xentralProducts.exportFormatXlsx")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               type="button"
               variant="outline"
@@ -820,6 +1075,12 @@ export default function XentralProductsPage() {
       {error ? (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-700">
           {error}
+        </div>
+      ) : null}
+
+      {exportError ? (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-700">
+          {exportError}
         </div>
       ) : null}
 
