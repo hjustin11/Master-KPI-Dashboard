@@ -43,6 +43,7 @@ const baseSchema = z.object({
 
   // ---- App ----
   NEXT_PUBLIC_APP_URL: optionalString,
+  APP_BASE_URL: optionalString,
   OWNER_EMAILS: optionalString,
 
   // ---- Xentral ----
@@ -61,6 +62,7 @@ const baseSchema = z.object({
   XENTRAL_ORDERS_CACHE_FRESH_MS: positiveIntString,
   XENTRAL_ORDERS_CACHE_STALE_MS: positiveIntString,
   XENTRAL_ARTICLES_CACHE_DISABLE: optionalString,
+  XENTRAL_ORDERS_CACHE_DISABLE: optionalString,
 
   // ---- Amazon SP-API ----
   AMAZON_SP_API_REFRESH_TOKEN: optionalString,
@@ -76,6 +78,7 @@ const baseSchema = z.object({
   AMAZON_SP_API_MAX_429_RETRIES: positiveIntString,
   AMAZON_SP_API_ORDERS_PAGE_DELAY_MS: positiveIntString,
   AMAZON_SALES_GRANULARITY_TIMEZONE: optionalString,
+  AMAZON_RULEBOOK_PATH: optionalString,
 
   // ---- LLM ----
   ANTHROPIC_API_KEY: optionalString,
@@ -102,6 +105,8 @@ const baseSchema = z.object({
   OTTO_API_CLIENT_ID: optionalString,
   OTTO_API_CLIENT_SECRET: optionalString,
   OTTO_API_SCOPES: optionalString,
+  OTTO_PRODUCTS_PATH: optionalString,
+  OTTO_PRODUCTS_API_VERSION: optionalString,
   KAUFLAND_API_BASE_URL: optionalString,
   KAUFLAND_CLIENT_KEY: optionalString,
   KAUFLAND_SECRET_KEY: optionalString,
@@ -148,6 +153,10 @@ const baseSchema = z.object({
   INTEGRATION_CACHE_DEV_MEMORY: optionalString,
   CRON_SECRET: optionalString,
   INTEGRATION_CACHE_WARM_SECRET: optionalString,
+  PRICE_PARITY_CACHE_DISABLE: optionalString,
+  PRICE_PARITY_AMAZON_FETCH_MS: positiveIntString,
+  PROCUREMENT_LINES_CACHE_DISABLE: optionalString,
+  IMAGE_PROXY_ALLOWED_HOSTS: optionalString,
 
   // ---- Public-Flags ----
   NEXT_PUBLIC_XENTRAL_ADDRESS_DEMO_ORDERS: optionalString,
