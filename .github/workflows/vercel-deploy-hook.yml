@@ -5,6 +5,12 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+# Verhindert, dass schnelle main-Pushes parallele Deploys racing — der jüngste
+# Commit gewinnt, ältere Deploys werden gecancelt.
+concurrency:
+  group: vercel-prod
+  cancel-in-progress: true
+
 jobs:
   deploy-production:
     runs-on: ubuntu-latest

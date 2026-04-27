@@ -60,5 +60,8 @@ export async function GET() {
       isOpen: new Date(r.period_to).getTime() >= todayMs - 86_400_000,
     }));
 
-  return NextResponse.json({ periods });
+  return NextResponse.json(
+    { periods },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }

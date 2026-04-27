@@ -380,7 +380,9 @@ export async function runCrossListingClaudeOptimize(args: {
       improvedBullets &&
       improvedBullets.join("\n") !== args.mergedValues.bullets.join("\n");
 
-    const any = Boolean(titleChanged || descChanged || bulletsChanged || improvedSearchTerms);
+    const hasAnyImprovement = Boolean(
+      titleChanged || descChanged || bulletsChanged || improvedSearchTerms
+    );
 
     return {
       usedLlm: true,
@@ -395,7 +397,9 @@ export async function runCrossListingClaudeOptimize(args: {
       bulletsReason: v.fields.bulletPoints?.reason ?? "",
       searchTermsReason: v.fields.searchTerms?.reason ?? "",
       summary: v.summary.trim(),
-      noMaterialImprovement: any ? false : Boolean(v.noMaterialImprovement),
+      // Wenn der LLM eine Verbesserung gefunden hat, wird `noMaterialImprovement`
+      // zwingend false — sonst LLM-Selbsteinschätzung übernehmen.
+      noMaterialImprovement: hasAnyImprovement ? false : Boolean(v.noMaterialImprovement),
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

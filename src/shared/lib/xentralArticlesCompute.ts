@@ -943,13 +943,6 @@ export async function computeXentralArticlesPayload(
         return new Map<string, number>();
       }),
     ]);
-    // Debug: Shopify-Split-Diagnose (temporär)
-    const testSku = agg.bySku.get("aaaf-004");
-    if (testSku) {
-      console.log("[shopify-sku-split] AAAF-004 soldByProject keys:", Object.keys(testSku.soldByProject));
-      console.log("[shopify-sku-split] AAAF-004 soldByProject:", JSON.stringify(testSku.soldByProject));
-      console.log("[shopify-sku-split] shopifyBySku size:", shopifyBySku.size, "AAAF-004:", shopifyBySku.get("aaaf-004"));
-    }
     const next = items.map((row) => {
       const hit = agg.bySku.get(row.sku.trim().toLowerCase());
       if (hit) {

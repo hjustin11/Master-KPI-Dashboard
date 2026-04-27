@@ -35,3 +35,6 @@ jobs:
           # in Production-Build sonst hart abbrechen. Wir validieren im CI nur den
           # Code-Build — Secret-Pflicht greift dann erst in Vercel mit echten Vars.
           SKIP_ENV_VALIDATION: "1"
+
+      - name: Test
+        run: npm test
