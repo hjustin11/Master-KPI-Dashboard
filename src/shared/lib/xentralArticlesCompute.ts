@@ -995,14 +995,49 @@ export async function computeXentralArticlesPayload(
   const rawAccum: XentralArticleRaw[] = [...firstRaw];
   const maxItems = 20_000;
   const maxPages = 400;
-  let page = pageNumber + 1;
-  while (rawAccum.length < totalCount && rawAccum.length < maxItems && page <= maxPages) {
-    const next = await fetchPage(page);
-    if (!next.res.ok || !next.json) break;
-    const nextRaw = mapToArticlesRaw(next.json) ?? [];
-    if (!nextRaw.length) break;
-    rawAccum.push(...nextRaw);
-    page += 1;
+
+  // Vorher seriell: bei 2000 Produkten + pageSize=150 → ~14 Round-Trips à 0.5–1.5 s
+  // (= 7–20 s gesamt). Xentral toleriert parallele Reads gut; mit Concurrency 4
+  // schrumpft das auf ~3–5 s. Reihenfolge bleibt deterministisch durch indizierten
+  // Result-Slot, damit nachgelagerte Aggregationen stabil sind.
+  const pagesToFetch: number[] = [];
+  const expectedTotal = Math.min(totalCount, maxItems);
+  const remainingItems = Math.max(0, expectedTotal - firstRaw.length);
+  const remainingPages = Math.ceil(remainingItems / clampedPageSize);
+  for (let i = 0; i < Math.min(remainingPages, maxPages - pageNumber); i++) {
+    pagesToFetch.push(pageNumber + 1 + i);
+  }
+
+  if (pagesToFetch.length > 0) {
+    const PAGE_CONCURRENCY = 4;
+    const results: Array<XentralArticleRaw[] | null> = new Array(pagesToFetch.length).fill(null);
+    let cursor = 0;
+    let stopReason: "ok" | "fail" = "ok";
+    const runners = Array.from({ length: Math.min(PAGE_CONCURRENCY, pagesToFetch.length) }, async () => {
+      while (cursor < pagesToFetch.length && stopReason === "ok") {
+        const idx = cursor++;
+        const pageNum = pagesToFetch[idx]!;
+        const next = await fetchPage(pageNum);
+        if (!next.res.ok || !next.json) {
+          stopReason = "fail";
+          return;
+        }
+        const nextRaw = mapToArticlesRaw(next.json) ?? [];
+        if (nextRaw.length === 0) {
+          stopReason = "fail";
+          return;
+        }
+        results[idx] = nextRaw;
+      }
+    });
+    await Promise.all(runners);
+    // Bis zum ersten Lücken-Index (null) zusammenfügen — dahinter brechen wir ab,
+    // wie es das alte serielle `break` getan hätte.
+    for (const slot of results) {
+      if (slot === null) break;
+      if (rawAccum.length >= maxItems) break;
+      rawAccum.push(...slot);
+    }
   }
 
   const enriched = enrichArticles(rawAccum, projectById, purchasePriceByProductId);
