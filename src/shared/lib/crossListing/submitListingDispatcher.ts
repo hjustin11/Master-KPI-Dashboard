@@ -159,14 +159,38 @@ function buildGenericPayload(args: DispatchArgs): Record<string, unknown> {
 }
 
 // ---------------------------------------------------------------------------
-// Otto Market v2: POST /v2/products
+// Otto Market: POST /v5/products
 // ---------------------------------------------------------------------------
-// Otto's offizieller Endpoint ist `/v2/products` (nicht /v4), Payload ist ein
-// Array von ProductVariation-Objekten. Antwort ist ein Prozess-Token, das
-// async verarbeitet wird — Status via GET /v2/products/update-tasks/{uuid}.
-// Referenz: otto-de/marketplace-php-sdk → PartnerProductClient.php
+// Otto-API-Versionen (verifiziert April 2026 via
+// /api/otto/categories-debug?diagnose=1):
+//   - v1/v2/v3/v4/products → 404 "no Route matched with those values"
+//   - v5/products          → 200 (produktiv, liefert existierende Listings)
+// Der archivierte PHP-SDK nutzt v2 — irreführend, aber das v5-Schema ist
+// (lt. Response-Sample) fast identisch mit v2/v4: ProductVariation bleibt, nur
+// Zusatzfelder kamen rein (`brandId`, `moin`, `compliance`-Container).
+//
+// v5-Schema-Änderungen (OTTO_LISTING_UPLOAD.md §12):
+//   - `compliance`-Container (2025-05-05): `productSafety` ist reingezogen,
+//     plus `foodInformation` für Food/Tiernahrung (GPSR-Pflicht seit 2024-12).
+//     Economic-Operator-Adressen sind Pflicht — aktuell NICHT vom Builder gesetzt
+//     (→ erwarteter Validation-Error im Task-Result, dann nachziehen).
+//   - `brandId`: v5-GET zeigt `brand + brandId`, aber im POST-Body scheint
+//     `brand`-Name weiter erlaubt — Otto resolved intern. Falls doch nötig:
+//     via `/v5/products/brands` auflösen.
+//   - `additionalRequirements.reference` wurde aus Kategorien entfernt (2025-08-19).
+//
+// Override via env: `OTTO_PRODUCTS_API_VERSION=v6` o. ä., falls Otto bumpt.
 
 type OttoMediaAsset = { type: "IMAGE"; location: string; filename?: string };
+
+/** PackingUnit-Einheiten: Gewicht in GRAMM, Maße in MILLIMETER (int).
+ *  Referenz: OTTO_LISTING_UPLOAD.md §9. */
+type OttoPackingUnit = {
+  weight?: number;
+  width?: number;
+  height?: number;
+  length?: number;
+};
 
 type OttoProductVariation = {
   productReference: string;
@@ -187,8 +211,27 @@ type OttoProductVariation = {
     standardPrice: { amount: number; currency: string };
     vat: "FULL" | "HALF" | "NONE";
   };
-  logistics: { packingUnitCount: number; packingUnits: unknown[] };
+  logistics: { packingUnitCount: number; packingUnits: OttoPackingUnit[] };
 };
+
+/** HTML → Plaintext. Otto's description darf kein HTML enthalten. */
+function stripHtmlForOtto(raw: string): string {
+  return raw
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 function buildOttoProductVariation(args: DispatchArgs): OttoProductVariation {
   const v = args.values;
@@ -211,19 +254,45 @@ function buildOttoProductVariation(args: DispatchArgs): OttoProductVariation {
     return { type: "IMAGE", location: url, filename };
   });
 
-  const bullets = v.bullets.map((b) => b.trim()).filter(Boolean).slice(0, 10);
+  const bullets = v.bullets
+    .map((b) => stripHtmlForOtto(b).slice(0, 250))
+    .filter(Boolean)
+    .slice(0, 10);
   const category = v.category.trim() || v.attributes.category || "";
   const brand = v.brand.trim();
 
   // Otto verlangt `attributes` als Liste {name, values[]}. Wir mappen die
-  // freien user-Attribute 1:1 + ergänzen Standard-Pflichtfelder.
+  // freien user-Attribute 1:1 + vermeiden Duplikate.
   const attributes: Array<{ name: string; values: string[] }> = [];
+  const seenAttrNames = new Set<string>();
   for (const [key, value] of Object.entries(v.attributes)) {
     if (!key || !value.trim()) continue;
     if (["category", "brand"].includes(key)) continue;
     attributes.push({ name: key, values: [value.trim()] });
+    seenAttrNames.add(key.toLowerCase());
   }
-  if (v.petSpecies.trim()) attributes.push({ name: "Zielgruppe", values: [v.petSpecies.trim()] });
+  // petSpecies → "Zielgruppe" falls nicht schon vom required-attributes-Builder gesetzt.
+  if (v.petSpecies.trim() && !seenAttrNames.has("zielgruppe") && !seenAttrNames.has("tierart")) {
+    attributes.push({ name: "Zielgruppe", values: [v.petSpecies.trim()] });
+  }
+
+  // PackingUnit: Xentral liefert cm + kg, Otto erwartet mm + g (integer).
+  // Referenz: OTTO_LISTING_UPLOAD.md §9.
+  const dimL = num(v.dimL);
+  const dimW = num(v.dimW);
+  const dimH = num(v.dimH);
+  const weight = num(v.weight);
+  const packingUnit: OttoPackingUnit = {};
+  if (weight != null && weight > 0) packingUnit.weight = Math.round(weight * 1000);
+  if (dimL != null && dimL > 0) packingUnit.length = Math.round(dimL * 10);
+  if (dimW != null && dimW > 0) packingUnit.width = Math.round(dimW * 10);
+  if (dimH != null && dimH > 0) packingUnit.height = Math.round(dimH * 10);
+  const hasPackingDims = Object.keys(packingUnit).length > 0;
+  const logistics: { packingUnitCount: number; packingUnits: OttoPackingUnit[] } = hasPackingDims
+    ? { packingUnitCount: 1, packingUnits: [packingUnit] }
+    : { packingUnitCount: 1, packingUnits: [] };
+
+  const descriptionPlain = stripHtmlForOtto(v.description || "").slice(0, 4000);
 
   return {
     productReference: args.sku,
@@ -232,7 +301,7 @@ function buildOttoProductVariation(args: DispatchArgs): OttoProductVariation {
     productDescription: {
       category,
       brand,
-      description: v.description.trim(),
+      description: descriptionPlain,
       bulletPoints: bullets,
       fscCertified: false,
       disposal: false,
@@ -247,7 +316,7 @@ function buildOttoProductVariation(args: DispatchArgs): OttoProductVariation {
       standardPrice: { amount: priceEur, currency: "EUR" },
       vat: "FULL",
     },
-    logistics: { packingUnitCount: 0, packingUnits: [] },
+    logistics,
   };
 }
 
@@ -279,7 +348,11 @@ async function dispatchOtto(args: DispatchArgs): Promise<SubmissionOutcome> {
       scopes,
     });
 
-    const url = new URL("/v2/products", cfg.baseUrl).toString();
+    // v5 ist der aktuell aktive Pfad (verifiziert via /api/otto/categories-debug
+    // ?diagnose=1 — nur /v5/products liefert 200, v1–v4 sind "no Route matched").
+    // Override via `OTTO_PRODUCTS_API_VERSION` falls Otto eine neue Version rolled.
+    const apiVersion = (process.env.OTTO_PRODUCTS_API_VERSION ?? "v5").trim() || "v5";
+    const url = new URL(`/${apiVersion}/products`, cfg.baseUrl).toString();
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -297,7 +370,7 @@ async function dispatchOtto(args: DispatchArgs): Promise<SubmissionOutcome> {
       json = null;
     }
     if (!res.ok) {
-      const errorMsg =
+      const bodyMsg =
         (json && typeof json === "object" && "message" in json &&
          typeof (json as { message?: unknown }).message === "string"
           ? (json as { message: string }).message
@@ -305,8 +378,12 @@ async function dispatchOtto(args: DispatchArgs): Promise<SubmissionOutcome> {
         (json && typeof json === "object" && "errors" in json
           ? JSON.stringify((json as { errors: unknown }).errors).slice(0, 500)
           : null) ??
-        text.slice(0, 500) ??
-        `HTTP ${res.status}`;
+        (text ? text.slice(0, 500) : null);
+      const hint =
+        res.status === 404
+          ? ` Hinweis: ${url} liefert 404. Check /api/otto/categories-debug?diagnose=1 welche Version antwortet, dann OTTO_PRODUCTS_API_VERSION=vN in der .env setzen.`
+          : "";
+      const errorMsg = `Otto ${res.status} bei ${url}: ${bodyMsg ?? "(leerer Response-Body)"}${hint}`;
       return {
         ok: false,
         status: `HTTP_${res.status}`,
@@ -321,26 +398,28 @@ async function dispatchOtto(args: DispatchArgs): Promise<SubmissionOutcome> {
 
     // Erfolgreich akzeptiert — Otto verarbeitet asynchron. Wir extrahieren die
     // update-task-UUID aus der self-Link-Referenz für späteres Polling.
+    // WICHTIG: das eigentliche Validation-Ergebnis (pro Variation + Errors)
+    // steht erst am `result`-Link ab, NICHT hier in der Sync-Response.
+    // OTTO_LISTING_UPLOAD.md §10.
     const links =
       json && typeof json === "object" && "links" in json && Array.isArray((json as { links: unknown }).links)
         ? ((json as { links: Array<{ rel?: string; href?: string }> }).links)
         : [];
     const selfLink = links.find((l) => l?.rel === "self")?.href ?? null;
+    const resultLink = links.find((l) => l?.rel === "result")?.href ?? null;
     const taskUuid = selfLink ? selfLink.split("/").pop() ?? null : null;
     const state =
       json && typeof json === "object" && "state" in json && typeof (json as { state: unknown }).state === "string"
         ? ((json as { state: string }).state)
         : "pending";
+    const issueMessage = taskUuid
+      ? `Otto hat den Upload angenommen (state=${state}, task=${taskUuid}). Verarbeitung ist asynchron. Status: GET /v4/products/update-tasks/${taskUuid} — Pro-Variation-Fehler: GET ${resultLink ?? `/v4/products/update-tasks/${taskUuid}/result`}.`
+      : `Otto hat den Upload angenommen (state=${state}). Task-UUID konnte nicht extrahiert werden.`;
     return {
       ok: true,
       status: `ACCEPTED_${state.toUpperCase()}`,
       submissionId: taskUuid,
-      issues: [
-        {
-          severity: "INFO",
-          message: `Otto hat den Upload angenommen (state=${state}). Verarbeitung ist asynchron — Status über GET /v2/products/update-tasks/${taskUuid ?? "<uuid>"} abrufbar.`,
-        },
-      ],
+      issues: [{ severity: "INFO", message: issueMessage }],
       httpStatus: res.status,
       endpointUsed: url,
       preparedPayload: payload,

@@ -349,8 +349,137 @@ const fressnapfRequiredAttributes: RequiredAttrBuilder = (sources, values, sku) 
   return out;
 };
 
+/**
+ * Otto-Material-Mapping (deutsche Labels, weil Otto-Attribut-Werte in deutscher
+ * Schreibweise ausgewertet werden — siehe OTTO_LISTING_UPLOAD.md §4).
+ */
+function deriveMaterialGerman(haystack: string): string | null {
+  const h = haystack.toLowerCase();
+  if (/sisal/.test(h)) return "Sisal";
+  if (/plüsch|plusch|plush/.test(h)) return "Plüsch";
+  if (/nylon/.test(h)) return "Nylon";
+  if (/kunststoff|plastik|plastic/.test(h)) return "Kunststoff";
+  if (/edelstahl/.test(h)) return "Edelstahl";
+  if (/aluminium/.test(h)) return "Aluminium";
+  if (/metall/.test(h)) return "Metall";
+  if (/keramik|ceramic/.test(h)) return "Keramik";
+  if (/spanplatte/.test(h)) return "Spanplatte";
+  if (/mdf/.test(h)) return "MDF";
+  if (/holz|wood/.test(h)) return "Holz";
+  if (/baumwolle|cotton/.test(h)) return "Baumwolle";
+  if (/pappe|karton|cardboard/.test(h)) return "Pappe";
+  if (/leder|leather/.test(h)) return "Leder";
+  if (/jute/.test(h)) return "Jute";
+  if (/hanf|hemp/.test(h)) return "Hanf";
+  if (/filz|felt/.test(h)) return "Filz";
+  return null;
+}
+
+/**
+ * Otto-Farb-Mapping (deutsche Labels). Otto's Enum allowedValues pro Kategorie
+ * sind i. d. R. "Schwarz", "Weiß", "Grau", … — user korrigiert im Editor,
+ * falls für diese Kategorie ein anderer Wert gültig ist.
+ */
+function deriveColorGerman(haystack: string): string | null {
+  const h = haystack.toLowerCase();
+  const patterns: Array<[RegExp, string]> = [
+    [/\bbeige\b/, "Beige"],
+    [/\banthrazit|\banthracite\b/, "Anthrazit"],
+    [/\bgrau\b|\bgrey\b|\bgray\b/, "Grau"],
+    [/\bschwarz\b|\bblack\b/, "Schwarz"],
+    [/\bwei(ß|ss)\b|\bwhite\b/, "Weiß"],
+    [/\bbraun\b|\bbrown\b/, "Braun"],
+    [/\bblau\b|\bblue\b/, "Blau"],
+    [/\bgr(ü|ue)n\b|\bgreen\b/, "Grün"],
+    [/\brot\b|\bred\b/, "Rot"],
+    [/\bgelb\b|\byellow\b/, "Gelb"],
+    [/\brosa\b|\bpink\b/, "Rosa"],
+    [/\blila\b|\bviolett\b|\bpurple\b/, "Lila"],
+    [/\borange\b/, "Orange"],
+  ];
+  for (const [re, name] of patterns) if (re.test(h)) return name;
+  return null;
+}
+
+/**
+ * Otto-Tierart (deutsche Labels — Otto-Kategorien nennen die Pflicht-Attribute
+ * typischerweise "Tierart" oder "Zielgruppe" mit Werten wie "Katze", "Hund").
+ */
+function derivePetSpeciesGerman(haystack: string, petSpeciesRaw: string): string | null {
+  const normalized = petSpeciesRaw.trim().toLowerCase();
+  if (normalized) {
+    if (/katze|cat/.test(normalized)) return "Katze";
+    if (/hund|dog/.test(normalized)) return "Hund";
+    if (/vogel|bird/.test(normalized)) return "Vogel";
+    if (/fisch|fish/.test(normalized)) return "Fisch";
+    if (/nager|hamster|kaninchen|meerschwein/.test(normalized)) return "Kleintier";
+    if (/pferd|horse/.test(normalized)) return "Pferd";
+  }
+  const h = haystack.toLowerCase();
+  if (/\bkatze|\bkatzen|\bcat\b|\bcats\b|kratz|\bmieze/.test(h)) return "Katze";
+  if (/\bhund|\bhunde|\bdog\b|\bdogs\b/.test(h)) return "Hund";
+  if (/\bvogel|\bvögel|\bbird\b/.test(h)) return "Vogel";
+  if (/\bfisch|\bfische|\bfish\b|aquarium/.test(h)) return "Fisch";
+  if (/hamster|kaninchen|meerschwein|nager/.test(h)) return "Kleintier";
+  return null;
+}
+
+/**
+ * Otto-Pflichtattribute-Builder.
+ *
+ * **Vorsicht — Otto ist category-spezifisch:** die Pflicht-Attribute pro
+ * Kategorie stehen in `GET /v5/products/categories` → CategoryGroup.attributes[]
+ * mit `relevance = "MANDATORY"`. Unser Builder kann ohne Live-Lookup nur
+ * **defensive Smart-Defaults** setzen, die für viele Otto-Pet-Kategorien
+ * passen. User korrigiert im Editor — vorausgefüllte Werte sind besser als
+ * leere Felder, weil:
+ *   - User sieht direkt, welche Keys Otto erwartet (Farbe/Material/Tierart)
+ *   - Response-Errors bei `attribute.value.not.allowed` zeigen den nächsten
+ *     Treffer aus `allowedValues`, den der User dann 1:1 eintragen kann
+ *
+ * Category + Brand **mergen wir NICHT hierher** — die gehen direkt in
+ * `productDescription.category` / `productDescription.brand` (siehe dispatchOtto),
+ * und müssen gegen die Otto-Listen validiert werden (Discovery via
+ * `/api/otto/categories-debug`).
+ *
+ * Referenz: OTTO_LISTING_UPLOAD.md §4 + §11 (Stolpersteine).
+ */
+const ottoRequiredAttributes: RequiredAttrBuilder = (sources, values) => {
+  const hay = `${values.title} ${values.description} ${values.bullets.join(" ")} ${values.category}`;
+  const out: Record<string, string> = {};
+
+  const petSpecies = derivePetSpeciesGerman(hay, values.petSpecies);
+  if (petSpecies) {
+    // Otto-Pet-Kategorien nutzen meist "Tierart" oder "Zielgruppe".
+    // Wir setzen beide — der jeweils unpassende wird vom Backend ignoriert,
+    // der passende landet als Attribute in der Variation (siehe dispatchOtto).
+    out.Tierart = petSpecies;
+    out.Zielgruppe = petSpecies;
+  }
+
+  const color = deriveColorGerman(hay);
+  if (color) out.Farbe = color;
+
+  const material = deriveMaterialGerman(hay);
+  if (material) out.Material = material;
+
+  // Dimensionen als redundante Attribute (zusätzlich zum logistics-Block im
+  // Dispatcher). Viele Otto-Kategorien verlangen "Breite"/"Höhe"/"Länge" als
+  // Pflicht-Attribute MIT Einheit-Suffix.
+  if (values.dimL) out["Länge"] = `${values.dimL} cm`;
+  if (values.dimW) out["Breite"] = `${values.dimW} cm`;
+  if (values.dimH) out["Höhe"] = `${values.dimH} cm`;
+  if (values.weight) out["Gewicht"] = `${values.weight} kg`;
+
+  // Herstellerangabe als Attribut (falls Kategorie separates Feld erwartet).
+  if (values.brand.trim()) out.Hersteller = values.brand.trim();
+
+  return out;
+};
+
 const BUILDERS: Partial<Record<CrossListingTargetSlug, RequiredAttrBuilder>> = {
   fressnapf: fressnapfRequiredAttributes,
+  otto: ottoRequiredAttributes,
 };
 
 /**
