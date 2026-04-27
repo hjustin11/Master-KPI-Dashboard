@@ -3,16 +3,16 @@ import {
   getFlexIntegrationConfig,
   FLEX_MARKETPLACE_MMS_SPEC,
 } from "@/shared/lib/flexMarketplaceApiClient";
+import { withAuth } from "@/shared/lib/apiAuth";
 
 /**
  * Sample-Endpoint: holt bis zu 30 existierende MMS-Offers und extrahiert
  * deren tatsächliche `category_code`/`category_label`/`hierarchy`-Werte.
- * Einzige Methode, die reale PM01-Category-Taxonomie zu sehen, weil MMS
- * die Kategorien nicht über /api/categories (oft 403) offenlegt.
+ * **Owner/Admin only** — leakt MMS-Offer-Daten + Mirakl-Config.
  *
  * Nutzung: /api/mediamarkt/sample-categories
  */
-export async function GET() {
+export const GET = withAuth(async () => {
   const cfg = await getFlexIntegrationConfig(FLEX_MARKETPLACE_MMS_SPEC);
   if (!cfg.apiKey || !cfg.baseUrl) {
     return NextResponse.json({ error: "MediaMarkt/Saturn API nicht konfiguriert." }, { status: 500 });
@@ -81,4 +81,4 @@ export async function GET() {
     extracted,
     fullProbeResults: attempts,
   });
-}
+}, { requiredRole: ["owner", "admin"] });

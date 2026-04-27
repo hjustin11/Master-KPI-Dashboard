@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { getFressnapfIntegrationConfig } from "@/shared/lib/fressnapfApiClient";
+import { withAuth } from "@/shared/lib/apiAuth";
 
 /**
  * Debug: ruft Fressnapfs Mirakl /api/categories ab, damit wir die echten
- * Kategorie-Codes sehen (ohne die der PM01-Upload scheitert).
+ * Kategorie-Codes sehen (ohne die der PM01-Upload scheitert). **Owner/Admin only**.
  * Nutzung: /api/fressnapf/categories-debug
  * Optionaler Filter: ?q=kratz
  */
-export async function GET(request: Request) {
+export const GET = withAuth(async ({ req: request }) => {
   const cfg = await getFressnapfIntegrationConfig();
   if (!cfg.apiKey || !cfg.baseUrl) {
     return NextResponse.json({ error: "Fressnapf API nicht konfiguriert." }, { status: 500 });
@@ -78,4 +79,4 @@ export async function GET(request: Request) {
   }
   const results = await Promise.all(paths.map(probe));
   return NextResponse.json({ baseUrl: base, authMode: cfg.authMode, results });
-}
+}, { requiredRole: ["owner", "admin"] });

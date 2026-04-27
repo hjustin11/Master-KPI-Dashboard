@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { getFressnapfIntegrationConfig } from "@/shared/lib/fressnapfApiClient";
+import { withAuth } from "@/shared/lib/apiAuth";
 
 /**
  * Sample-Endpoint: holt 20 existierende Fressnapf-Produkte und extrahiert
- * deren tatsächlich akzeptierte Category-Codes. Das ist die einzige
- * Möglichkeit, die PM01-Category-Taxonomie zu sehen, weil /api/categories
- * 403 Forbidden für Seller-API-Keys liefert.
+ * deren tatsächlich akzeptierte Category-Codes. **Owner/Admin only** —
+ * leakt Mirakl-Config + Produktdaten.
  *
  * Nutzung:
  *   /api/fressnapf/sample-categories
  */
-export async function GET() {
+export const GET = withAuth(async () => {
   const cfg = await getFressnapfIntegrationConfig();
   if (!cfg.apiKey || !cfg.baseUrl) {
     return NextResponse.json({ error: "Fressnapf API nicht konfiguriert." }, { status: 500 });
@@ -87,4 +87,4 @@ export async function GET() {
     extracted,
     fullProbeResults: attempts,
   });
-}
+}, { requiredRole: ["owner", "admin"] });

@@ -4,22 +4,25 @@ import {
   getOttoAccessToken,
   getOttoIntegrationConfig,
 } from "@/shared/lib/ottoApiClient";
+import { withAuth } from "@/shared/lib/apiAuth";
 
 export const maxDuration = 120;
 
 /**
- * Otto-Discovery-Endpunkt für Listing-Preparation.
+ * Otto-Discovery-Endpunkt für Listing-Preparation. **Owner/Admin only** —
+ * leakt Otto-API-Konfiguration + Token-Scope-Decode.
  *
  * Query-Modi:
  *   - `?category=Kratzbäume` → matching CategoryGroup inkl. AttributeDefinitions
  *     (mandatory vs. optional). Input kann nur der Kategorie-String sein oder
  *     (vorgestellt) `categoryGroup/category`.
  *   - `?brands=1`            → brands liste (für `brand.not.allowed`-Prevention).
+ *   - `?diagnose=1`          → Token-Scope + Path-Probes über v1..v6.
  *   - sonst                  → alle Kategorien (flache Liste `["categoryGroup/category", …]`).
  *
  * Referenz: OTTO_LISTING_UPLOAD.md §4 (AttributeDefinition-Struktur).
  */
-export async function GET(request: Request) {
+export const GET = withAuth(async ({ req: request }) => {
   const cfg = await getOttoIntegrationConfig();
   if (!cfg.clientId || !cfg.clientSecret) {
     return NextResponse.json(
@@ -183,4 +186,4 @@ export async function GET(request: Request) {
     totalCategories: flat.length,
     categories: flat,
   });
-}
+}, { requiredRole: ["owner", "admin"] });

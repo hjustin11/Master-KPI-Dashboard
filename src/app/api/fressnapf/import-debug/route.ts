@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getFressnapfIntegrationConfig } from "@/shared/lib/fressnapfApiClient";
+import { withAuth } from "@/shared/lib/apiAuth";
 
 /**
  * Debug-Endpoint: inspiziert einen existierenden Fressnapf-Mirakl-Import
- * (PM01 oder OF01). Liefert Status + Error-Report-Inhalt direkt.
+ * (PM01 oder OF01). Liefert Status + Error-Report-Inhalt direkt. **Owner/Admin only**.
  *
  * Nutzung:
  *   /api/fressnapf/import-debug?type=offers&id=5189851
@@ -12,7 +13,7 @@ import { getFressnapfIntegrationConfig } from "@/shared/lib/fressnapfApiClient";
  * `type` = "offers" | "products"
  * `id`   = Mirakl-import_id
  */
-export async function GET(request: Request) {
+export const GET = withAuth(async ({ req: request }) => {
   const cfg = await getFressnapfIntegrationConfig();
   if (!cfg.apiKey || !cfg.baseUrl) {
     return NextResponse.json({ error: "Fressnapf API nicht konfiguriert." }, { status: 500 });
@@ -71,4 +72,4 @@ export async function GET(request: Request) {
     errorReportFile,
     errorReportTracking,
   });
-}
+}, { requiredRole: ["owner", "admin"] });

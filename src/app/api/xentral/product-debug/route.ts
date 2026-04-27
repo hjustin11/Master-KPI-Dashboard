@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { getIntegrationSecretValue } from "@/shared/lib/integrationSecrets";
+import { withAuth } from "@/shared/lib/apiAuth";
 
 /**
  * Debug-Endpunkt: gibt die rohen Responses aller relevanten Xentral-Sub-Resources
- * für eine Produkt-ID zurück. Hilft Feldnamen für Dimensionen/EAN zu ermitteln.
+ * für eine Produkt-ID zurück. **Owner/Admin only** — leakt Xentral-PAT-Wirkung
+ * + Produkt-Stammdaten.
  *
  * Nutzung: /api/xentral/product-debug?id=XXXX
  */
-export async function GET(request: Request) {
+export const GET = withAuth(async ({ req: request }) => {
   const { searchParams } = new URL(request.url);
   const productId = (searchParams.get("id") ?? "").trim();
   const sku = (searchParams.get("sku") ?? "").trim();
@@ -80,4 +82,4 @@ export async function GET(request: Request) {
   ];
   const results = await Promise.all(paths.map(fetchAndParse));
   return NextResponse.json({ productId: idToUse, results });
-}
+}, { requiredRole: ["owner", "admin"] });

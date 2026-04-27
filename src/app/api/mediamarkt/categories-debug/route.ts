@@ -3,14 +3,15 @@ import {
   getFlexIntegrationConfig,
   FLEX_MARKETPLACE_MMS_SPEC,
 } from "@/shared/lib/flexMarketplaceApiClient";
+import { withAuth } from "@/shared/lib/apiAuth";
 
 /**
  * Debug: probt 11 Mirakl-Pfade der MediaMarkt/Saturn-API gleichzeitig, um die
- * tatsächliche Category/Hierarchy-Struktur zu ermitteln.
+ * tatsächliche Category/Hierarchy-Struktur zu ermitteln. **Owner/Admin only**.
  * Nutzung: /api/mediamarkt/categories-debug
  *         /api/mediamarkt/categories-debug?path=/api/products/attributes
  */
-export async function GET(request: Request) {
+export const GET = withAuth(async ({ req: request }) => {
   const cfg = await getFlexIntegrationConfig(FLEX_MARKETPLACE_MMS_SPEC);
   if (!cfg.apiKey || !cfg.baseUrl) {
     return NextResponse.json({ error: "MediaMarkt/Saturn API nicht konfiguriert." }, { status: 500 });
@@ -59,4 +60,4 @@ export async function GET(request: Request) {
   }
   const results = await Promise.all(paths.map(probe));
   return NextResponse.json({ baseUrl: base, authMode: cfg.authMode, results });
-}
+}, { requiredRole: ["owner", "admin"] });
